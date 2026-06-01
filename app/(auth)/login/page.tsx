@@ -1,42 +1,40 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
-import { useActionState, useEffect, useState } from "react";
-
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useActionState, useEffect, useState } from "react";
 import { AuthForm } from "@/components/chat/auth-form";
 import { SubmitButton } from "@/components/chat/submit-button";
 import { toast } from "@/components/chat/toast";
 import { type LoginActionState, login } from "../actions";
 
-export default function Page() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/";
   const [email, setEmail] = useState("");
   const [isSuccessful, setIsSuccessful] = useState(false);
 
   const [state, formAction] = useActionState<LoginActionState, FormData>(
     login,
-    { status: "idle" }
+    { status: "idle" },
   );
 
-  const { update: updateSession } = useSession();
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: router and updateSession are stable refs
   useEffect(() => {
     if (state.status === "failed") {
-      toast({ type: "error", description: "Invalid credentials!" });
+      toast({ type: "error", description: "Credenciales inválidas." });
     } else if (state.status === "invalid_data") {
       toast({
         type: "error",
-        description: "Failed validating your submission!",
+        description:
+          "Revisa el email y usa una contraseña de al menos 8 caracteres.",
       });
     } else if (state.status === "success") {
       setIsSuccessful(true);
-      updateSession();
       router.refresh();
+      router.push(redirectTo.startsWith("/") ? redirectTo : "/");
     }
-  }, [state.status]);
+  }, [redirectTo, router, state.status]);
 
   const handleSubmit = (formData: FormData) => {
     setEmail(formData.get("email") as string);
@@ -45,22 +43,46 @@ export default function Page() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Inicia sesión</h1>
       <p className="text-sm text-muted-foreground">
-        Sign in to your account to continue
+        Accede con una cuenta invitada por un administrador.
       </p>
       <AuthForm action={handleSubmit} defaultEmail={email}>
-        <SubmitButton isSuccessful={isSuccessful}>Sign in</SubmitButton>
+        <SubmitButton isSuccessful={isSuccessful}>Entrar</SubmitButton>
         <p className="text-center text-[13px] text-muted-foreground">
-          {"No account? "}
+          ¿Aún no tienes acceso? Solicita un enlace de invitación a un admin.
+        </p>
+        <p className="text-center text-[13px] text-muted-foreground">
+          ¿Ya tienes un enlace? Ábrelo directamente desde tu email.
+        </p>
+        <p className="text-center text-[13px] text-muted-foreground">
           <Link
             className="text-foreground underline-offset-4 hover:underline"
             href="/register"
           >
-            Sign up
+            Ver instrucciones de registro
           </Link>
         </p>
       </AuthForm>
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Cargando acceso…
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Espera un momento mientras preparamos el formulario.
+          </p>
+        </>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

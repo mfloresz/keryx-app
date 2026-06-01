@@ -29,14 +29,14 @@
   - Styling with [Tailwind CSS](https://tailwindcss.com)
   - Component primitives from [Radix UI](https://radix-ui.com) for accessibility and flexibility
 - Data Persistence
-  - [Neon Serverless Postgres](https://vercel.com/marketplace/neon) for saving chat history and user data
+  - [PocketBase](https://pocketbase.io) for users, chat history, invites, admin settings, and app data
   - [Vercel Blob](https://vercel.com/storage/blob) for efficient file storage
-- [Auth.js](https://authjs.dev)
-  - Simple and secure authentication
+- Invite-only authentication
+  - Custom cookie-based sessions with admin-managed invitations and role-based access
 
 ## Model Providers
 
-This template uses the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) to access multiple AI models through a unified interface. Models are configured in `lib/ai/models.ts` with per-model provider routing. Included models: Mistral, Moonshot, DeepSeek, OpenAI, and xAI.
+This app supports a configurable AI backend. Admins can switch between the [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) and an OpenAI-compatible OpenCode GO endpoint from the admin panel. Models are resolved dynamically in `lib/ai/models.ts` and filtered by user role.
 
 ### AI Gateway Authentication
 
@@ -64,7 +64,7 @@ You will need to use the environment variables [defined in `.env.example`](.env.
 
 ```bash
 pnpm install
-pnpm db:migrate # Setup database or apply latest database changes
+pnpm pb:init # Create PocketBase collections and bootstrap settings/admin user
 pnpm dev
 ```
 

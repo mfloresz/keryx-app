@@ -1,5 +1,6 @@
 import { tool, type UIMessageStreamWriter } from "ai";
-import type { Session } from "next-auth";
+import type { Session } from "@/lib/auth/types";
+import type { AIProvider } from "@/lib/db/queries";
 import { z } from "zod";
 import {
   artifactKinds,
@@ -12,12 +13,14 @@ type CreateDocumentProps = {
   session: Session;
   dataStream: UIMessageStreamWriter<ChatMessage>;
   modelId: string;
+  modelProvider: AIProvider;
 };
 
 export const createDocument = ({
   session,
   dataStream,
   modelId,
+  modelProvider,
 }: CreateDocumentProps) =>
   tool({
     description:
@@ -27,7 +30,7 @@ export const createDocument = ({
       kind: z
         .enum(artifactKinds)
         .describe(
-          "REQUIRED. 'code' for programming/algorithms, 'text' for essays/writing, 'sheet' for spreadsheets"
+          "REQUIRED. 'code' for programming/algorithms, 'text' for essays/writing, 'sheet' for spreadsheets",
         ),
     }),
     execute: async ({ title, kind }) => {
@@ -59,7 +62,7 @@ export const createDocument = ({
 
       const documentHandler = documentHandlersByArtifactKind.find(
         (documentHandlerByArtifactKind) =>
-          documentHandlerByArtifactKind.kind === kind
+          documentHandlerByArtifactKind.kind === kind,
       );
 
       if (!documentHandler) {
@@ -72,6 +75,7 @@ export const createDocument = ({
         dataStream,
         session,
         modelId,
+        modelProvider,
       });
 
       dataStream.write({ type: "data-finish", data: null, transient: true });

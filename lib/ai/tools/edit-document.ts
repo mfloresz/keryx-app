@@ -1,5 +1,5 @@
 import { tool, type UIMessageStreamWriter } from "ai";
-import type { Session } from "next-auth";
+import type { Session } from "@/lib/auth/types";
 import { z } from "zod";
 import { getDocumentById, saveDocument } from "@/lib/db/queries";
 import type { ChatMessage } from "@/lib/types";
@@ -18,14 +18,14 @@ export const editDocument = ({ session, dataStream }: EditDocumentProps) =>
       old_string: z
         .string()
         .describe(
-          "Exact string to find. Include 3-5 surrounding lines for uniqueness."
+          "Exact string to find. Include 3-5 surrounding lines for uniqueness.",
         ),
       new_string: z.string().describe("Replacement string"),
       replace_all: z
         .boolean()
         .optional()
         .describe(
-          "Replace all occurrences instead of just the first (default false)"
+          "Replace all occurrences instead of just the first (default false)",
         ),
     }),
     execute: async ({ id, old_string, new_string, replace_all }) => {

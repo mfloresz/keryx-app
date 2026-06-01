@@ -1,14 +1,17 @@
 "use server";
 
 import { z } from "zod";
+import { createSession } from "./auth";
+import { authenticateUser, registerUserFromInvite } from "@/lib/db/queries";
 
-import { createUser, getUser } from "@/lib/db/queries";
-
-import { signIn } from "./auth";
-
-const authFormSchema = z.object({
+const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(6),
+  password: z.string().min(8),
+});
+
+const inviteRegistrationSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(8),
 });
 
 export type LoginActionState = {
@@ -17,19 +20,20 @@ export type LoginActionState = {
 
 export const login = async (
   _: LoginActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<LoginActionState> => {
   try {
-    const validatedData = authFormSchema.parse({
+    const validatedData = loginSchema.parse({
       email: formData.get("email"),
       password: formData.get("password"),
     });
 
-    await signIn("credentials", {
-      email: validatedData.email,
-      password: validatedData.password,
-      redirect: false,
-    });
+    const session = await authenticateUser(
+      validatedData.email,
+      validatedData.password,
+    );
+
+    await createSession(session);
 
     return { status: "success" };
   } catch (error) {
@@ -47,31 +51,28 @@ export type RegisterActionState = {
     | "in_progress"
     | "success"
     | "failed"
-    | "user_exists"
-    | "invalid_data";
+    | "invalid_data"
+    | "invite_invalid"
+    | "invite_expired"
+    | "invite_used";
 };
 
 export const register = async (
   _: RegisterActionState,
-  formData: FormData
+  formData: FormData,
 ): Promise<RegisterActionState> => {
   try {
-    const validatedData = authFormSchema.parse({
-      email: formData.get("email"),
+    const validatedData = inviteRegistrationSchema.parse({
+      token: formData.get("token"),
       password: formData.get("password"),
     });
 
-    const [user] = await getUser(validatedData.email);
-
-    if (user) {
-      return { status: "user_exists" } as RegisterActionState;
-    }
-    await createUser(validatedData.email, validatedData.password);
-    await signIn("credentials", {
-      email: validatedData.email,
+    const result = await registerUserFromInvite({
+      token: validatedData.token,
       password: validatedData.password,
-      redirect: false,
     });
+
+    await createSession(result.session);
 
     return { status: "success" };
   } catch (error) {
@@ -79,6 +80,18 @@ export const register = async (
       return { status: "invalid_data" };
     }
 
-    return { status: "failed" };
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+
+      if (message.includes("expired")) {
+        return { status: "invite_expired" };
+      }
+
+      if (message.includes("used")) {
+        return { status: "invite_used" };
+      }
+    }
+
+    return { status: "invite_invalid" };
   }
 };

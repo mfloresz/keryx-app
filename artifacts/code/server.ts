@@ -12,11 +12,11 @@ function stripFences(code: string): string {
 
 export const codeDocumentHandler = createDocumentHandler<"code">({
   kind: "code",
-  onCreateDocument: async ({ title, dataStream, modelId }) => {
+  onCreateDocument: async ({ title, dataStream, modelId, modelProvider }) => {
     let draftContent = "";
 
     const { fullStream } = streamText({
-      model: getLanguageModel(modelId),
+      model: getLanguageModel(modelId, modelProvider),
       system: `${codePrompt}\n\nOutput ONLY the code. No explanations, no markdown fences, no wrapping.`,
       prompt: title,
     });
@@ -34,11 +34,17 @@ export const codeDocumentHandler = createDocumentHandler<"code">({
 
     return stripFences(draftContent);
   },
-  onUpdateDocument: async ({ document, description, dataStream, modelId }) => {
+  onUpdateDocument: async ({
+    document,
+    description,
+    dataStream,
+    modelId,
+    modelProvider,
+  }) => {
     let draftContent = "";
 
     const { fullStream } = streamText({
-      model: getLanguageModel(modelId),
+      model: getLanguageModel(modelId, modelProvider),
       system: `${updateDocumentPrompt(document.content, "code")}\n\nOutput ONLY the complete updated code. No explanations, no markdown fences, no wrapping.`,
       prompt: description,
     });

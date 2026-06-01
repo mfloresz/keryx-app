@@ -1,5 +1,6 @@
 import { Output, streamText, tool, type UIMessageStreamWriter } from "ai";
-import type { Session } from "next-auth";
+import type { Session } from "@/lib/auth/types";
+import type { AIProvider } from "@/lib/db/queries";
 import { z } from "zod";
 import { getDocumentById, saveSuggestions } from "@/lib/db/queries";
 import type { Suggestion } from "@/lib/db/schema";
@@ -11,12 +12,14 @@ type RequestSuggestionsProps = {
   session: Session;
   dataStream: UIMessageStreamWriter<ChatMessage>;
   modelId: string;
+  modelProvider: AIProvider;
 };
 
 export const requestSuggestions = ({
   session,
   dataStream,
   modelId,
+  modelProvider,
 }: RequestSuggestionsProps) =>
   tool({
     description:
@@ -25,7 +28,7 @@ export const requestSuggestions = ({
       documentId: z
         .string()
         .describe(
-          "The UUID of an existing document artifact that was previously created with createDocument"
+          "The UUID of an existing document artifact that was previously created with createDocument",
         ),
     }),
     execute: async ({ documentId }) => {
@@ -47,7 +50,7 @@ export const requestSuggestions = ({
       >[] = [];
 
       const { partialOutputStream } = streamText({
-        model: getLanguageModel(modelId),
+        model: getLanguageModel(modelId, modelProvider),
         system:
           "You are a writing assistant. Given a piece of writing, offer up to 5 suggestions to improve it. Each suggestion must contain full sentences, not just individual words. Describe what changed and why.",
         prompt: document.content,

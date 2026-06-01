@@ -7,6 +7,7 @@ import type { VisibilityType } from "@/components/chat/visibility-selector";
 import { titleModel } from "@/lib/ai/models";
 import { titlePrompt } from "@/lib/ai/prompts";
 import { getTitleModel } from "@/lib/ai/providers";
+import { getAiSettings } from "@/lib/db/queries";
 import {
   deleteMessagesByChatIdAfterTimestamp,
   getChatById,
@@ -25,13 +26,18 @@ export async function generateTitleFromUserMessage({
 }: {
   message: UIMessage;
 }) {
+  const settings = await getAiSettings();
+
   const { text } = await generateText({
-    model: getTitleModel(),
+    model: getTitleModel(settings.activeProvider),
     system: titlePrompt,
     prompt: getTextFromMessage(message),
-    providerOptions: {
-      gateway: { order: titleModel.gatewayOrder },
-    },
+    providerOptions:
+      settings.activeProvider === "vercel_gateway"
+        ? {
+            gateway: { order: titleModel.gatewayOrder },
+          }
+        : undefined,
   });
   return text
     .replace(/^[#*"\s]+/, "")

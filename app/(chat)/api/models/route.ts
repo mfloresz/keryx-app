@@ -1,20 +1,42 @@
-import { getAllGatewayModels, getCapabilities, isDemo } from "@/lib/ai/models";
+import { connection } from "next/server";
+import { auth } from "@/app/(auth)/auth";
+import {
+  getCapabilities,
+  getDefaultModelForProvider,
+  getModelsForProvider,
+} from "@/lib/ai/models";
+import { getAiSettings } from "@/lib/db/queries";
 
 export async function GET() {
+  await connection();
+
   const headers = {
-    "Cache-Control": "public, max-age=86400, s-maxage=86400",
+    "Cache-Control": "private, max-age=300, s-maxage=300",
   };
 
-  const curatedCapabilities = await getCapabilities();
+  const [session, settings] = await Promise.all([auth(), getAiSettings()]);
+  const providerModels = await getModelsForProvider(settings.activeProvider);
+  const visibleModels =
+    session?.user?.role === "admin"
+      ? providerModels
+      : providerModels.filter((model) =>
+          settings.userAllowedModelIds.includes(model.id),
+        );
+  const defaultModelId =
+    (await getDefaultModelForProvider(settings.activeProvider)) ??
+    visibleModels[0]?.id;
+  const capabilities = await getCapabilities(
+    settings.activeProvider,
+    visibleModels,
+  );
 
-  if (isDemo) {
-    const models = await getAllGatewayModels();
-    const capabilities = Object.fromEntries(
-      models.map((m) => [m.id, curatedCapabilities[m.id] ?? m.capabilities])
-    );
-
-    return Response.json({ capabilities, models }, { headers });
-  }
-
-  return Response.json(curatedCapabilities, { headers });
+  return Response.json(
+    {
+      capabilities,
+      models: visibleModels,
+      defaultModelId,
+      activeProvider: settings.activeProvider,
+    },
+    { headers },
+  );
 }

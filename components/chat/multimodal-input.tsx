@@ -3,13 +3,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import equal from "fast-deep-equal";
-import {
-  ArrowUpIcon,
-  BrainIcon,
-  EyeIcon,
-  LockIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { ArrowUpIcon, BrainIcon, EyeIcon, WrenchIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
@@ -124,7 +118,7 @@ function PureMultimodalInput({
 
   const [localStorageInput, setLocalStorageInput] = useLocalStorage(
     "input",
-    ""
+    "",
   );
 
   useEffect(() => {
@@ -167,7 +161,7 @@ function PureMultimodalInput({
         break;
       case "model": {
         const modelBtn = document.querySelector<HTMLButtonElement>(
-          "[data-testid='model-selector']"
+          "[data-testid='model-selector']",
         );
         modelBtn?.click();
         break;
@@ -182,7 +176,7 @@ function PureMultimodalInput({
             onClick: () => {
               fetch(
                 `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/chat?id=${chatId}`,
-                { method: "DELETE" }
+                { method: "DELETE" },
               );
               router.push("/");
               toast.success("Chat deleted");
@@ -219,7 +213,7 @@ function PureMultimodalInput({
     window.history.pushState(
       {},
       "",
-      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${chatId}`
+      `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/chat/${chatId}`,
     );
 
     sendMessage({
@@ -266,7 +260,7 @@ function PureMultimodalInput({
         {
           method: "POST",
           body: formData,
-        }
+        },
       );
 
       if (response.ok) {
@@ -296,7 +290,7 @@ function PureMultimodalInput({
         const uploadPromises = files.map((file) => uploadFile(file));
         const uploadedAttachments = await Promise.all(uploadPromises);
         const successfullyUploadedAttachments = uploadedAttachments.filter(
-          (attachment) => attachment !== undefined
+          (attachment) => attachment !== undefined,
         );
 
         setAttachments((currentAttachments) => [
@@ -309,7 +303,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile]
+    [setAttachments, uploadFile],
   );
 
   const handlePaste = useCallback(
@@ -320,7 +314,7 @@ function PureMultimodalInput({
       }
 
       const imageItems = Array.from(items).filter((item) =>
-        item.type.startsWith("image/")
+        item.type.startsWith("image/"),
       );
 
       if (imageItems.length === 0) {
@@ -342,7 +336,7 @@ function PureMultimodalInput({
           (attachment) =>
             attachment !== undefined &&
             attachment.url !== undefined &&
-            attachment.contentType !== undefined
+            attachment.contentType !== undefined,
         );
 
         setAttachments((curr) => [
@@ -355,7 +349,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile]
+    [setAttachments, uploadFile],
   );
 
   useEffect(() => {
@@ -450,7 +444,7 @@ function PureMultimodalInput({
                 key={attachment.url}
                 onRemove={() => {
                   setAttachments((currentAttachments) =>
-                    currentAttachments.filter((a) => a.url !== attachment.url)
+                    currentAttachments.filter((a) => a.url !== attachment.url),
                   );
                   if (fileInputRef.current) {
                     fileInputRef.current.value = "";
@@ -479,7 +473,7 @@ function PureMultimodalInput({
           onKeyDown={(e) => {
             if (slashOpen) {
               const filtered = slashCommands.filter((cmd) =>
-                cmd.name.startsWith(slashQuery.toLowerCase())
+                cmd.name.startsWith(slashQuery.toLowerCase()),
               );
               if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -536,7 +530,7 @@ function PureMultimodalInput({
                 "h-7 w-7 rounded-xl transition-all duration-200",
                 input.trim()
                   ? "bg-foreground text-background hover:opacity-85 active:scale-95"
-                  : "bg-muted text-muted-foreground/25 cursor-not-allowed"
+                  : "bg-muted text-muted-foreground/25 cursor-not-allowed",
               )}
               data-testid="send-button"
               disabled={!input.trim() || uploadQueue.length > 0}
@@ -581,7 +575,7 @@ export const MultimodalInput = memo(
     }
 
     return true;
-  }
+  },
 );
 
 function PureAttachmentsButton({
@@ -596,7 +590,7 @@ function PureAttachmentsButton({
   const { data: modelsResponse } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
     (url: string) => fetch(url).then((r) => r.json()),
-    { revalidateOnFocus: false, dedupingInterval: 3_600_000 }
+    { revalidateOnFocus: false, dedupingInterval: 3_600_000 },
   );
 
   const caps: Record<string, ModelCapabilities> | undefined =
@@ -609,7 +603,7 @@ function PureAttachmentsButton({
         "h-7 w-7 rounded-lg border border-border/40 p-1 transition-colors",
         hasVision
           ? "text-foreground hover:border-border hover:text-foreground"
-          : "text-muted-foreground/30 cursor-not-allowed"
+          : "text-muted-foreground/30 cursor-not-allowed",
       )}
       data-testid="attachments-button"
       disabled={status !== "ready" || !hasVision}
@@ -637,7 +631,7 @@ function PureModelSelectorCompact({
   const { data: modelsData } = useSWR(
     `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/models`,
     (url: string) => fetch(url).then((r) => r.json()),
-    { revalidateOnFocus: false, dedupingInterval: 3_600_000 }
+    { revalidateOnFocus: false, dedupingInterval: 3_600_000 },
   );
 
   const capabilities: Record<string, ModelCapabilities> | undefined =
@@ -667,35 +661,18 @@ function PureModelSelectorCompact({
         <ModelSelectorInput placeholder="Search models..." />
         <ModelSelectorList>
           {(() => {
-            const curatedIds = new Set(chatModels.map((m) => m.id));
-            const allModels = dynamicModels
-              ? [
-                  ...chatModels,
-                  ...dynamicModels.filter((m) => !curatedIds.has(m.id)),
-                ]
-              : chatModels;
+            const allModels = dynamicModels ?? chatModels;
 
-            const grouped: Record<
-              string,
-              { model: ChatModel; curated: boolean }[]
-            > = {};
+            const grouped: Record<string, ChatModel[]> = {};
             for (const model of allModels) {
-              const key = curatedIds.has(model.id)
-                ? "_available"
-                : model.provider;
+              const key = model.provider;
               if (!grouped[key]) {
                 grouped[key] = [];
               }
-              grouped[key].push({ model, curated: curatedIds.has(model.id) });
+              grouped[key].push(model);
             }
 
             const sortedKeys = Object.keys(grouped).sort((a, b) => {
-              if (a === "_available") {
-                return -1;
-              }
-              if (b === "_available") {
-                return 1;
-              }
               return a.localeCompare(b);
             });
 
@@ -725,15 +702,8 @@ function PureModelSelectorCompact({
             };
 
             return sortedKeys.map((key) => (
-              <ModelSelectorGroup
-                heading={
-                  key === "_available"
-                    ? "Available"
-                    : (providerNames[key] ?? key)
-                }
-                key={key}
-              >
-                {grouped[key].map(({ model, curated }) => {
+              <ModelSelectorGroup heading={providerNames[key] ?? key} key={key}>
+                {grouped[key].map((model) => {
                   const logoProvider = model.id.split("/")[0];
                   return (
                     <ModelSelectorItem
@@ -741,20 +711,16 @@ function PureModelSelectorCompact({
                         "flex w-full",
                         model.id === selectedModel.id &&
                           "border-b border-dashed border-foreground/50",
-                        !curated && "opacity-40 cursor-default"
                       )}
                       key={model.id}
                       onSelect={() => {
-                        if (!curated) {
-                          return;
-                        }
                         onModelChange?.(model.id);
                         setCookie("chat-model", model.id);
                         setOpen(false);
                         setTimeout(() => {
                           document
                             .querySelector<HTMLTextAreaElement>(
-                              "[data-testid='multimodal-input']"
+                              "[data-testid='multimodal-input']",
                             )
                             ?.focus();
                         }, 50);
@@ -772,9 +738,6 @@ function PureModelSelectorCompact({
                         )}
                         {capabilities?.[model.id]?.reasoning && (
                           <BrainIcon className="size-3.5" />
-                        )}
-                        {!curated && (
-                          <LockIcon className="size-3 text-muted-foreground/50" />
                         )}
                       </div>
                     </ModelSelectorItem>
