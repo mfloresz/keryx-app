@@ -10,13 +10,13 @@ import {
 import { checkBotId } from "botid/server";
 import { after } from "next/server";
 import { createResumableStreamContext } from "resumable-stream";
-import { auth, type UserType } from "@/app/(auth)/auth";
-import { entitlementsByUserType } from "@/lib/ai/entitlements";
+import { auth } from "@/app/(auth)/auth";
+import { entitlementsByRole } from "@/lib/ai/entitlements";
 import {
-  allowedModelIds,
-  chatModels,
   DEFAULT_CHAT_MODEL,
   getCapabilities,
+  getDefaultModelForProvider,
+  getModelsForProvider,
 } from "@/lib/ai/models";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
@@ -30,6 +30,7 @@ import {
   createStreamId,
   deleteChatById,
   getChatById,
+  getAiSettings,
   getMessageCountByUserId,
   getMessagesByChatId,
   saveChat,
@@ -80,20 +81,32 @@ export async function POST(request: Request) {
       return new ChatbotError("unauthorized:chat").toResponse();
     }
 
-    const chatModel = allowedModelIds.has(selectedChatModel)
-      ? selectedChatModel
-      : DEFAULT_CHAT_MODEL;
-
     await checkIpRateLimit(ipAddress(request));
 
-    const userType: UserType = session.user.type;
+    const settings = await getAiSettings();
+    const providerModels = await getModelsForProvider(settings.activeProvider);
+    const allowedModels =
+      session.user.role === "admin"
+        ? providerModels
+        : providerModels.filter((model) =>
+            settings.userAllowedModelIds.includes(model.id),
+          );
+    const allowedModelIds = new Set(allowedModels.map((model) => model.id));
+    const fallbackModel =
+      (await getDefaultModelForProvider(settings.activeProvider)) ??
+      DEFAULT_CHAT_MODEL;
+    const chatModel = allowedModelIds.has(selectedChatModel)
+      ? selectedChatModel
+      : fallbackModel;
 
     const messageCount = await getMessageCountByUserId({
       id: session.user.id,
       differenceInHours: 1,
     });
 
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerHour) {
+    if (
+      messageCount > entitlementsByRole[session.user.role].maxMessagesPerHour
+    ) {
       return new ChatbotError("rate_limit:chat").toResponse();
     }
 
@@ -129,13 +142,13 @@ export async function POST(request: Request) {
               ?.filter(
                 (p: Record<string, unknown>) =>
                   p.state === "approval-responded" ||
-                  p.state === "output-denied"
+                  p.state === "output-denied",
               )
               .map((p: Record<string, unknown>) => [
                 String(p.toolCallId ?? ""),
                 p,
-              ]) ?? []
-        )
+              ]) ?? [],
+        ),
       );
       uiMessages = dbMessages.map((msg) => ({
         ...msg,
@@ -167,6 +180,7 @@ export async function POST(request: Request) {
 
     if (message?.role === "user") {
       await saveMessages({
+        userId: session.user.id,
         messages: [
           {
             chatId: id,
@@ -180,8 +194,11 @@ export async function POST(request: Request) {
       });
     }
 
-    const modelConfig = chatModels.find((m) => m.id === chatModel);
-    const modelCapabilities = await getCapabilities();
+    const modelConfig = providerModels.find((m) => m.id === chatModel);
+    const modelCapabilities = await getCapabilities(
+      settings.activeProvider,
+      providerModels,
+    );
     const capabilities = modelCapabilities[chatModel];
     const isReasoningModel = capabilities?.reasoning === true;
     const supportsTools = capabilities?.tools === true;
@@ -192,7 +209,7 @@ export async function POST(request: Request) {
       originalMessages: isToolApprovalFlow ? uiMessages : undefined,
       execute: async ({ writer: dataStream }) => {
         const result = streamText({
-          model: getLanguageModel(chatModel),
+          model: getLanguageModel(chatModel, settings.activeProvider),
           system: systemPrompt({ requestHints, supportsTools }),
           messages: modelMessages,
           stopWhen: stepCountIs(5),
@@ -207,9 +224,10 @@ export async function POST(request: Request) {
                   "requestSuggestions",
                 ],
           providerOptions: {
-            ...(modelConfig?.gatewayOrder && {
-              gateway: { order: modelConfig.gatewayOrder },
-            }),
+            ...(settings.activeProvider === "vercel_gateway" &&
+              modelConfig?.gatewayOrder && {
+                gateway: { order: modelConfig.gatewayOrder },
+              }),
             ...(modelConfig?.reasoningEffort && {
               openai: { reasoningEffort: modelConfig.reasoningEffort },
             }),
@@ -220,17 +238,20 @@ export async function POST(request: Request) {
               session,
               dataStream,
               modelId: chatModel,
+              modelProvider: settings.activeProvider,
             }),
             editDocument: editDocument({ dataStream, session }),
             updateDocument: updateDocument({
               session,
               dataStream,
               modelId: chatModel,
+              modelProvider: settings.activeProvider,
             }),
             requestSuggestions: requestSuggestions({
               session,
               dataStream,
               modelId: chatModel,
+              modelProvider: settings.activeProvider,
             }),
           },
           experimental_telemetry: {
@@ -240,7 +261,7 @@ export async function POST(request: Request) {
         });
 
         dataStream.merge(
-          result.toUIMessageStream({ sendReasoning: isReasoningModel })
+          result.toUIMessageStream({ sendReasoning: isReasoningModel }),
         );
 
         if (titlePromise) {
@@ -265,6 +286,7 @@ export async function POST(request: Request) {
               });
             } else {
               await saveMessages({
+                userId: session.user.id,
                 messages: [
                   {
                     id: finishedMsg.id,
@@ -280,6 +302,7 @@ export async function POST(request: Request) {
           }
         } else if (finishedMessages.length > 0) {
           await saveMessages({
+            userId: session.user.id,
             messages: finishedMessages.map((currentMessage) => ({
               id: currentMessage.id,
               role: currentMessage.role,
@@ -295,7 +318,7 @@ export async function POST(request: Request) {
         if (
           error instanceof Error &&
           error.message?.includes(
-            "AI Gateway requires a valid credit card on file to service requests"
+            "AI Gateway requires a valid credit card on file to service requests",
           )
         ) {
           return "AI Gateway requires a valid credit card on file to service requests. Please visit https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card to add a card and unlock your free credits.";
@@ -317,7 +340,7 @@ export async function POST(request: Request) {
             await createStreamId({ streamId, chatId: id });
             await streamContext.createNewResumableStream(
               streamId,
-              () => sseStream
+              () => sseStream,
             );
           }
         } catch (_) {
@@ -335,13 +358,26 @@ export async function POST(request: Request) {
     if (
       error instanceof Error &&
       error.message?.includes(
-        "AI Gateway requires a valid credit card on file to service requests"
+        "AI Gateway requires a valid credit card on file to service requests",
       )
     ) {
       return new ChatbotError("bad_request:activate_gateway").toResponse();
     }
 
     console.error("Unhandled error in chat API:", error, { vercelId });
+
+    if (!isProductionEnvironment) {
+      const message = error instanceof Error ? error.message : String(error);
+      return Response.json(
+        {
+          code: "internal_error:chat",
+          message,
+          cause: error instanceof Error ? error.stack : undefined,
+        },
+        { status: 500 },
+      );
+    }
+
     return new ChatbotError("offline:chat").toResponse();
   }
 }
