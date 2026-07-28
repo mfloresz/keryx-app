@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-01T00:00:00.000Z",
+  "title": "Design System: Keryx",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Ámbar Terroso",
+        "canonical": "oklch(0.6649 0.0912 81.5426)",
+        "tonalRamp": [
+          "oklch(0.25 0.09 82)",
+          "oklch(0.35 0.09 82)",
+          "oklch(0.45 0.09 82)",
+          "oklch(0.55 0.09 82)",
+          "oklch(0.6649 0.0912 81.5426)",
+          "oklch(0.75 0.10 82)",
+          "oklch(0.82 0.08 82)",
+          "oklch(0.90 0.05 82)"
+        ]
+      },
+      "secondary": {
+        "role": "secondary",
+        "displayName": "Salvia Muted",
+        "canonical": "oklch(0.7004 0.0391 152.5285)",
+        "tonalRamp": [
+          "oklch(0.25 0.04 153)",
+          "oklch(0.35 0.04 153)",
+          "oklch(0.45 0.04 153)",
+          "oklch(0.55 0.04 153)",
+          "oklch(0.65 0.04 153)",
+          "oklch(0.7004 0.0391 152.5285)",
+          "oklch(0.80 0.03 153)",
+          "oklch(0.90 0.02 153)"
+        ]
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Página Cálida",
+        "canonical": "oklch(0.982 0.0041 91.4458)",
+        "tonalRamp": [
+          "oklch(0.233 0.0093 159.2819)",
+          "oklch(0.3105 0.0163 156.152)",
+          "oklch(0.4997 0.0155 159.505)",
+          "oklch(0.7091 0.0099 150.629)",
+          "oklch(0.8793 0.0197 90.557)",
+          "oklch(0.9099 0.0195 90.5511)",
+          "oklch(0.9492 0.0152 90.2369)",
+          "oklch(0.982 0.0041 91.4458)"
+        ]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Tinta Verde",
+        "canonical": "oklch(0.3139 0.0109 156.542)",
+        "tonalRamp": [
+          "oklch(0.15 0.01 157)",
+          "oklch(0.25 0.01 157)",
+          "oklch(0.3139 0.0109 156.542)",
+          "oklch(0.45 0.01 157)",
+          "oklch(0.60 0.01 157)",
+          "oklch(0.75 0.01 157)",
+          "oklch(0.85 0.01 157)",
+          "oklch(0.95 0.005 91)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Surface",
+        "canonical": "oklch(0.9099 0.0195 90.5511)",
+        "tonalRamp": [
+          "oklch(0.3105 0.0163 156.152)",
+          "oklch(0.40 0.02 156)",
+          "oklch(0.55 0.02 156)",
+          "oklch(0.70 0.02 156)",
+          "oklch(0.80 0.02 91)",
+          "oklch(0.87 0.02 91)",
+          "oklch(0.9099 0.0195 90.5511)",
+          "oklch(0.96 0.01 91)"
+        ]
+      },
+      "destructive": {
+        "role": "destructive",
+        "displayName": "Rojo Muted",
+        "canonical": "oklch(0.5133 0.1143 29.2251)",
+        "tonalRamp": [
+          "oklch(0.25 0.11 29)",
+          "oklch(0.35 0.11 29)",
+          "oklch(0.45 0.11 29)",
+          "oklch(0.5133 0.1143 29.2251)",
+          "oklch(0.60 0.10 29)",
+          "oklch(0.70 0.08 29)",
+          "oklch(0.80 0.05 29)",
+          "oklch(0.90 0.03 29)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display — Spectral",
+        "purpose": "Hero headlines y títulos de bienvenida. Aparece una vez por vista."
+      },
+      "body": {
+        "displayName": "Body — Merriweather",
+        "purpose": "Texto de mensajes, descripciones, contenido legible principal."
+      },
+      "label": {
+        "displayName": "Label — Merriweather Medium",
+        "purpose": "Botones, inputs, badges, etiquetas interactivas."
+      },
+      "mono": {
+        "displayName": "Mono — Courier Prime",
+        "purpose": "Código, kbd, samp. Solo para contenido técnico."
+      }
+    },
+    "shadows": [
+      {
+        "name": "ambient-green",
+        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08)",
+        "purpose": "Sombras funcionales en modo claro. Tinte verde intencional."
+      },
+      {
+        "name": "structural-black",
+        "value": "0px 10px 30px 0px hsl(0 0% 0% / 0.4)",
+        "purpose": "Sombras funcionales en modo oscuro."
+      },
+      {
+        "name": "input-xs",
+        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.04)",
+        "purpose": "Sombra mínima en inputs y textareas."
+      },
+      {
+        "name": "card-sm",
+        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 1px 2px -1px hsl(140 6.25% 18.82% / 0.08)",
+        "purpose": "Elevación sutil en cards."
+      },
+      {
+        "name": "overlay-md",
+        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 2px 4px -1px hsl(140 6.25% 18.82% / 0.08)",
+        "purpose": "Popovers, dropdowns, overlays."
+      },
+      {
+        "name": "overlay-lg",
+        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 4px 6px -1px hsl(140 6.25% 18.82% / 0.08)",
+        "purpose": "Diálogos y modales."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Easing por defecto para transiciones de estado."
+      },
+      {
+        "name": "duration-fast",
+        "value": "150ms",
+        "purpose": "Transiciones de opacidad y exit animations."
+      },
+      {
+        "name": "duration-normal",
+        "value": "200ms",
+        "purpose": "Entry animations, focus transitions."
+      },
+      {
+        "name": "duration-slow",
+        "value": "300ms",
+        "purpose": "Sidebar collapse/expand."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Botón principal con ámbar terroso. Para acciones primarias: enviar mensaje, confirmar, crear.",
+      "html": "<button class=\"ds-btn-primary\">Enviar mensaje</button>",
+      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-foreground); padding: 8px 16px; border-radius: 14px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-primary:hover { opacity: 0.9; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px oklch(0.6649 0.0912 81.5426 / 0.5); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Botón de borde para acciones secundarias. Modelo selector, cancelar, navegación.",
+      "html": "<button class=\"ds-btn-outline\">Cancelar</button>",
+      "css": ".ds-btn-outline { background: transparent; color: var(--foreground); padding: 8px 16px; border-radius: 14px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-outline:hover { background: var(--accent); color: var(--accent-foreground); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px oklch(0.6649 0.0912 81.5426 / 0.5); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Botón fantasma para acciones de bajo peso. Acciones de mensaje, toggle, navegación sidebar.",
+      "html": "<button class=\"ds-btn-ghost\">Copiar</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: var(--foreground); padding: 8px 16px; border-radius: 14px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-ghost:hover { background: var(--accent); color: var(--accent-foreground); }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de texto para una línea. Búsqueda, configuración, nombres.",
+      "html": "<input class=\"ds-input\" placeholder=\"Buscar chats...\" />",
+      "css": ".ds-input { background: transparent; color: var(--foreground); padding: 4px 12px; border-radius: 14px; border: 1px solid var(--border); font-family: var(--app-font-family); font-size: 0.875rem; height: 36px; width: 100%; box-shadow: 0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.04); transition: color 0.15s, box-shadow 0.15s; } .ds-input::placeholder { color: var(--muted-foreground); } .ds-input:focus { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px oklch(0.6649 0.0912 81.5426 / 0.5); }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Superficie elevada para agrupar contenido. Configuración, paneles, contenido estructurado.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><h3 class=\"ds-card-title\">Configuración</h3><p class=\"ds-card-desc\">Opciones generales</p></div><div class=\"ds-card-content\">Contenido aquí</div></div>",
+      "css": ".ds-card { background: var(--card); color: var(--card-foreground); border-radius: 20px; border: 1px solid var(--border); padding: 24px; box-shadow: 0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 1px 2px -1px hsl(140 6.25% 18.82% / 0.08); display: flex; flex-direction: column; gap: 24px; } .ds-card-header { display: grid; grid-template-rows: auto auto; gap: 6px; } .ds-card-title { font-weight: 600; font-size: 1rem; line-height: 1.3; } .ds-card-desc { color: var(--muted-foreground); font-size: 0.875rem; } .ds-card-content { padding: 0; }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Etiqueta pill para estados, modelos, categorías.",
+      "html": "<span class=\"ds-badge\">GPT-5.4 Nano</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 500; background: var(--primary); color: var(--primary-foreground); border: 1px solid transparent; white-space: nowrap; }"
+    },
+    {
+      "name": "Sidebar Chat Item",
+      "kind": "nav",
+      "refersTo": "sidebar-item",
+      "description": "Item de chat en el sidebar. Activo: ámbar. Inactivo: transparente con hover accent.",
+      "html": "<div class=\"ds-sidebar-item\">Conversación sobre arquitectura</div>",
+      "css": ".ds-sidebar-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 14px; font-size: 0.875rem; color: var(--sidebar-foreground); cursor: pointer; transition: background-color 0.15s, color 0.15s; } .ds-sidebar-item:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } .ds-sidebar-item.active { background: var(--sidebar-primary); color: var(--sidebar-primary-foreground); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "El Escritorio Silencioso",
+    "overview": "Keryx es un escritorio de trabajo ordenado y silencioso — todo en su lugar, sin distracciones. La interfaz transmite calma y competencia: un espacio donde la conversación con la IA fluye sin fricción visual. La personalidad es inteligente, seria y confiable, como una herramienta bien construida que no necesita gritar para demostrar su valor.\n\nEl sistema rechaza activamente la estética genérica de herramientas de código (editores con sidebar de chat como accesorio) y los chats corporativos neutros (ChatGPT, Claude). Keryx tiene identidad propia: tipografía serif como declaración de seriedad, paleta cálida terrosa que no busca ser llamativa, espaciado generoso que respeta la lectura.",
+    "keyCharacteristics": [
+      "Serif-forward: Spectral y Merriweather definen la personalidad visual",
+      "Paleta terrosa: ámbar cálido como acento, verdes oliva como base",
+      "Superficies planas con sombras funcionales, no decorativas",
+      "Espaciado generoso que respira, nunca apretado",
+      "Animaciones únicamente funcionales — feedback de estado, orientación espacial"
+    ],
+    "rules": [
+      { "name": "The Earth-Tone Rule", "body": "Los colores neutros nunca son grises puros. Siempre tienen un tinte hacia la familia cromática de la paleta (verde-oliva en claro, verde-profundo en oscuro).", "section": "colors" },
+      { "name": "The Amber Restraint Rule", "body": "El ámbar primario aparece en ≤15% de cualquier pantalla. Su rareza es su punto — es la chispa que orienta la atención, no el color dominante.", "section": "colors" },
+      { "name": "The Serif Identity Rule", "body": "El serif no es decorativo; es la personalidad de Keryx. Nunca se reemplaza por sans-serif en display o body.", "section": "typography" },
+      { "name": "The Baseline Size Rule", "body": "El tamaño base es 0.875rem (14px), no 1rem. Herramienta de uso intensivo se beneficia de densidad moderada.", "section": "typography" },
+      { "name": "The Functional Elevation Rule", "body": "Las sombras no son decorativas. Si un elemento no cambia de nivel, no tiene sombra.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar Spectral/Merriweather como familia tipográfica principal",
+      "Do mantener el ámbar primario como acento raro (≤15%)",
+      "Do usar sombras solo en overlays (diálogos, popovers, dropdowns)",
+      "Do aplicar transiciones de estado en inputs y buttons",
+      "Do usar text-muted-foreground para placeholders y timestamps",
+      "Do respetar la densidad base de 14px para body text",
+      "Do usar la sombra verde-tintada en modo claro"
+    ],
+    "donts": [
+      "Don't usar sans-serif en display o body text",
+      "Don't usar grises puros para neutros — siempre tintar hacia verde-oliva",
+      "Don't poner sombras en cards, inputs, o badges",
+      "Don't exceder 15% de cobertura del ámbar primario",
+      "Don't usar border-left/right mayor a 1px como acento decorativo",
+      "Don't animar propiedades de layout en transiciones de estado",
+      "Don't usar gradientes de texto",
+      "Don't redondear cards con radius mayor a 20px",
+      "Don't parecerse a herramientas de código o chats corporativos genéricos"
+    ]
+  }
+}
