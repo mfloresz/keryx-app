@@ -35,9 +35,13 @@ func (p *GoogleProvider) goaiOpts(req ChatRequest) []goai.Option {
 	if len(req.Messages) > 0 {
 		msgs := make([]provider.Message, 0, len(req.Messages))
 		for _, m := range req.Messages {
+			parts := messageParts(m)
+			if len(parts) == 0 {
+				continue
+			}
 			msgs = append(msgs, provider.Message{
 				Role:    provider.Role(m.Role),
-				Content: []provider.Part{{Type: provider.PartText, Text: m.Content}},
+				Content: parts,
 			})
 		}
 		o = append(o, goai.WithMessages(msgs...))
@@ -76,10 +80,12 @@ func (p *GoogleProvider) Chat(ctx context.Context, req ChatRequest) (string, err
 	return strings.TrimSpace(result.Text), nil
 }
 
-func (p *GoogleProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(string)) (string, error) {
+func (p *GoogleProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (ChatStreamResult, error) {
+	var result ChatStreamResult
+
 	model, err := p.model()
 	if err != nil {
-		return "", err
+		return result, err
 	}
 
 	if req.Model != "" {
@@ -88,22 +94,33 @@ func (p *GoogleProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	stream, err := goai.StreamText(ctx, model, p.goaiOpts(req)...)
 	if err != nil {
-		return "", fmt.Errorf("google chat stream: %w", err)
+		return result, fmt.Errorf("google chat stream: %w", err)
 	}
 
-	var fullText strings.Builder
-	for text := range stream.TextStream() {
-		fullText.WriteString(text)
-		if onChunk != nil {
-			onChunk(text)
+	var text strings.Builder
+	var reasoning strings.Builder
+	for chunk := range stream.Stream() {
+		switch chunk.Type {
+		case provider.ChunkText:
+			text.WriteString(chunk.Text)
+			if onChunk != nil {
+				onChunk(StreamChunk{Kind: StreamChunkText, Text: chunk.Text})
+			}
+		case provider.ChunkReasoning:
+			reasoning.WriteString(chunk.Text)
+			if onChunk != nil {
+				onChunk(StreamChunk{Kind: StreamChunkReasoning, Text: chunk.Text})
+			}
 		}
 	}
 
+	result.Text = strings.TrimSpace(text.String())
+	result.Reasoning = strings.TrimSpace(reasoning.String())
 	if err := stream.Err(); err != nil {
-		return fullText.String(), fmt.Errorf("google stream error: %w", err)
+		return result, fmt.Errorf("google stream error: %w", err)
 	}
 
-	return strings.TrimSpace(fullText.String()), nil
+	return result, nil
 }
 
 func (p *GoogleProvider) GenerateTitle(ctx context.Context, userMessage string, language string) (string, error) {
@@ -112,7 +129,6 @@ func (p *GoogleProvider) GenerateTitle(ctx context.Context, userMessage string, 
 	fullPrompt := titlePrompt + "\n\nUser message: " + userMessage
 
 	return p.Chat(ctx, ChatRequest{
-		Messages:  []ChatMessage{{Role: "user", Content: fullPrompt}},
-		MaxTokens: 20,
+		Messages: []ChatMessage{{Role: "user", Content: fullPrompt}},
 	})
 }

@@ -25,30 +25,36 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
   isSubmitting.value = true
 
   try {
-    const id = crypto.randomUUID()
-    const cleanFiles = await persistAttachmentFiles(id, files)
-
-    const parts: any[] = [{ type: 'text', text }]
-    if (cleanFiles.length) parts.push(...cleanFiles)
-
-    const chat = {
-      id,
+    // Create the chat first: attachments are stored against a chat record.
+    const baseChat = {
+      id: crypto.randomUUID(),
       title: '' as string | null,
       visibility: 'private' as const,
       createdAt: new Date().toISOString(),
-      messages: [{ id: crypto.randomUUID(), role: 'user', parts, createdAt: new Date().toISOString() }],
+      messages: [{ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }], createdAt: new Date().toISOString() }],
       votes: [],
       webSearch: Boolean(webSearch),
     }
-
-    const saved = await chatRepository.createChat(chat)
+    const saved = await chatRepository.createChat(baseChat)
     const chatId = saved.id
+
+    // Upload attachments against the real chat ID, then update the message
+    // with persisted file parts.
+    const cleanFiles = await persistAttachmentFiles(chatId, files)
+    if (cleanFiles.length) {
+      const parts: any[] = [{ type: 'text', text }, ...cleanFiles]
+      await chatRepository.createChat({
+        ...baseChat,
+        id: chatId,
+        messages: [{ ...baseChat.messages[0], parts }],
+      } as any)
+    }
 
     chatStore.addChat({
       id: chatId,
-      label: chat.title || 'Untitled',
+      label: baseChat.title || 'Untitled',
       to: `/chat/${chatId}`,
-      createdAt: chat.createdAt,
+      createdAt: baseChat.createdAt,
     })
 
     router.push(`/chat/${chatId}`)

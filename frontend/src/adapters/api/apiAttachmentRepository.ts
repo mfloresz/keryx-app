@@ -1,52 +1,85 @@
 import type { AttachmentRepository } from "@/domain/chat/ports";
 import type { AttachmentFile } from "@/components/ai-elements/prompt-input/types";
+import { getAuthAdapter } from "@/services/runtime";
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error("Unable to read attachment"));
-    };
-    reader.onerror = () =>
-      reject(reader.error ?? new Error("Unable to read attachment"));
-    reader.readAsDataURL(file);
-  });
+interface UploadedAttachment {
+  id: string;
+  filename: string;
+  mediaType: string;
+  size: number;
 }
 
-function inferMediaType(file: File): string {
-  if (file.type && file.type !== "application/octet-stream") return file.type;
+async function uploadFiles(
+  chatId: string,
+  files: File[],
+): Promise<UploadedAttachment[]> {
+  const auth = await getAuthAdapter();
+  const headers = await auth.getAuthorizationHeaders();
 
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  const map: Record<string, string> = {
-    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
-    gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
-    pdf: "application/pdf", txt: "text/plain", md: "text/markdown",
-    json: "application/json", csv: "text/csv",
+  const form = new FormData();
+  for (const file of files) {
+    form.append("files", file, file.name);
+  }
+
+  const response = await fetch(`/api/chats/${chatId}/attachments`, {
+    method: "POST",
+    headers, // no content-type: the browser sets the multipart boundary
+    body: form,
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(
+      typeof payload?.message === "string"
+        ? payload.message
+        : `Failed to upload attachment (${response.status})`,
+    );
+  }
+
+  const body = (await response.json()) as {
+    attachments: UploadedAttachment[];
   };
-  return map[ext ?? ""] ?? "application/octet-stream";
+  return body.attachments ?? [];
 }
 
 export const apiAttachmentRepository: AttachmentRepository = {
-  async persistFiles(_chatId, files) {
-    return await Promise.all(
-      files.map(async (file: AttachmentFile) => {
-        if (file.file) {
-          const mediaType = inferMediaType(file.file);
-          const correctedFile = new File([file.file], file.file.name, { type: mediaType });
-          return {
-            type: "file",
-            url: await fileToDataUrl(correctedFile),
-            filename: correctedFile.name,
-            mediaType,
-            providerMetadata: { keryx: { inline: true, size: correctedFile.size } },
-          };
-        }
-        return { type: "file", url: file.url, filename: file.filename, mediaType: file.mediaType, providerMetadata: file.providerMetadata };
-      }),
+  async persistFiles(chatId, files) {
+    // Files already persisted (no raw File blob) are returned as-is.
+    const pending = files.filter(
+      (f) => f.file && !f.providerMetadata?.keryx?.storageKey,
     );
+    const uploaded = new Map<File, UploadedAttachment>();
+    if (pending.length) {
+      const results = await uploadFiles(
+        chatId,
+        pending.map((f) => f.file as File),
+      );
+      pending.forEach((f, i) => {
+        const result = results[i];
+        if (result) uploaded.set(f.file as File, result);
+      });
+    }
+
+    return files.map((file: AttachmentFile) => {
+      const result = file.file ? uploaded.get(file.file) : undefined;
+      if (result) {
+        return {
+          type: "file",
+          url: `/api/attachments/${result.id}`,
+          filename: result.filename,
+          mediaType: result.mediaType,
+          providerMetadata: {
+            keryx: { storageKey: result.id, size: result.size },
+          },
+        };
+      }
+      return {
+        type: "file",
+        url: file.url,
+        filename: file.filename,
+        mediaType: file.mediaType,
+        providerMetadata: file.providerMetadata,
+      };
+    });
   },
 };

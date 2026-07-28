@@ -129,6 +129,9 @@ func (s *Store) DeleteChat(chatID, ownerID string) error {
 	if err != nil {
 		return ErrNotFound
 	}
+	if err := s.DeleteChatAttachments(chatID, ownerID); err != nil {
+		return err
+	}
 	return s.App.Delete(record)
 }
 
@@ -144,6 +147,9 @@ func (s *Store) DeleteAllChats(ownerID string) error {
 		return err
 	}
 	for _, r := range records {
+		if err := s.DeleteChatAttachments(r.Id, ownerID); err != nil {
+			return err
+		}
 		if err := s.App.Delete(r); err != nil {
 			return err
 		}

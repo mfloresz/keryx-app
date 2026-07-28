@@ -16,6 +16,7 @@ import {
   Attachments,
 } from '@/components/ai-elements/attachments'
 import type { AttachmentData } from '@/components/ai-elements/attachments'
+import { ensureAttachmentResolved, resolvedAttachmentUrl } from '@/utils/attachmentUrl'
 import {
   Tool,
   ToolContent,
@@ -126,16 +127,24 @@ function getAttachmentStableId(part: FileUIPart, index: number): string {
     return storageKey
   }
 
-  if (typeof part.url === 'string' && part.url.startsWith('attachment://')) {
-    return part.url.slice('attachment://'.length)
+  if (typeof part.url === 'string' && part.url.startsWith('/api/attachments/')) {
+    return part.url.slice('/api/attachments/'.length)
   }
 
   return `${part.filename || 'attachment'}-${index}`
 }
 
 const attachmentData = computed<AttachmentData[]>(() =>
-  fileParts.value.map((p, i) => ({ ...p, id: getAttachmentStableId(p, i) }))
+  fileParts.value.map((p, i) => {
+    ensureAttachmentResolved(p.url)
+    return { ...p, id: getAttachmentStableId(p, i), url: resolvedAttachmentUrl(p.url) ?? p.url }
+  })
 )
+
+function openAttachment(item: AttachmentData) {
+  const url = item.type === 'file' ? item.url : undefined
+  if (url) window.open(url, '_blank', 'noopener')
+}
 
 const hasAttachments = computed(() => fileParts.value.length > 0)
 
@@ -222,6 +231,8 @@ function changeBranch(direction: -1 | 1) {
             v-for="item in attachmentData"
             :key="item.id"
             :data="item"
+            class="cursor-pointer"
+            @click="openAttachment(item)"
           >
             <AttachmentPreview />
             <AttachmentInfo show-media-type />
