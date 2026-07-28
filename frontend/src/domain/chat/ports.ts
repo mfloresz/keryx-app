@@ -18,7 +18,7 @@ export interface VoteRequest {
 
 export interface ChatRepository {
   listChats(): Promise<ChatIndexEntry[]>;
-  createChat(chat: ChatRecord): Promise<void>;
+  createChat(chat: ChatRecord): Promise<ChatRecord>;
   getChat(chatId: string): Promise<ChatRecord | null>;
   deleteChat(chatId: string): Promise<void>;
   deleteAllChats(): Promise<void>;

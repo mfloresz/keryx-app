@@ -1,12 +1,7 @@
 /**
  * Router Configuration
- *
- * Defines the application routes:
- * - / : New chat interface (no chat ID until first message)
- * - /chat/:id : Existing chat interface
  */
 import { createWebHistory, createRouter } from "vue-router";
-import { ENABLE_AUTH, IS_STATIC_MODE } from "@/app/config";
 import { getAuthAdapter } from "@/services/runtime";
 
 const routes = [
@@ -60,14 +55,6 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
-  if (IS_STATIC_MODE && to.path === "/login") {
-    return "/";
-  }
-
-  if (!ENABLE_AUTH || IS_STATIC_MODE) {
-    return true;
-  }
-
   const auth = await getAuthAdapter();
   const session = await auth.getSession();
 
@@ -87,13 +74,9 @@ router.beforeEach(async (to) => {
     const response = await fetch("/api/auth/me", {
       headers: await auth.getAuthorizationHeaders(),
     });
-    if (!response.ok) {
-      return "/";
-    }
+    if (!response.ok) return "/";
     const payload = await response.json();
-    if (payload.role !== "admin") {
-      return "/";
-    }
+    if (payload.role !== "admin") return "/";
   }
 
   return true;
