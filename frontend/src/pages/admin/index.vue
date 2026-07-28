@@ -123,12 +123,15 @@ async function assertOk(response: Response, fallbackMessage: string): Promise<vo
 
 async function loadData(): Promise<void> {
   isLoading.value = true;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
     const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse] = await Promise.all([
-      apiFetch("/api/admin/users"),
-      apiFetch("/api/admin/invitations"),
-      apiFetch("/api/admin/models"),
-      apiFetch("/api/admin/provider-keys"),
+      apiFetch("/api/admin/users", { signal: controller.signal }),
+      apiFetch("/api/admin/invitations", { signal: controller.signal }),
+      apiFetch("/api/admin/models", { signal: controller.signal }),
+      apiFetch("/api/admin/provider-keys", { signal: controller.signal }),
     ]);
 
     await assertOk(usersResponse, t("admin.shared.loadError"));
@@ -143,10 +146,15 @@ async function loadData(): Promise<void> {
     providerKeys.value =
       (await readPayload<ProviderKeyEntry[]>(providerKeysResponse)) ?? [];
   } catch (error) {
-    toast(
-      error instanceof Error ? error.message : t("admin.shared.loadError"),
-    );
+    if (error instanceof DOMException && error.name === "AbortError") {
+      toast(t("admin.shared.loadError"));
+    } else {
+      toast(
+        error instanceof Error ? error.message : t("admin.shared.loadError"),
+      );
+    }
   } finally {
+    clearTimeout(timeoutId);
     isLoading.value = false;
   }
 }
@@ -156,6 +164,17 @@ function formatDateTime(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatEmail(email: string): string {
+  if (email.length <= 50) return email;
+  const atIndex = email.lastIndexOf("@");
+  if (atIndex === -1) return email.substring(0, 47) + "...";
+  const localPart = email.substring(0, atIndex);
+  const domain = email.substring(atIndex);
+  const maxLocalLength = 50 - domain.length - 3;
+  if (maxLocalLength < 3) return email.substring(0, 47) + "...";
+  return localPart.substring(0, maxLocalLength) + "..." + domain;
 }
 
 // ---- Provider key handlers ----
@@ -226,6 +245,17 @@ function openInvitationDialog(): void {
 async function handleCreateInvitation(): Promise<void> {
   if (isCreatingInvitation.value) return;
 
+  const email = inviteEmail.value.trim();
+  if (!email) {
+    inviteError.value = "Email is required";
+    return;
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    inviteError.value = "Please enter a valid email address";
+    return;
+  }
+
   isCreatingInvitation.value = true;
   inviteError.value = "";
   createdInvitationUrl.value = "";
@@ -234,7 +264,7 @@ async function handleCreateInvitation(): Promise<void> {
     const response = await apiFetch("/api/admin/invitations", {
       method: "POST",
       body: JSON.stringify({
-        email: inviteEmail.value,
+        email,
         role: inviteRole.value,
       }),
     });
@@ -247,7 +277,7 @@ async function handleCreateInvitation(): Promise<void> {
     }
 
     createdInvitationUrl.value = payload?.invitationUrl ?? "";
-    createdInvitationEmail.value = inviteEmail.value.trim().toLowerCase();
+    createdInvitationEmail.value = email.toLowerCase();
     createdInvitationRole.value = inviteRole.value;
     inviteEmail.value = "";
     await loadData();
@@ -378,7 +408,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-0 flex-1 overflow-y-auto">
+  <div class="min-h-0 flex-1 overflow-y-auto overflow-hidden" aria-live="polite">
     <div class="space-y-6 p-6">
       <div>
         <h1 class="text-2xl font-semibold">{{ t('admin.dashboard.title') }}</h1>
@@ -414,7 +444,7 @@ onMounted(() => {
                   {{ t('admin.users.empty') }}
                 </TableEmpty>
                 <TableRow v-for="user in users" :key="user.id">
-                  <TableCell class="font-medium">{{ user.email }}</TableCell>
+                  <TableCell class="font-medium max-w-0 break-words" :title="user.email">{{ formatEmail(user.email) }}</TableCell>
                   <TableCell>
                     <Select
                       :model-value="user.role"
@@ -467,7 +497,7 @@ onMounted(() => {
                   {{ t('admin.invitations.noInvitations') }}
                 </TableEmpty>
                 <TableRow v-for="invitation in invitations" :key="invitation.id">
-                  <TableCell class="font-medium">{{ invitation.email }}</TableCell>
+                  <TableCell class="font-medium max-w-0 break-words" :title="invitation.email">{{ formatEmail(invitation.email) }}</TableCell>
                   <TableCell>{{ invitation.role === 'admin' ? t('admin.shared.roleAdmin') : t('admin.shared.roleUser') }}</TableCell>
                   <TableCell>
                     {{ invitation.usedAt ? t('admin.invitations.statusUsed') : t('admin.invitations.statusPending') }}
@@ -517,14 +547,14 @@ onMounted(() => {
                   {{ t('admin.providerKeys.noKeys') }}
                 </TableEmpty>
                 <TableRow v-for="entry in providerKeys" :key="entry.provider">
-                  <TableCell class="font-medium">{{ entry.label }}</TableCell>
+                  <TableCell class="font-medium break-words">{{ entry.label }}</TableCell>
                   <TableCell>
                     <div class="flex items-center gap-2">
                       <span
                         class="inline-block size-2 rounded-full"
                         :class="entry.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
                       />
-                      <span>
+                      <span class="break-words">
                         {{ entry.configured ? t('admin.providerKeys.statusConfigured') : t('admin.providerKeys.statusNotConfigured') }}
                       </span>
                     </div>
@@ -587,7 +617,7 @@ onMounted(() => {
                 <TableRow v-for="model in models" :key="model.id">
                   <TableCell>
                     <div class="font-medium">{{ model.displayName }}</div>
-                    <div class="text-sm text-muted-foreground">
+                    <div class="text-sm text-muted-foreground break-words">
                       {{ model.provider }} · {{ model.id }}
                     </div>
                   </TableCell>
@@ -643,7 +673,7 @@ onMounted(() => {
           </div>
 
           <div v-if="createdInvitationUrl" class="space-y-2 rounded-lg border bg-muted/40 p-3 text-sm">
-            <p class="break-all">{{ createdInvitationUrl }}</p>
+            <p class="break-all break-words">{{ createdInvitationUrl }}</p>
             <div class="flex flex-wrap justify-end gap-2">
               <Button variant="outline" size="sm" @click="handleCopyInvitationUrl">
                 {{ t('message.copy') }}
@@ -653,7 +683,7 @@ onMounted(() => {
               </Button>
             </div>
           </div>
-          <p v-if="inviteError" class="text-sm text-destructive">{{ inviteError }}</p>
+          <p v-if="inviteError" role="alert" class="text-sm text-destructive">{{ inviteError }}</p>
         </div>
 
         <DialogFooter>
