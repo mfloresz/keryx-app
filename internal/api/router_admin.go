@@ -1,0 +1,208 @@
+package api
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/google/uuid"
+	"keryx-server/internal/store"
+)
+
+func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := s.Store.ListUsers()
+	if err != nil {
+		errorResponse(w, "Failed to list users", http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, users, http.StatusOK)
+}
+
+func (s *Server) handleAdminUpdateUserRole(w http.ResponseWriter, r *http.Request) {
+	userID := r.PathValue("id")
+
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Role != store.RoleAdmin && req.Role != store.RoleUser {
+		errorResponse(w, "Invalid role", http.StatusBadRequest)
+		return
+	}
+
+	user, err := s.Store.GetUserByID(userID)
+	if err != nil {
+		errorResponse(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Prevent removing last admin
+	if user.Role == store.RoleAdmin && req.Role == store.RoleUser {
+		adminCount, err := s.Store.CountAdmins()
+		if err != nil {
+			errorResponse(w, "Failed to check admin count", http.StatusInternalServerError)
+			return
+		}
+		if adminCount <= 1 {
+			errorResponse(w, "At least one admin user is required", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if err := s.Store.UpdateUserRole(userID, req.Role); err != nil {
+		errorResponse(w, "Failed to update role", http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
+}
+
+func (s *Server) handleAdminListModels(w http.ResponseWriter, r *http.Request) {
+	models, err := s.Store.ListModels()
+	if err != nil {
+		errorResponse(w, "Failed to list models", http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, models, http.StatusOK)
+}
+
+func (s *Server) handleAdminUpdateModel(w http.ResponseWriter, r *http.Request) {
+	modelID := r.PathValue("id")
+
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.Store.SetModelEnabled(modelID, req.Enabled); err != nil {
+		errorResponse(w, "Model not found", http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
+}
+
+func (s *Server) handleAdminModelCatalog(w http.ResponseWriter, r *http.Request) {
+	catalog := store.GetCatalogModels()
+	jsonResponse(w, catalog, http.StatusOK)
+}
+
+func (s *Server) handleAdminListInvitations(w http.ResponseWriter, r *http.Request) {
+	invitations, err := s.Store.ListInvitations()
+	if err != nil {
+		errorResponse(w, "Failed to list invitations", http.StatusInternalServerError)
+		return
+	}
+	// Sanitize: remove token_hash from response
+	type sanitizedInvitation struct {
+		ID                 string   `json:"id"`
+		Email              string   `json:"email"`
+		Role               string   `json:"role"`
+		ExpiresAt          string   `json:"expiresAt"`
+		UsedAt             *string  `json:"usedAt"`
+		CreatedBy          string   `json:"createdBy"`
+		CreatedAt          string   `json:"createdAt"`
+		InitialModelAccess []string `json:"initialModelAccess"`
+	}
+	sanitized := make([]sanitizedInvitation, 0, len(invitations))
+	for _, inv := range invitations {
+		sanitized = append(sanitized, sanitizedInvitation{
+			ID:                 inv.ID,
+			Email:              inv.Email,
+			Role:               inv.Role,
+			ExpiresAt:          inv.ExpiresAt,
+			UsedAt:             inv.UsedAt,
+			CreatedBy:          inv.CreatedBy,
+			CreatedAt:          inv.CreatedAt,
+			InitialModelAccess: inv.InitialModelAccess,
+		})
+	}
+	jsonResponse(w, sanitized, http.StatusOK)
+}
+
+func (s *Server) handleAdminCreateInvitation(w http.ResponseWriter, r *http.Request) {
+	adminID, _ := userIDFromContext(r)
+
+	var req struct {
+		Email string `json:"email"`
+		Role  string `json:"role"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if email == "" {
+		errorResponse(w, "Missing invitation email", http.StatusBadRequest)
+		return
+	}
+
+	// Check if user already exists
+	if _, err := s.Store.GetUserByEmail(email); err == nil {
+		errorResponse(w, "A user with this email already exists", http.StatusConflict)
+		return
+	}
+
+	role := req.Role
+	if role != store.RoleAdmin && role != store.RoleUser {
+		role = store.RoleUser
+	}
+
+	rawToken := uuid.New().String() + uuid.New().String()
+	tokenHash := sha256Hex(rawToken)
+
+	inv := &store.InvitationRecord{
+		ID:        uuid.New().String(),
+		Email:     email,
+		TokenHash: tokenHash,
+		Role:      role,
+		ExpiresAt: "9999-12-31T23:59:59.999Z",
+		CreatedBy: adminID,
+	}
+
+	if err := s.Store.CreateInvitation(inv); err != nil {
+		errorResponse(w, "Failed to create invitation: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	baseURL := s.Cfg.AppBaseURL
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("http://%s", r.Host)
+	}
+
+	jsonResponse(w, map[string]any{
+		"invitation": map[string]any{
+			"id":        inv.ID,
+			"email":     inv.Email,
+			"role":      inv.Role,
+			"expiresAt": inv.ExpiresAt,
+			"usedAt":    nil,
+			"createdBy": inv.CreatedBy,
+			"createdAt": inv.CreatedAt,
+		},
+		"invitationUrl": fmt.Sprintf("%s/invite/%s", baseURL, rawToken),
+	}, http.StatusOK)
+}
+
+func (s *Server) handleAdminDeleteInvitation(w http.ResponseWriter, r *http.Request) {
+	invitationID := r.PathValue("id")
+
+	if err := s.Store.DeleteInvitation(invitationID); err != nil {
+		errorResponse(w, "Invitation not found", http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
+}
+
+func sha256Hex(input string) string {
+	h := sha256.Sum256([]byte(input))
+	return fmt.Sprintf("%x", h)
+}

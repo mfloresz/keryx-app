@@ -1,4 +1,3 @@
-import { IS_CLOUD_MODE } from "@/app/config";
 import type { AttachmentRepository, ChatRepository } from "@/domain/chat/ports";
 import type { ModelRepository } from "@/domain/models/ports";
 import type { AuthAdapter } from "@/domain/auth/ports";
@@ -10,52 +9,36 @@ let authAdapterPromise: Promise<AuthAdapter> | null = null;
 
 export function getChatRepository(): Promise<ChatRepository> {
   if (!chatRepositoryPromise) {
-    chatRepositoryPromise = IS_CLOUD_MODE
-      ? import("@/adapters/cloud/cloudChatRepository").then(
-          (module) => module.cloudChatRepository,
-        )
-      : import("@/adapters/static/opfsChatRepository").then(
-          (module) => module.opfsChatRepository,
-        );
+    chatRepositoryPromise = import("@/adapters/api/apiChatRepository").then(
+      (m) => m.apiChatRepository,
+    );
   }
   return chatRepositoryPromise;
 }
 
 export function getAttachmentRepository(): Promise<AttachmentRepository> {
   if (!attachmentRepositoryPromise) {
-    attachmentRepositoryPromise = IS_CLOUD_MODE
-      ? import("@/adapters/cloud/cloudAttachmentRepository").then(
-          (module) => module.cloudAttachmentRepository,
-        )
-      : import("@/adapters/static/opfsAttachmentRepository").then(
-          (module) => module.opfsAttachmentRepository,
-        );
+    attachmentRepositoryPromise = import("@/adapters/api/apiAttachmentRepository").then(
+      (m) => m.apiAttachmentRepository,
+    );
   }
   return attachmentRepositoryPromise;
 }
 
 export function getModelRepository(): Promise<ModelRepository> {
   if (!modelRepositoryPromise) {
-    modelRepositoryPromise = IS_CLOUD_MODE
-      ? import("@/adapters/cloud/cloudModelRepository").then(
-          (module) => module.cloudModelRepository,
-        )
-      : import("@/adapters/static/staticModelRepository").then(
-          (module) => module.staticModelRepository,
-        );
+    modelRepositoryPromise = import("@/adapters/api/apiModelRepository").then(
+      (m) => m.apiModelRepository,
+    );
   }
   return modelRepositoryPromise;
 }
 
 export function getAuthAdapter(): Promise<AuthAdapter> {
   if (!authAdapterPromise) {
-    authAdapterPromise = IS_CLOUD_MODE
-      ? import("@/adapters/cloud/cloudAuthAdapter").then(
-          (module) => module.cloudAuthAdapter,
-        )
-      : import("@/adapters/static/staticAuthAdapter").then(
-          (module) => module.staticAuthAdapter,
-        );
+    authAdapterPromise = import("@/adapters/api/apiAuthAdapter").then(
+      (m) => m.apiAuthAdapter,
+    );
   }
   return authAdapterPromise;
 }

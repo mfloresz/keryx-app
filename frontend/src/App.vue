@@ -6,7 +6,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { useAppFont } from '@/composables/useAppFont'
 import AppLayout from './components/layout/AppLayout.vue'
-import { ENABLE_AUTH } from '@/app/config'
 
 const route = useRoute()
 const chatStore = useChatStore()
@@ -15,70 +14,40 @@ const { toasts, dismiss } = useToast()
 const showLayout = computed(() => route.meta.layout !== false)
 const isPublicRoute = computed(() => route.meta.public === true)
 const canRenderProtectedLayout = computed(() => {
-  if (!showLayout.value) {
-    return false
-  }
-
-  if (!ENABLE_AUTH) {
-    return true
-  }
-
-  if (isPublicRoute.value) {
-    return false
-  }
-
+  if (!showLayout.value) return false
+  if (isPublicRoute.value) return false
   return !authStore.isLoading && Boolean(authStore.session)
 })
 const hasLoadedChats = ref(false)
 
-// Initialize global font settings (applies CSS custom properties on :root)
 useAppFont()
 
 async function loadChatsIfNeeded() {
-  if (route.path === '/login' || hasLoadedChats.value) {
-    return
-  }
-
-  if (!ENABLE_AUTH || authStore.session) {
+  if (route.path === '/login' || hasLoadedChats.value) return
+  if (authStore.session) {
     const loaded = await chatStore.fetchChats()
-    if (loaded) {
-      hasLoadedChats.value = true
-    }
+    if (loaded) hasLoadedChats.value = true
   }
 }
 
 onMounted(async () => {
-  if (ENABLE_AUTH) {
-    await authStore.loadSession()
-  }
-
+  await authStore.loadSession()
   await loadChatsIfNeeded()
 })
 
-watch(
-  () => route.path,
-  async () => {
+watch(() => route.path, async () => {
+  await loadChatsIfNeeded()
+}, { immediate: true })
+
+watch(() => authStore.session, async (session, previousSession) => {
+  if (session && !previousSession) {
     await loadChatsIfNeeded()
-  },
-  { immediate: true }
-)
-
-watch(
-  () => authStore.session,
-  async (session, previousSession) => {
-    if (session && !previousSession) {
-      await loadChatsIfNeeded()
-      return
-    }
-
-    if (!session) {
-      if (previousSession) {
-        hasLoadedChats.value = false
-      }
-      return
-    }
+    return
   }
-)
+  if (!session && previousSession) {
+    hasLoadedChats.value = false
+  }
+})
 </script>
 
 <template>
@@ -95,7 +64,7 @@ watch(
 
   <Suspense v-else>
     <RouterView
-      v-if="!ENABLE_AUTH || isPublicRoute || !showLayout"
+      v-if="isPublicRoute || !showLayout"
       :key="String(route.params.id || route.path)"
     />
     <div v-else class="flex min-h-screen items-center justify-center">
