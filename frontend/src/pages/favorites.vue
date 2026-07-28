@@ -38,7 +38,7 @@ onMounted(loadFavorites)
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex h-full flex-col overflow-hidden">
     <div class="border-b px-4 py-3">
       <h2 class="font-semibold truncate">
         {{ $t('favorites.title') }}
@@ -48,11 +48,11 @@ onMounted(loadFavorites)
       </p>
     </div>
 
-    <div v-if="isLoading" class="flex-1 flex items-center justify-center">
+    <div v-if="isLoading" class="flex-1 flex items-center justify-center" role="status">
       <div class="text-muted-foreground">{{ $t('app.loading') }}</div>
     </div>
 
-    <div v-else-if="favorites.length === 0" class="flex-1 flex items-center justify-center px-4">
+    <div v-else-if="favorites.length === 0" class="flex-1 flex items-center justify-center px-4" aria-live="polite">
       <div class="max-w-md text-center space-y-2">
         <h3 class="text-lg font-medium">{{ $t('favorites.emptyTitle') }}</h3>
         <p class="text-sm text-muted-foreground">{{ $t('favorites.emptyDescription') }}</p>

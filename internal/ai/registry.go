@@ -49,14 +49,14 @@ var knownProviders = []ProviderInfo{
 		},
 		Models: []ModelInfo{
 			{ID: "venice/e2ee-deepseek-v4-flash", UpstreamID: "e2ee-deepseek-v4-flash", Provider: "venice", DisplayName: "DeepSeek V4 Flash (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/mistral-small-3-2-24b-instruct", UpstreamID: "mistral-small-3-2-24b-instruct", Provider: "venice", DisplayName: "Mistral Small 3.2 24B", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/google-gemma-4-31b-it:disable_thinking=true", UpstreamID: "google-gemma-4-31b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 31B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/mistral-small-3-2-24b-instruct", UpstreamID: "mistral-small-3-2-24b-instruct", Provider: "venice", DisplayName: "Mistral Small 3.2 24B", SupportsImages: true, SupportsSearch: false, MaxContext: 128000, MaxOutput: 0},
+			{ID: "venice/google-gemma-4-31b-it:disable_thinking=true", UpstreamID: "google-gemma-4-31b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 31B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/e2ee-gpt-oss-20b-p", UpstreamID: "e2ee-gpt-oss-20b-p", Provider: "venice", DisplayName: "GPT OSS 20B (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/aion-labs-aion-3-0-mini", UpstreamID: "aion-labs-aion-3-0-mini", Provider: "venice", DisplayName: "Aion 3.0 Mini", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/e2ee-gemma-4-26b-a4b-uncensored-p", UpstreamID: "e2ee-gemma-4-26b-a4b-uncensored-p", Provider: "venice", DisplayName: "Gemma 4 26B A4B Uncensored (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/google-gemma-4-26b-a4b-it:disable_thinking=true", UpstreamID: "google-gemma-4-26b-a4b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 26B A4B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/xiaomi-mimo-v2-5", UpstreamID: "xiaomi-mimo-v2-5", Provider: "venice", DisplayName: "Xiaomi Mimo V2.5", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/mistral-small-2603", UpstreamID: "mistral-small-2603", Provider: "venice", DisplayName: "Mistral Small 2603", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/google-gemma-4-26b-a4b-it:disable_thinking=true", UpstreamID: "google-gemma-4-26b-a4b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 26B A4B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/xiaomi-mimo-v2-5", UpstreamID: "xiaomi-mimo-v2-5", Provider: "venice", DisplayName: "Xiaomi Mimo V2.5", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/mistral-small-2603", UpstreamID: "mistral-small-2603", Provider: "venice", DisplayName: "Mistral Small 2603", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
@@ -95,8 +95,8 @@ var knownProviders = []ProviderInfo{
 		OpenAICompat: false,
 		DefaultModel: "gemma-4-31b-it",
 		Models: []ModelInfo{
-			{ID: "google/gemma-4-26b-a4b-it", UpstreamID: "gemma-4-26b-a4b-it", Provider: "google", DisplayName: "Gemma 4 26B A4B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "google/gemma-4-31b-it", UpstreamID: "gemma-4-31b-it", Provider: "google", DisplayName: "Gemma 4 31B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "google/gemma-4-26b-a4b-it", UpstreamID: "gemma-4-26b-a4b-it", Provider: "google", DisplayName: "Gemma 4 26B A4B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "google/gemma-4-31b-it", UpstreamID: "gemma-4-31b-it", Provider: "google", DisplayName: "Gemma 4 31B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 }

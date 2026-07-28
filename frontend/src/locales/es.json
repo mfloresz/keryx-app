@@ -9,6 +9,19 @@
     "delete": "Eliminar",
     "skipToContent": "Saltar al contenido"
   },
+  "errors": {
+    "network": "No se puede conectar. Por favor verifica tu conexión a internet e inténtalo de nuevo.",
+    "auth": "Error de autenticación. Por favor verifica tu clave de API o inicia sesión de nuevo.",
+    "rateLimit": "Demasiadas solicitudes. Por favor espera un momento e inténtalo de nuevo.",
+    "timeout": "La solicitud agotó el tiempo de espera. Por favor inténtalo de nuevo.",
+    "server": "El servidor encontró un error. Por favor inténtalo de nuevo más tarde.",
+    "provider": "El proveedor de IA devolvió un error. Por favor verifica tu configuración.",
+    "unknown": "Ocurrió un error inesperado. Por favor inténtalo de nuevo.",
+    "offline": "Parece que estás desconectado. Por favor verifica tu conexión.",
+    "notFound": "El recurso solicitado no fue encontrado.",
+    "forbidden": "No tienes permiso para realizar esta acción.",
+    "validation": "Por favor verifica tu entrada e inténtalo de nuevo."
+  },
   "sidebar": {
     "newChat": "Nuevo Chat",
     "search": "Buscar",
@@ -161,7 +174,17 @@
     "unsupportedImageDescription": "El modelo seleccionado no soporta imagenes. Solo se permiten documentos de texto.",
     "unsupportedCloudAttachmentDescription": "En modo cloud, los adjuntos deben cargarse como archivos locales integrados. Vuelve a adjuntar el archivo e intentalo de nuevo.",
     "thinking": "Pensando...",
-    "stop": "Detener"
+    "stop": "Detener",
+    "errors": {
+      "network": "No se puede conectar. Por favor verifica tu conexión a internet e inténtalo de nuevo.",
+      "auth": "Error de autenticación. Por favor verifica tu clave de API o inicia sesión de nuevo.",
+      "rate_limit": "Demasiadas solicitudes. Por favor espera un momento e inténtalo de nuevo.",
+      "timeout": "La solicitud agotó el tiempo de espera. Por favor inténtalo de nuevo.",
+      "server": "El servidor encontró un error. Por favor inténtalo de nuevo más tarde.",
+      "provider": "El proveedor de IA devolvió un error. Por favor verifica tu configuración.",
+      "unexpected": "Ocurrió un error inesperado. Por favor inténtalo de nuevo.",
+      "unknown": "Ocurrió un error inesperado"
+    }
   },
   "message": {
     "user": "Usuario",
@@ -311,7 +334,10 @@
       "createAccount": "Crear cuenta",
       "creatingAccount": "Creando cuenta...",
       "success": "La cuenta se creó correctamente.",
-      "error": "No se pudo aceptar la invitación"
+      "error": "No se pudo aceptar la invitación",
+      "requestTimedOut": "La solicitud agotó el tiempo de espera. Por favor inténtalo de nuevo.",
+      "passwordRequired": "La contraseña es obligatoria.",
+      "confirmPasswordRequired": "Por favor confirma tu contraseña."
     }
   }
 }

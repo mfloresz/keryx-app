@@ -68,9 +68,9 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
 </script>
 
 <template>
-  <div class="flex flex-col h-full">
+  <div class="flex flex-col h-full overflow-hidden">
     <div class="flex-1 flex flex-col items-center justify-center px-4">
-      <div class="text-center space-y-4 max-w-lg">
+      <div class="text-center space-y-4 max-w-lg min-w-0 overflow-hidden break-words">
         <h1 class="text-3xl font-bold tracking-tight">{{ $t('chat.welcomeTitle') }}</h1>
         <p class="text-muted-foreground">{{ $t('chat.welcomeSubtitle') }}</p>
       </div>

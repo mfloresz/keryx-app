@@ -42,6 +42,7 @@ const isEditDialogOpen = ref(false)
 const editMessageId = ref<string | null>(null)
 const editText = ref('')
 const editTextareaRef = ref<any>(null)
+const isEditing = ref(false)
 
 const chatId = computed(() => route.params.id as string)
 const compactNumberFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
@@ -96,13 +97,25 @@ function buildSearchRequestBody(webSearch: boolean) {
 async function loadChat() {
   isLoading.value = true
   loadError.value = null
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
   try {
-    const loadedChat = await chatRepository.getChat(chatId.value)
+    const loadedChat = await Promise.race([
+      chatRepository.getChat(chatId.value),
+      new Promise<never>((_, reject) => {
+        controller.signal.addEventListener('abort', () => {
+          const err = new Error('Aborted')
+          err.name = 'AbortError'
+          reject(err)
+        }, { once: true })
+      }),
+    ])
     if (!loadedChat) throw new Error('Chat not found')
     chatData.value = loadedChat
   } catch (err: any) {
-    loadError.value = err.message || 'Failed to load chat'
+    loadError.value = err instanceof Error ? getUserFacingChatError(err.message, t) : t('chat.errors.unexpected')
   } finally {
+    clearTimeout(timeoutId)
     isLoading.value = false
   }
 }
@@ -225,6 +238,21 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
     if (chatData.value) {
       chatData.value = { ...chatData.value, webSearch }
     }
+    // The stream endpoint only appends the assistant reply, so the user
+    // message must be persisted here first (with file parts, if any).
+    const userMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      createdAt: new Date().toISOString(),
+      parts: [{ type: 'text' as const, text }, ...cleanFiles],
+    }
+    await chatRepository.createChat({
+      ...chatData.value,
+      messages: [...(chatData.value?.messages ?? []), userMessage],
+    } as any)
+    // NOTE: no messageId here — passing one triggers the SDK's edit/resend
+    // path and nothing is sent. The in-memory id is reconciled with the
+    // persisted id later by backfillVisibleMessageIds().
     chat.sendMessage(
       { text, files: cleanFiles },
       { body: buildSearchRequestBody(webSearch) }
@@ -249,19 +277,35 @@ async function handleEdit(message: UIMessage) {
 }
 
 async function confirmEdit() {
-  if (!editMessageId.value) return
+  if (!editMessageId.value || isEditing.value) return
   const text = editText.value.trim()
-  if (!text) return
+  if (!text || text.length > 10000) return
+  isEditing.value = true
   isEditDialogOpen.value = false
+  const messageId = editMessageId.value
   try {
-    await chatRepository.deleteMessage(chatId.value, { messageId: editMessageId.value, type: 'edit' })
+    await chatRepository.deleteMessage(chatId.value, { messageId, type: 'edit' })
   } catch {
     toast(t('chat.failedEdit'))
+    isEditing.value = false
     return
   }
-  chat.sendMessage({ text, messageId: editMessageId.value }, { body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+  // deleteMessage keeps the old user message in place; update its stored text
+  // so the edited content survives rehydration.
+  if (chatData.value) {
+    await chatRepository.createChat({
+      ...chatData.value,
+      messages: (chatData.value.messages ?? []).map((m: UIMessage) =>
+        m.id === messageId
+          ? { ...m, parts: [{ type: 'text' as const, text }] }
+          : m
+      ),
+    } as any)
+  }
+  chat.sendMessage({ text, messageId }, { body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
   editMessageId.value = null
   editText.value = ''
+  isEditing.value = false
 }
 
 function cancelEdit() {
@@ -348,11 +392,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="isLoading" class="flex-1 flex items-center justify-center">
+  <div v-if="isLoading" class="flex-1 flex items-center justify-center overflow-hidden break-words">
     <div class="text-muted-foreground">{{ $t('chat.loadingChat') }}</div>
   </div>
 
-  <div v-else-if="loadError" class="flex-1 flex items-center justify-center">
+  <div v-else-if="loadError" class="flex-1 flex items-center justify-center overflow-hidden break-words">
     <div class="text-center space-y-4">
       <h2 class="text-xl font-semibold">{{ $t('chat.notFoundTitle') }}</h2>
       <p class="text-muted-foreground">{{ loadError }}</p>
@@ -369,8 +413,9 @@ onMounted(() => {
         <DialogHeader>
           <DialogTitle>{{ $t('message.edit') }}</DialogTitle>
         </DialogHeader>
-        <Textarea ref="editTextareaRef" v-model="editText" class="min-h-[120px]"
+        <Textarea ref="editTextareaRef" v-model="editText" class="min-h-[120px]" maxlength="10000"
           @keydown.enter.meta="confirmEdit" @keydown.enter.ctrl="confirmEdit" />
+        <div class="text-xs text-muted-foreground text-right mt-1">{{ editText.length }}/10000</div>
         <DialogFooter class="gap-2 sm:gap-0">
           <Button variant="outline" @click="cancelEdit">{{ $t('app.cancel') }}</Button>
           <Button @click="confirmEdit">{{ $t('message.edit') }}</Button>
@@ -379,7 +424,7 @@ onMounted(() => {
     </Dialog>
 
     <!-- Chat header -->
-    <div class="border-b px-4 py-3 flex items-center justify-between gap-3">
+    <div class="border-b px-4 py-3 flex items-center justify-between gap-3 min-w-0">
       <h2 class="font-semibold truncate">{{ chatTitle }}</h2>
       <Context :used-tokens="usedTokens" :max-tokens="maxContextTokens" :usage="contextUsage" :model-id="currentModelId">
         <ContextTrigger>
