@@ -1,12 +1,3 @@
-import { mockRoot } from './mock-opfs'
-
-/* ---------- OPFS ---------- */
-Object.defineProperty(globalThis, 'navigator', {
-  value: { storage: { getDirectory: async () => mockRoot } },
-  writable: true,
-  configurable: true,
-})
-
 /* ---------- localStorage ---------- */
 const store: Record<string, string> = {}
 Object.defineProperty(globalThis, 'localStorage', {

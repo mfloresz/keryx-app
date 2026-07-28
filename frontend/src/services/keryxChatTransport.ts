@@ -56,9 +56,9 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
       throw new Error('No model selected');
     }
 
-    // Convert UIMessage[] to backend ChatMessage[] (role + content).
-    // Messages with empty text content are skipped: sending them makes
-    // providers reject the whole request with 400.
+    // Convert UIMessage[] to backend ChatMessage[] (role + content + files).
+    // Messages with neither text content nor file attachments are skipped:
+    // sending them makes providers reject the whole request with 400.
     const messages = options.messages
       .map((msg: any) => {
         // Extract text content from parts or legacy content field
@@ -71,10 +71,25 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         } else if (typeof msg.content === 'string') {
           content = msg.content;
         }
+        // Attachments travel as metadata refs; the backend resolves the
+        // bytes from stored files. The attachment id is stored in
+        // providerMetadata.keryx.storageKey, with the API URL as fallback.
+        const attachments = (Array.isArray(msg.parts) ? msg.parts : [])
+          .filter((p: any) => p?.type === 'file')
+          .map((p: any) => {
+            const storageKey = p.providerMetadata?.keryx?.storageKey;
+            const fromUrl = typeof p.url === 'string' && p.url.startsWith('/api/attachments/')
+              ? p.url.slice('/api/attachments/'.length)
+              : undefined;
+            const id = storageKey ?? fromUrl;
+            if (!id) return null;
+            return { id, filename: p.filename ?? 'attachment', mediaType: p.mediaType ?? 'application/octet-stream' };
+          })
+          .filter((a: unknown) => a !== null);
         const role = msg.role ?? 'user';
         if (role !== 'user' && role !== 'assistant') return null;
-        if (!content.trim()) return null;
-        return { role, content };
+        if (!content.trim() && attachments.length === 0) return null;
+        return attachments.length ? { role, content, attachments } : { role, content };
       })
       .filter((msg: unknown) => msg !== null);
 
@@ -104,7 +119,23 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
       async start(controller) {
         let buffer = '';
 
-        // Emit initial chunks: start-step, then text-start
+        // Emit initial chunks: start-step, then text-start.
+        // Reasoning chunks (reasoning-start/delta/end) are emitted lazily only
+        // when the backend actually sends reasoning events.
+        const reasoningId = crypto.randomUUID();
+        let reasoningOpen = false;
+
+        const closeReasoning = () => {
+          if (reasoningOpen) {
+            controller.enqueue({ type: 'reasoning-end', id: reasoningId } as UIMessageChunk);
+            reasoningOpen = false;
+          }
+        };
+        const closeAll = () => {
+          closeReasoning();
+          controller.enqueue({ type: 'text-end', id: messageId } as UIMessageChunk);
+        };
+
         controller.enqueue({ type: 'start-step' } as UIMessageChunk);
         controller.enqueue({
           type: 'text-start',
@@ -127,20 +158,31 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
               try {
                 const data = JSON.parse(trimmed.slice(6));
 
-                if (data.type === 'text' && data.text) {
+                if (data.type === 'reasoning' && data.text) {
+                  if (!reasoningOpen) {
+                    controller.enqueue({ type: 'reasoning-start', id: reasoningId } as UIMessageChunk);
+                    reasoningOpen = true;
+                  }
+                  controller.enqueue({
+                    type: 'reasoning-delta',
+                    id: reasoningId,
+                    delta: data.text,
+                  } as UIMessageChunk);
+                } else if (data.type === 'text' && data.text) {
+                  closeReasoning();
                   controller.enqueue({
                     type: 'text-delta',
                     id: messageId,
                     delta: data.text,
                   } as UIMessageChunk);
                 } else if (data.type === 'finish') {
-                  controller.enqueue({ type: 'text-end', id: messageId } as UIMessageChunk);
+                  closeAll();
                   controller.enqueue({ type: 'finish-step' } as UIMessageChunk);
                   controller.enqueue({ type: 'finish', finishReason: 'stop' } as UIMessageChunk);
                   controller.close();
                   return;
                 } else if (data.type === 'error') {
-                  controller.enqueue({ type: 'text-end', id: messageId } as UIMessageChunk);
+                  closeAll();
                   controller.enqueue({ type: 'error', errorText: data.error ?? 'Unknown error' } as UIMessageChunk);
                   controller.enqueue({ type: 'finish-step' } as UIMessageChunk);
                   controller.enqueue({ type: 'finish', finishReason: 'error' } as UIMessageChunk);
@@ -154,7 +196,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
             }
           }
         } catch (err) {
-          controller.enqueue({ type: 'text-end', id: messageId } as UIMessageChunk);
+          closeAll();
           controller.enqueue({
             type: 'error',
             errorText: err instanceof Error ? err.message : 'Stream error',
@@ -166,7 +208,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         }
 
         // If we got here without a finish/error event, close cleanly
-        controller.enqueue({ type: 'text-end', id: messageId } as UIMessageChunk);
+        closeAll();
         controller.enqueue({ type: 'finish-step' } as UIMessageChunk);
         controller.enqueue({ type: 'finish', finishReason: 'stop' } as UIMessageChunk);
         controller.close();

@@ -416,10 +416,15 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			errorResponse(w, fmt.Sprintf("Invalid message role: %q", m.Role), http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(m.Content) == "" {
+		if strings.TrimSpace(m.Content) == "" && len(m.Attachments) == 0 {
 			continue
 		}
-		filtered = append(filtered, m)
+		resolved, err := s.resolveAttachments(userID, m)
+		if err != nil {
+			errorResponse(w, "Failed to load attachments: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		filtered = append(filtered, resolved)
 	}
 	if len(filtered) == 0 || filtered[len(filtered)-1].Role != "user" {
 		errorResponse(w, "Last message must be a non-empty user message", http.StatusBadRequest)
@@ -467,13 +472,17 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	writeSSEEvent(w, "start", nil)
 	flusher.Flush()
 
-	var fullText string
-	fullText, err = provider.ChatStream(r.Context(), ai.ChatRequest{
+	streamResult, err := provider.ChatStream(r.Context(), ai.ChatRequest{
 		Model:    resolvedModel,
 		Messages: req.Messages,
 		System:   systemPrompt,
-	}, func(chunk string) {
-		writeSSEEvent(w, "text", map[string]string{"text": chunk})
+	}, func(chunk ai.StreamChunk) {
+		switch chunk.Kind {
+		case ai.StreamChunkReasoning:
+			writeSSEEvent(w, "reasoning", map[string]string{"text": chunk.Text})
+		default:
+			writeSSEEvent(w, "text", map[string]string{"text": chunk.Text})
+		}
 		flusher.Flush()
 	})
 
@@ -482,52 +491,78 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		flusher.Flush()
 		return
 	}
+	fullText := streamResult.Text
+
+	// Generate title if chat has no title, then save both title and messages.
+	if chat.Title == "" && len(req.Messages) > 0 && provider != nil {
+		firstUserMsg := ""
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				firstUserMsg = m.Content
+				break
+			}
+		}
+		if firstUserMsg != "" {
+			lang := req.Language
+			if lang == "" {
+				lang = "en"
+			}
+			title, err := provider.GenerateTitle(context.Background(), firstUserMsg, lang)
+			if err == nil && title != "" {
+				chat.Title = title
+			}
+		}
+	}
+
+	// Append assistant message to chat messages
+	var existingMessages []map[string]any
+	json.Unmarshal(chat.Messages, &existingMessages)
+
+	assistantParts := []map[string]any{}
+	if streamResult.Reasoning != "" {
+		assistantParts = append(assistantParts, map[string]any{
+			"type": "reasoning",
+			"text": streamResult.Reasoning,
+		})
+	}
+	assistantParts = append(assistantParts, map[string]any{"type": "text", "text": fullText})
+	assistantMsg := map[string]any{
+		"id":    generateID(),
+		"role":  "assistant",
+		"parts": assistantParts,
+	}
+	existingMessages = append(existingMessages, assistantMsg)
+	chat.Messages, _ = json.Marshal(existingMessages)
+
+	// Save chat with title and messages atomically
+	savedChat, err := s.Store.SaveChat(chat, userID)
+	if err == nil && savedChat.Title != "" {
+		writeSSEEvent(w, "finish", map[string]string{"title": savedChat.Title})
+		flusher.Flush()
+		return
+	}
 
 	writeSSEEvent(w, "finish", nil)
 	flusher.Flush()
+}
 
-	// Generate title if chat has no title (using the same provider)
-	if chat.Title == "" && len(req.Messages) > 0 && provider != nil {
-		go func() {
-			firstUserMsg := ""
-			for _, m := range req.Messages {
-				if m.Role == "user" {
-					firstUserMsg = m.Content
-					break
-				}
-			}
-			if firstUserMsg != "" {
-				lang := req.Language
-				if lang == "" {
-					lang = "en"
-				}
-				title, err := provider.GenerateTitle(context.Background(), firstUserMsg, lang)
-				if err == nil && title != "" {
-					s.Store.UpdateChatTitle(chatID, userID, title)
-				}
-			}
-		}()
-	}
-
-	// Save chat with new messages in background
-	go func() {
-		updatedChat, err := s.Store.GetChat(chatID, userID)
+// resolveAttachments loads attachment bytes for any message whose attachment
+// refs carry an ID. Metadata sent by the client is trusted only for display;
+// server-side data always wins for filename/mediaType.
+func (s *Server) resolveAttachments(userID string, m ai.ChatMessage) (ai.ChatMessage, error) {
+	for i, a := range m.Attachments {
+		if a.ID == "" || a.Data != nil {
+			continue
+		}
+		info, data, err := s.Store.GetAttachmentData(a.ID, userID)
 		if err != nil {
-			return
+			return m, fmt.Errorf("attachment %s: %w", a.ID, err)
 		}
-
-		var existingMessages []map[string]any
-		json.Unmarshal(updatedChat.Messages, &existingMessages)
-
-		assistantMsg := map[string]any{
-			"id":    generateID(),
-			"role":  "assistant",
-			"parts": []map[string]any{{"type": "text", "text": fullText}},
-		}
-		existingMessages = append(existingMessages, assistantMsg)
-		updatedChat.Messages, _ = json.Marshal(existingMessages)
-		_, _ = s.Store.SaveChat(updatedChat, userID)
-	}()
+		m.Attachments[i].Data = data
+		m.Attachments[i].Filename = info.Filename
+		m.Attachments[i].MediaType = info.MediaType
+	}
+	return m, nil
 }
 
 const baseSystemPrompt = `Eres un asistente de IA útil, respetuoso y honesto. Respondes en el mismo idioma en que te hablan. Proporcionas respuestas claras, concisas y útiles.`

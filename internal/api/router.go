@@ -65,6 +65,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/chats/{id}/votes", s.withAuth(s.handleGetVotes))
 	mux.HandleFunc("POST /api/chats/{id}/votes", s.withAuth(s.handleSaveVote))
 	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.handleChatStream))
+	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
+	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
 
 	// Model routes
 	mux.HandleFunc("GET /api/models/allowed", s.withAuth(s.handleAllowedModels))

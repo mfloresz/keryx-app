@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { getFavoriteMessagesFromChat } from "./favorites";
 
 describe("favorites aggregator", () => {
-  it("assigns ids to messages that arrive without one before storage sanitization", async () => {
-    const { sanitizeMessagesForStorage } = await import("./chatCore");
-    const messages = sanitizeMessagesForStorage([
+  it("assigns ids to messages that arrive without one", async () => {
+    const { ensureMessageIdentifiers } = await import("./chatCore");
+    const messages = ensureMessageIdentifiers([
       {
         id: "",
         role: "assistant",
