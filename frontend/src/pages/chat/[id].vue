@@ -155,15 +155,7 @@ function findPersistedMessageMatch(message: UIMessage, persistedMessages: UIMess
   return candidates.length === 1 ? candidates[0] ?? null : null
 }
 
-function backfillVisibleMessageIds(visibleMessages: UIMessage[], persistedMessages: UIMessage[]): UIMessage[] {
-  const usedIds = new Set<string>()
-  return cloneJson(visibleMessages).map((message) => {
-    const persistedMatch = findPersistedMessageMatch(message, persistedMessages, usedIds)
-    if (persistedMatch?.id) usedIds.add(persistedMatch.id)
-    const currentId = typeof message.id === 'string' && message.id.trim().length > 0 ? message.id : null
-    return { ...message, id: persistedMatch?.id || currentId || crypto.randomUUID() }
-  })
-}
+
 
 async function resolvePersistedMessageId(message: UIMessage): Promise<string | null> {
   const currentId = typeof message.id === 'string' && message.id.trim().length > 0 ? message.id : null
@@ -173,14 +165,7 @@ async function resolvePersistedMessageId(message: UIMessage): Promise<string | n
   return findPersistedMessageMatch(message, persistedMessages)?.id ?? null
 }
 
-async function refreshChatMeta() {
-  const updatedChat = await chatRepository.getChat(chatId.value)
-  if (!updatedChat) throw new Error('Chat not found')
-  const visibleMessages = backfillVisibleMessageIds(chat.messages, updatedChat.messages as UIMessage[])
-  chat.messages = visibleMessages
-  chatData.value = { ...updatedChat, messages: visibleMessages }
-  return updatedChat
-}
+
 
 await loadChat()
 
@@ -216,14 +201,19 @@ const chat = new Chat({
   }
 })
 
-// Watch for streaming completion
+// Watch for streaming completion. Only lightweight metadata (title, usage)
+// is refreshed — chat.messages is NOT re-hydrated here so the rendered
+// conversation never flickers when a stream ends.
 watch(() => chat.status, async (status, prevStatus) => {
   if ((prevStatus === 'streaming' || prevStatus === 'submitted') && status === 'ready') {
     await nextTick()
     setTimeout(async () => {
       try {
-        const [updatedChat] = await Promise.all([refreshChatMeta(), loadVotes()])
-        chatStore.updateChat(chatId.value, { label: updatedChat?.title || 'Untitled' })
+        const [updatedChat] = await Promise.all([chatRepository.getChat(chatId.value), loadVotes()])
+        if (updatedChat) {
+          chatData.value = { ...updatedChat, messages: chatData.value?.messages ?? updatedChat.messages }
+          chatStore.updateChat(chatId.value, { label: updatedChat.title || 'Untitled' })
+        }
       } catch {
         // ignore refresh errors after streaming
       }
@@ -238,21 +228,11 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
     if (chatData.value) {
       chatData.value = { ...chatData.value, webSearch }
     }
-    // The stream endpoint only appends the assistant reply, so the user
-    // message must be persisted here first (with file parts, if any).
-    const userMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      createdAt: new Date().toISOString(),
-      parts: [{ type: 'text' as const, text }, ...cleanFiles],
-    }
-    await chatRepository.createChat({
-      ...chatData.value,
-      messages: [...(chatData.value?.messages ?? []), userMessage],
-    } as any)
+    // The stream endpoint persists the user message (upsert by id) before
+    // streaming and appends the assistant reply when done — no client-side
+    // save of the full chat is needed, which avoids stale-state overwrites.
     // NOTE: no messageId here — passing one triggers the SDK's edit/resend
-    // path and nothing is sent. The in-memory id is reconciled with the
-    // persisted id later by backfillVisibleMessageIds().
+    // path and nothing is sent.
     chat.sendMessage(
       { text, files: cleanFiles },
       { body: buildSearchRequestBody(webSearch) }
@@ -290,18 +270,9 @@ async function confirmEdit() {
     isEditing.value = false
     return
   }
-  // deleteMessage keeps the old user message in place; update its stored text
-  // so the edited content survives rehydration.
-  if (chatData.value) {
-    await chatRepository.createChat({
-      ...chatData.value,
-      messages: (chatData.value.messages ?? []).map((m: UIMessage) =>
-        m.id === messageId
-          ? { ...m, parts: [{ type: 'text' as const, text }] }
-          : m
-      ),
-    } as any)
-  }
+  // deleteMessage keeps the target user message in place; the stream
+  // endpoint upserts it by id with the edited text and appends the new
+  // assistant reply atomically server-side.
   chat.sendMessage({ text, messageId }, { body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
   editMessageId.value = null
   editText.value = ''

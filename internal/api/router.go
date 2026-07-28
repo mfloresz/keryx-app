@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"keryx-server/internal/ai"
@@ -22,6 +23,11 @@ type Server struct {
 	Store       *store.Store
 	Cfg         *config.Config
 	AIProviders map[string]ai.Provider
+
+	// chatLocks serializes read-modify-write cycles per chat so concurrent
+	// handlers (stream persist, votes, message edits) can't clobber each
+	// other's changes.
+	chatLocks sync.Map
 }
 
 func New(st *store.Store, cfg *config.Config) *Server {
@@ -30,6 +36,14 @@ func New(st *store.Store, cfg *config.Config) *Server {
 		Cfg:         cfg,
 		AIProviders: make(map[string]ai.Provider),
 	}
+}
+
+// lockChat locks the per-chat mutex and returns the unlock function.
+func (s *Server) lockChat(chatID string) func() {
+	v, _ := s.chatLocks.LoadOrStore(chatID, &sync.Mutex{})
+	m := v.(*sync.Mutex)
+	m.Lock()
+	return m.Unlock
 }
 
 func (s *Server) Handler() http.Handler {

@@ -89,9 +89,18 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         const role = msg.role ?? 'user';
         if (role !== 'user' && role !== 'assistant') return null;
         if (!content.trim() && attachments.length === 0) return null;
-        return attachments.length ? { role, content, attachments } : { role, content };
+        const base: Record<string, unknown> = { id: msg.id, role, content };
+        if (attachments.length) base.attachments = attachments;
+        return base;
       })
       .filter((msg: unknown) => msg !== null);
+
+    // The raw last user UI message (parts, id, createdAt) is persisted
+    // verbatim by the backend before streaming, so no input is ever lost
+    // even if the stream fails or the client disconnects.
+    const lastUserMessage = [...options.messages]
+      .reverse()
+      .find((msg: any) => (msg.role ?? 'user') === 'user') ?? null;
 
     const response = await fetch(this.api, {
       method: 'POST',
@@ -102,6 +111,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         system: (body.system as string) ?? '',
         webSearch: Boolean(body.webSearch),
         language: body.language as string,
+        userMessage: lastUserMessage,
       }),
       signal: options.abortSignal,
     });
@@ -124,6 +134,23 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         // when the backend actually sends reasoning events.
         const reasoningId = crypto.randomUUID();
         let reasoningOpen = false;
+        let startSent = false;
+
+        // Initial chunks are emitted lazily once the backend's 'start' event
+        // arrives, so the SDK can adopt the persisted assistant message id.
+        const ensureStart = (serverMessageId?: string) => {
+          if (startSent) return;
+          startSent = true;
+          controller.enqueue({
+            type: 'start',
+            messageId: serverMessageId,
+          } as UIMessageChunk);
+          controller.enqueue({ type: 'start-step' } as UIMessageChunk);
+          controller.enqueue({
+            type: 'text-start',
+            id: messageId,
+          } as UIMessageChunk);
+        };
 
         const closeReasoning = () => {
           if (reasoningOpen) {
@@ -136,16 +163,13 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
           controller.enqueue({ type: 'text-end', id: messageId } as UIMessageChunk);
         };
 
-        controller.enqueue({ type: 'start-step' } as UIMessageChunk);
-        controller.enqueue({
-          type: 'text-start',
-          id: messageId,
-        } as UIMessageChunk);
-
         try {
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+              ensureStart();
+              break;
+            }
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
@@ -157,6 +181,15 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
 
               try {
                 const data = JSON.parse(trimmed.slice(6));
+
+                if (data.type === 'start') {
+                  // Adopt the backend-persisted assistant message id so the
+                  // in-memory message matches the stored one (stable votes,
+                  // no re-hydration needed after the stream).
+                  ensureStart(data.assistantMessageId || undefined);
+                  continue;
+                }
+                ensureStart();
 
                 if (data.type === 'reasoning' && data.text) {
                   if (!reasoningOpen) {
@@ -189,13 +222,13 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                   controller.close();
                   return;
                 }
-                // ignore 'start' type
               } catch {
                 // skip malformed JSON lines
               }
             }
           }
         } catch (err) {
+          ensureStart();
           closeAll();
           controller.enqueue({
             type: 'error',

@@ -128,6 +128,9 @@ func (s *Server) handleDeleteMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
 	chat, err := s.Store.GetChat(chatID, userID)
 	if err != nil {
 		errorResponse(w, "Chat not found", http.StatusNotFound)
@@ -193,6 +196,9 @@ func (s *Server) handleSwitchBranch(w http.ResponseWriter, r *http.Request) {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
+
+	unlock := s.lockChat(chatID)
+	defer unlock()
 
 	chat, err := s.Store.GetChat(chatID, userID)
 	if err != nil {
@@ -302,6 +308,9 @@ func (s *Server) handleSaveVote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
 	chat, err := s.Store.GetChat(chatID, userID)
 	if err != nil {
 		errorResponse(w, "Chat not found", http.StatusNotFound)
@@ -395,6 +404,10 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		WebSearch    bool             `json:"webSearch"`
 		SearchEngine string           `json:"searchEngine"`
 		Language     string           `json:"language"`
+		// UserMessage is the full client-side UI message object for the new
+		// user message (id, role, createdAt, parts). The backend persists it
+		// verbatim before streaming so it survives failed/aborted streams.
+		UserMessage json.RawMessage `json:"userMessage"`
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
@@ -443,6 +456,13 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist the new user message and the web-search flag BEFORE streaming,
+	// so the user's input is durable even if the stream fails or the client
+	// disconnects mid-response. Upsert by message id keeps edit/regenerate
+	// flows from duplicating the message.
+	userMessageID := s.persistUserMessage(chatID, userID, req.UserMessage, req.WebSearch)
+	assistantMessageID := generateID()
+
 	provider, resolvedModel, err := s.getProviderForModel(req.Model)
 	if err != nil {
 		errorResponse(w, "Failed to get provider: "+err.Error(), http.StatusInternalServerError)
@@ -468,9 +488,17 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send start event
-	writeSSEEvent(w, "start", nil)
+	// Send start event with the persisted message ids so the client can
+	// reconcile its optimistic ids with the stored ones deterministically.
+	writeSSEEvent(w, "start", map[string]string{
+		"userMessageId":      userMessageID,
+		"assistantMessageId": assistantMessageID,
+	})
 	flusher.Flush()
+
+	// Accumulate partial output locally so an error or client disconnect can
+	// still persist whatever was generated so far.
+	var partialText, partialReasoning strings.Builder
 
 	streamResult, err := provider.ChatStream(r.Context(), ai.ChatRequest{
 		Model:    resolvedModel,
@@ -479,19 +507,33 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	}, func(chunk ai.StreamChunk) {
 		switch chunk.Kind {
 		case ai.StreamChunkReasoning:
+			partialReasoning.WriteString(chunk.Text)
 			writeSSEEvent(w, "reasoning", map[string]string{"text": chunk.Text})
 		default:
+			partialText.WriteString(chunk.Text)
 			writeSSEEvent(w, "text", map[string]string{"text": chunk.Text})
 		}
 		flusher.Flush()
 	})
 
+	fullText := streamResult.Text
+	fullReasoning := streamResult.Reasoning
+	if fullText == "" {
+		fullText = partialText.String()
+	}
+	if fullReasoning == "" {
+		fullReasoning = partialReasoning.String()
+	}
+
 	if err != nil {
+		// Persist the partial assistant response (if any) instead of losing it.
+		if strings.TrimSpace(fullText) != "" || fullReasoning != "" {
+			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning)
+		}
 		writeSSEEvent(w, "error", map[string]string{"error": err.Error()})
 		flusher.Flush()
 		return
 	}
-	fullText := streamResult.Text
 
 	// Generate title if chat has no title, then save both title and messages.
 	if chat.Title == "" && len(req.Messages) > 0 && provider != nil {
@@ -507,43 +549,122 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			if lang == "" {
 				lang = "en"
 			}
-			title, err := provider.GenerateTitle(context.Background(), firstUserMsg, lang)
+			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			title, err := provider.GenerateTitle(titleCtx, firstUserMsg, lang)
+			cancel()
 			if err == nil && title != "" {
 				chat.Title = title
 			}
 		}
 	}
 
-	// Append assistant message to chat messages
-	var existingMessages []map[string]any
-	json.Unmarshal(chat.Messages, &existingMessages)
-
-	assistantParts := []map[string]any{}
-	if streamResult.Reasoning != "" {
-		assistantParts = append(assistantParts, map[string]any{
-			"type": "reasoning",
-			"text": streamResult.Reasoning,
-		})
-	}
-	assistantParts = append(assistantParts, map[string]any{"type": "text", "text": fullText})
-	assistantMsg := map[string]any{
-		"id":    generateID(),
-		"role":  "assistant",
-		"parts": assistantParts,
-	}
-	existingMessages = append(existingMessages, assistantMsg)
-	chat.Messages, _ = json.Marshal(existingMessages)
-
-	// Save chat with title and messages atomically
-	savedChat, err := s.Store.SaveChat(chat, userID)
-	if err == nil && savedChat.Title != "" {
-		writeSSEEvent(w, "finish", map[string]string{"title": savedChat.Title})
+	// Append assistant message and persist atomically with the title.
+	savedTitle := s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, chat.Title)
+	if savedTitle != "" {
+		writeSSEEvent(w, "finish", map[string]string{"title": savedTitle})
 		flusher.Flush()
 		return
 	}
 
 	writeSSEEvent(w, "finish", nil)
 	flusher.Flush()
+}
+
+// persistUserMessage upserts the client-provided user message into the chat
+// and records the web-search flag. Returns the persisted message id (empty
+// when nothing was persisted). Serialized per chat via the chat lock.
+func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, webSearch bool) string {
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
+	chat, err := s.Store.GetChat(chatID, userID)
+	if err != nil {
+		return ""
+	}
+	chat.WebSearch = webSearch
+
+	messageID := ""
+	if len(raw) > 0 {
+		var um map[string]any
+		if err := json.Unmarshal(raw, &um); err == nil && um["role"] == "user" {
+			messageID, _ = um["id"].(string)
+			if messageID == "" {
+				messageID = generateID()
+				um["id"] = messageID
+			}
+			var messages []map[string]any
+			json.Unmarshal(chat.Messages, &messages)
+			replaced := false
+			for i, m := range messages {
+				if mid, _ := m["id"].(string); mid == messageID {
+					messages[i] = um
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				messages = append(messages, um)
+			}
+			chat.Messages, _ = json.Marshal(messages)
+		}
+	}
+
+	if _, err := s.Store.SaveChat(chat, userID); err != nil {
+		return ""
+	}
+	return messageID
+}
+
+// appendAssistantMessage appends (or replaces, on retry) the assistant
+// message in the stored chat and returns the persisted title. The read-save
+// cycle is serialized per chat so it never clobbers votes, branches, or
+// edits saved while the stream was running.
+func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoning string, titleOverride ...string) string {
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
+	chat, err := s.Store.GetChat(chatID, userID)
+	if err != nil {
+		return ""
+	}
+
+	var messages []map[string]any
+	json.Unmarshal(chat.Messages, &messages)
+
+	parts := []map[string]any{}
+	if reasoning != "" {
+		parts = append(parts, map[string]any{"type": "reasoning", "text": reasoning})
+	}
+	parts = append(parts, map[string]any{"type": "text", "text": text})
+	assistantMsg := map[string]any{
+		"id":        messageID,
+		"role":      "assistant",
+		"createdAt": time.Now().UTC().Format(time.RFC3339),
+		"parts":     parts,
+	}
+
+	replaced := false
+	for i, m := range messages {
+		if mid, _ := m["id"].(string); mid == messageID {
+			messages[i] = assistantMsg
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		messages = append(messages, assistantMsg)
+	}
+	chat.Messages, _ = json.Marshal(messages)
+
+	if len(titleOverride) > 0 && titleOverride[0] != "" {
+		chat.Title = titleOverride[0]
+	}
+
+	saved, err := s.Store.SaveChat(chat, userID)
+	if err != nil {
+		return ""
+	}
+	return saved.Title
 }
 
 // resolveAttachments loads attachment bytes for any message whose attachment
