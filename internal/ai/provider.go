@@ -13,8 +13,8 @@ type Provider interface {
 	// The onChunk callback is called for each text chunk received.
 	// Returns the full combined text.
 	ChatStream(ctx context.Context, req ChatRequest, onChunk func(string)) (string, error)
-	// GenerateTitle generates a concise title for a chat based on a user message.
-	GenerateTitle(ctx context.Context, userMessage string) (string, error)
+	// GenerateTitle generates a concise title for a chat based on a user message and language.
+	GenerateTitle(ctx context.Context, userMessage string, language string) (string, error)
 }
 
 // ChatMessage represents a single message in a chat conversation.
@@ -30,4 +30,12 @@ type ChatRequest struct {
 	System    string        `json:"system,omitempty"`
 	MaxTokens int           `json:"maxTokens,omitempty"`
 	Timeout   time.Duration `json:"timeout,omitempty"`
+}
+
+// ProviderOptions are passed to goai on every Chat/ChatStream call.
+// Shared by OpenAIProvider, used for provider-specific behavior toggles.
+type ProviderOptions struct {
+	UseResponsesAPI  *bool          `json:"useResponsesAPI,omitempty"`
+	StrictJSONSchema *bool          `json:"strictJsonSchema,omitempty"`
+	VeniceParams     map[string]any `json:"venice_parameters,omitempty"`
 }

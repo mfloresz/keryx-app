@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"keryx-server/internal/ai"
@@ -393,6 +394,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		System       string           `json:"system"`
 		WebSearch    bool             `json:"webSearch"`
 		SearchEngine string           `json:"searchEngine"`
+		Language     string           `json:"language"`
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
@@ -403,6 +405,27 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		errorResponse(w, "Missing model", http.StatusBadRequest)
 		return
 	}
+
+	if len(req.Messages) == 0 {
+		errorResponse(w, "Missing messages", http.StatusBadRequest)
+		return
+	}
+	var filtered []ai.ChatMessage
+	for _, m := range req.Messages {
+		if m.Role != "user" && m.Role != "assistant" {
+			errorResponse(w, fmt.Sprintf("Invalid message role: %q", m.Role), http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(m.Content) == "" {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	if len(filtered) == 0 || filtered[len(filtered)-1].Role != "user" {
+		errorResponse(w, "Last message must be a non-empty user message", http.StatusBadRequest)
+		return
+	}
+	req.Messages = filtered
 
 	if err := s.Store.AssertModelAllowed(userID, req.Model); err != nil {
 		errorResponse(w, "Model not allowed", http.StatusForbidden)
@@ -463,8 +486,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	writeSSEEvent(w, "finish", nil)
 	flusher.Flush()
 
-	// Generate title if chat has no title
-	if chat.Title == "" && len(req.Messages) > 0 {
+	// Generate title if chat has no title (using the same provider)
+	if chat.Title == "" && len(req.Messages) > 0 && provider != nil {
 		go func() {
 			firstUserMsg := ""
 			for _, m := range req.Messages {
@@ -474,12 +497,13 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if firstUserMsg != "" {
-				titleProvider, _, _ := s.getProviderForModel(ai.TitleModelRef())
-				if titleProvider != nil {
-					title, err := titleProvider.GenerateTitle(context.Background(), firstUserMsg)
-					if err == nil && title != "" {
-						s.Store.UpdateChatTitle(chatID, userID, title)
-					}
+				lang := req.Language
+				if lang == "" {
+					lang = "en"
+				}
+				title, err := provider.GenerateTitle(context.Background(), firstUserMsg, lang)
+				if err == nil && title != "" {
+					s.Store.UpdateChatTitle(chatID, userID, title)
 				}
 			}
 		}()

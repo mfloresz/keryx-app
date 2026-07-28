@@ -258,6 +258,28 @@
       "lastAdminHint": "At least one administrator must always remain.",
       "updateError": "Unable to update user role",
       "updateSuccess": "User role updated successfully"
+    },
+    "providerKeys": {
+      "title": "Provider API Keys",
+      "description": "Manage global API keys for AI providers. All users share these keys and the actual key is never shown after being saved.",
+      "providerColumn": "Provider",
+      "statusColumn": "Status",
+      "actionsColumn": "Actions",
+      "statusConfigured": "Configured",
+      "statusNotConfigured": "Not configured",
+      "modifyTitle": "Set API Key",
+      "keyLabel": "API Key",
+      "keyPlaceholder": "Enter the API key…",
+      "keyHint": "The key is encrypted before storage. Once saved, it can only be replaced or removed — never viewed.",
+      "saveButton": "Save Key",
+      "saving": "Saving…",
+      "deleteButton": "Delete Key",
+      "deleting": "Deleting…",
+      "saveSuccess": "API key saved successfully",
+      "saveError": "Unable to save API key",
+      "deleteSuccess": "API key deleted successfully",
+      "deleteError": "Unable to delete API key",
+      "updatedAt": "Updated"
     }
   },
   "auth": {

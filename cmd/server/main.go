@@ -27,6 +27,11 @@ func main() {
 		os.Exit(0)
 	}
 
+	if err := cfg.InitEncryptor(); err != nil {
+		slog.Error("failed to init encryptor", "error", err)
+		os.Exit(1)
+	}
+
 	app := pocketbase.NewWithConfig(pocketbase.Config{
 		DefaultDataDir: cfg.DataDir,
 		DefaultDev:     cfg.StaticDir != "",
@@ -36,7 +41,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	st := store.New(app)
+	st := store.New(app, cfg.Encryptor)
 	if err := st.EnsureSchema(); err != nil {
 		slog.Error("failed to ensure schema", "error", err)
 		os.Exit(1)

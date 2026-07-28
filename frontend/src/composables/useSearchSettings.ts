@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { supportsSearch } from '@/shared/utils/models'
 import { secureGetItem, secureSetItem } from '@/utils/secureStorage'
+import type { ChatModel } from '@/domain/models/types'
 
 export type SearchEngine = 'native' | 'tavily'
 export type SearchDepth = 'basic' | 'advanced' | 'fast' | 'ultra-fast'
@@ -75,9 +76,9 @@ export function useSearchSettings() {
   })
 
   const isSearchAvailable = computed(() => {
-    return (modelId: string) => {
+    return (models: ChatModel[], modelId: string) => {
       if (engine.value === 'native') {
-        return supportsSearch(modelId)
+        return supportsSearch(models, modelId)
       }
       // tavily mode: available for all models if key is set
       return tavilyApiKey.value.trim().length > 0

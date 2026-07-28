@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"keryx-server/internal/secure"
 )
 
 type Config struct {
@@ -13,12 +15,23 @@ type Config struct {
 	Port      string
 	DataDir   string
 	StaticDir string
-	// AI Gateway API Key for Vercel AI Gateway
-	AIGatewayAPIKey string
-	// OpenCode API Key
-	OpenCodeAPIKey string
+
+	// Venice API Key (env fallback)
+	VeniceAPIKey string
+	// OpenCode Go API Key (env fallback)
+	OpenCodeGoAPIKey string
+	// Google API Key (env fallback)
+	GoogleAPIKey string
 	// App base URL (for invitation links)
 	AppBaseURL string
+
+	// Encryption key for storing provider API keys in the DB.
+	// If empty, an auto-generated key is persisted at AppEncryptionPath.
+	AppEncryptionKey  string
+	AppEncryptionPath string
+
+	// Encryptor is initialised after Load() by InitEncryptor.
+	Encryptor *secure.Encryptor
 }
 
 func Load() (*Config, error) {
@@ -74,9 +87,24 @@ func Load() (*Config, error) {
 		cfg.StaticDir = absStaticDir
 	}
 
-	cfg.AIGatewayAPIKey = strings.TrimSpace(os.Getenv("AI_GATEWAY_API_KEY"))
-	cfg.OpenCodeAPIKey = strings.TrimSpace(os.Getenv("OPENCODE_API_KEY"))
+	cfg.AppEncryptionPath = filepath.Join(cfg.DataDir, "app.key")
+	cfg.AppEncryptionKey = strings.TrimSpace(os.Getenv("APP_ENCRYPTION_KEY"))
+	cfg.AppEncryptionKey = strings.TrimSpace(os.Getenv("APP_ENCRYPTION_KEY"))
+
+	cfg.VeniceAPIKey = strings.TrimSpace(os.Getenv("VENICE_API_KEY"))
+	cfg.OpenCodeGoAPIKey = strings.TrimSpace(os.Getenv("OPENCODEGO_API_KEY"))
+	cfg.GoogleAPIKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
 	cfg.AppBaseURL = strings.TrimSpace(os.Getenv("APP_BASE_URL"))
 
 	return cfg, nil
+}
+
+// InitEncryptor creates the Encryptor from the configured env key or app.key file.
+func (cfg *Config) InitEncryptor() error {
+	enc, err := secure.NewEncryptorFromConfig(cfg.AppEncryptionKey, cfg.AppEncryptionPath)
+	if err != nil {
+		return fmt.Errorf("init encryptor: %w", err)
+	}
+	cfg.Encryptor = enc
+	return nil
 }

@@ -9,20 +9,17 @@ import (
 // This is the single source of truth for provider and model metadata;
 // the database model catalog is seeded from this list.
 type ProviderInfo struct {
-	ID           string      `json:"id"`
-	Name         string      `json:"name"`
-	BaseURL      string      `json:"baseUrl"`
-	Models       []ModelInfo `json:"models"`
-	DefaultModel string      `json:"defaultModel"`
-	// TitleModel is a lightweight model used for chat title generation.
-	TitleModel string `json:"titleModel,omitempty"`
-	// Gateway indicates the provider forwards unknown upstream model IDs
-	// (e.g. "openai/...", "google/...") to their upstream provider.
-	Gateway bool `json:"gateway"`
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	BaseURL      string         `json:"baseUrl"`
+	Models       []ModelInfo    `json:"models"`
+	DefaultModel string         `json:"defaultModel"`
+	OpenAICompat bool           `json:"openaiCompat"`
+	GoAIOptions  map[string]any `json:"goaiOptions,omitempty"`
 }
 
 // ModelInfo describes a single model exposed by a provider.
-// ID is the public model ID used by clients (e.g. "opencode/mimo-v2.5");
+// ID is the public model ID used by clients (e.g. "venice/e2ee-deepseek-v4-flash");
 // UpstreamID is the identifier sent to the provider's API.
 type ModelInfo struct {
 	ID             string `json:"id"`
@@ -38,27 +35,68 @@ type ModelInfo struct {
 // knownProviders is the static provider catalog, mirroring Yara's registry.
 var knownProviders = []ProviderInfo{
 	{
-		ID:           "vercel-ai-gateway",
-		Name:         "Vercel AI Gateway",
-		BaseURL:      "https://ai-gateway.vercel.sh/v3/ai",
-		Gateway:      true,
-		DefaultModel: "openai/gpt-5.4-nano",
-		TitleModel:   "mistral/ministral-8b",
+		ID:           "venice",
+		Name:         "Venice",
+		BaseURL:      "https://api.venice.ai/api/v1",
+		OpenAICompat: true,
+		DefaultModel: "e2ee-deepseek-v4-flash",
+		GoAIOptions: map[string]any{
+			"useResponsesAPI":  false,
+			"strictJsonSchema": true,
+			"venice_parameters": map[string]any{
+				"include_venice_system_prompt": false,
+			},
+		},
 		Models: []ModelInfo{
-			{ID: "openai/gpt-5.4-nano", UpstreamID: "openai/gpt-5.4-nano", Provider: "vercel-ai-gateway", DisplayName: "GPT-5.4 Nano", SupportsImages: true, SupportsSearch: true, MaxContext: 400000, MaxOutput: 128000},
-			{ID: "google/gemini-3.5-flash", UpstreamID: "google/gemini-3.5-flash", Provider: "vercel-ai-gateway", DisplayName: "Gemini 3.5 Flash", SupportsImages: true, SupportsSearch: false, MaxContext: 1000000, MaxOutput: 64000},
-			{ID: "deepseek/deepseek-v4-flash", UpstreamID: "deepseek/deepseek-v4-flash", Provider: "vercel-ai-gateway", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: false, MaxContext: 390000, MaxOutput: 128000},
+			{ID: "venice/e2ee-deepseek-v4-flash", UpstreamID: "e2ee-deepseek-v4-flash", Provider: "venice", DisplayName: "DeepSeek V4 Flash (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/mistral-small-3-2-24b-instruct", UpstreamID: "mistral-small-3-2-24b-instruct", Provider: "venice", DisplayName: "Mistral Small 3.2 24B", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/google-gemma-4-31b-it:disable_thinking=true", UpstreamID: "google-gemma-4-31b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 31B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/e2ee-gpt-oss-20b-p", UpstreamID: "e2ee-gpt-oss-20b-p", Provider: "venice", DisplayName: "GPT OSS 20B (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/aion-labs-aion-3-0-mini", UpstreamID: "aion-labs-aion-3-0-mini", Provider: "venice", DisplayName: "Aion 3.0 Mini", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/e2ee-gemma-4-26b-a4b-uncensored-p", UpstreamID: "e2ee-gemma-4-26b-a4b-uncensored-p", Provider: "venice", DisplayName: "Gemma 4 26B A4B Uncensored (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/google-gemma-4-26b-a4b-it:disable_thinking=true", UpstreamID: "google-gemma-4-26b-a4b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 26B A4B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/xiaomi-mimo-v2-5", UpstreamID: "xiaomi-mimo-v2-5", Provider: "venice", DisplayName: "Xiaomi Mimo V2.5", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/mistral-small-2603", UpstreamID: "mistral-small-2603", Provider: "venice", DisplayName: "Mistral Small 2603", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
-		ID:           "opencode",
-		Name:         "OpenCode GO",
+		ID:           "opencode-go",
+		Name:         "OpenCode Go",
 		BaseURL:      "https://opencode.ai/zen/go/v1",
-		DefaultModel: "opencode/mimo-v2.5",
+		OpenAICompat: true,
+		DefaultModel: "mimo-v2.5",
+		GoAIOptions: map[string]any{
+			"useResponsesAPI":  false,
+			"strictJsonSchema": true,
+		},
 		Models: []ModelInfo{
-			{ID: "opencode/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode", DisplayName: "Mimo V2.5", SupportsImages: true, SupportsSearch: false, MaxContext: 1000000, MaxOutput: 128000},
-			{ID: "opencode/qwen3.5-plus", UpstreamID: "qwen3.5-plus", Provider: "opencode", DisplayName: "Qwen 3.5 Plus", SupportsImages: true, SupportsSearch: false, MaxContext: 262144, MaxOutput: 65536},
-			{ID: "opencode/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: false, MaxContext: 1000000, MaxOutput: 384000},
+			{ID: "opencode-go/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode-go", DisplayName: "Mimo V2.5", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode-go", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+		},
+	},
+	{
+		ID:           "lmstudio",
+		Name:         "LM Studio",
+		BaseURL:      "http://localhost:1234/v1",
+		OpenAICompat: true,
+		DefaultModel: "local-model",
+		GoAIOptions: map[string]any{
+			"useResponsesAPI":  false,
+			"strictJsonSchema": false,
+		},
+		Models: []ModelInfo{
+			{ID: "lmstudio/local-model", UpstreamID: "local-model", Provider: "lmstudio", DisplayName: "Local Model", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+		},
+	},
+	{
+		ID:           "google",
+		Name:         "Google Gemma",
+		BaseURL:      "https://generativelanguage.googleapis.com",
+		OpenAICompat: false,
+		DefaultModel: "gemma-4-31b-it",
+		Models: []ModelInfo{
+			{ID: "google/gemma-4-26b-a4b-it", UpstreamID: "gemma-4-26b-a4b-it", Provider: "google", DisplayName: "Gemma 4 26B A4B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "google/gemma-4-31b-it", UpstreamID: "gemma-4-31b-it", Provider: "google", DisplayName: "Gemma 4 31B IT", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 }
@@ -89,31 +127,19 @@ func ModelCatalog() []ModelInfo {
 	return out
 }
 
-// TitleModelRef returns the public model ID to use for chat title generation
-// (the gateway provider's lightweight title model), or "" if none is set.
-func TitleModelRef() string {
-	if info, ok := gatewayProvider(); ok && info.TitleModel != "" {
-		return info.ID + "/" + info.TitleModel
+// DefaultProvider returns the first provider (Venice).
+func DefaultProvider() ProviderInfo {
+	if len(knownProviders) == 0 {
+		return ProviderInfo{}
 	}
-	return ""
-}
-
-// gatewayProvider returns the provider that forwards unknown upstream IDs.
-func gatewayProvider() (ProviderInfo, bool) {
-	for _, info := range knownProviders {
-		if info.Gateway {
-			return info, true
-		}
-	}
-	return ProviderInfo{}, false
+	return knownProviders[0]
 }
 
 // ResolveModel maps a public model ID to its provider and upstream model ID.
 //
-// IDs with a known provider prefix (e.g. "opencode/mimo-v2.5") resolve to that
-// provider with the remainder as the upstream model ID. Any other prefixed ID
-// (e.g. "openai/gpt-5.4-nano") or unprefixed ID is routed through the gateway
-// provider, passing the full ID upstream.
+// IDs with a known provider prefix (e.g. "venice/e2ee-deepseek-v4-flash")
+// resolve to that provider with the remainder as the upstream model ID.
+// Unknown prefixes or unprefixed IDs return an error (no gateway fallback).
 func ResolveModel(modelID string) (ProviderInfo, string, error) {
 	modelID = strings.TrimSpace(modelID)
 	if modelID == "" {
@@ -131,10 +157,8 @@ func ResolveModel(modelID string) (ProviderInfo, string, error) {
 			}
 			return info, modelID[i+1:], nil
 		}
+		return ProviderInfo{}, "", fmt.Errorf("unknown provider prefix: %s", modelID[:i])
 	}
 
-	if info, ok := gatewayProvider(); ok {
-		return info, modelID, nil
-	}
-	return ProviderInfo{}, "", fmt.Errorf("unknown provider for model: %s", modelID)
+	return ProviderInfo{}, "", fmt.Errorf("model ID must include provider prefix (e.g. venice/model-name): %s", modelID)
 }

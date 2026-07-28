@@ -242,3 +242,26 @@ func (s *Store) seedInitialAdmin() error {
 	}
 	return nil
 }
+
+func (s *Store) ensureProviderKeysCollection() error {
+	if _, err := s.App.FindCollectionByNameOrId(ProviderKeysCollection); err == nil {
+		return nil
+	}
+	c := core.NewBaseCollection(ProviderKeysCollection)
+	// Only admins can read/write provider keys; the actual key is encrypted anyway.
+	adminOnly := "@request.auth.id != '' && @collection.users.id = @request.auth.id && @collection.users.role = 'admin'"
+	c.ListRule = types.Pointer(adminOnly)
+	c.ViewRule = types.Pointer(adminOnly)
+	c.CreateRule = types.Pointer(adminOnly)
+	c.UpdateRule = types.Pointer(adminOnly)
+	c.DeleteRule = types.Pointer(adminOnly)
+	c.Fields.Add(&core.TextField{Name: "provider", Required: true, Max: 80})
+	c.Fields.Add(&core.TextField{Name: "api_key_encrypted"})
+	c.Fields.Add(&core.BoolField{Name: "configured"})
+	c.Fields.Add(&core.DateField{Name: "updated_at"})
+	c.AddIndex("idx_provider_keys_provider_unique", true, "provider", "")
+	if err := s.App.Save(c); err != nil {
+		return err
+	}
+	return nil
+}

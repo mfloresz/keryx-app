@@ -10,12 +10,14 @@ func TestResolveModel(t *testing.T) {
 		wantUpstream string
 		wantErr      bool
 	}{
-		{name: "opencode catalog model", modelID: "opencode/mimo-v2.5", wantProvider: "opencode", wantUpstream: "mimo-v2.5"},
-		{name: "opencode catalog model qwen", modelID: "opencode/qwen3.5-plus", wantProvider: "opencode", wantUpstream: "qwen3.5-plus"},
-		{name: "gateway model keeps full ID", modelID: "openai/gpt-5.4-nano", wantProvider: "vercel-ai-gateway", wantUpstream: "openai/gpt-5.4-nano"},
-		{name: "unknown prefix routes via gateway", modelID: "anthropic/claude-x", wantProvider: "vercel-ai-gateway", wantUpstream: "anthropic/claude-x"},
-		{name: "unprefixed routes via gateway", modelID: "gpt-5.4-nano", wantProvider: "vercel-ai-gateway", wantUpstream: "gpt-5.4-nano"},
-		{name: "title model ref", modelID: TitleModelRef(), wantProvider: "vercel-ai-gateway", wantUpstream: "mistral/ministral-8b"},
+		{name: "venice catalog model", modelID: "venice/e2ee-deepseek-v4-flash", wantProvider: "venice", wantUpstream: "e2ee-deepseek-v4-flash"},
+		{name: "venice mistral model", modelID: "venice/mistral-small-3-2-24b-instruct", wantProvider: "venice", wantUpstream: "mistral-small-3-2-24b-instruct"},
+		{name: "opencode-go catalog model", modelID: "opencode-go/mimo-v2.5", wantProvider: "opencode-go", wantUpstream: "mimo-v2.5"},
+		{name: "opencode-go deepseek model", modelID: "opencode-go/deepseek-v4-flash", wantProvider: "opencode-go", wantUpstream: "deepseek-v4-flash"},
+		{name: "lmstudio local model", modelID: "lmstudio/local-model", wantProvider: "lmstudio", wantUpstream: "local-model"},
+		{name: "google gemma model", modelID: "google/gemma-4-31b-it", wantProvider: "google", wantUpstream: "gemma-4-31b-it"},
+		{name: "unknown prefix errors", modelID: "unknown/model-x", wantErr: true},
+		{name: "unprefixed errors (no gateway)", modelID: "gpt-5.4-nano", wantErr: true},
 		{name: "empty model errors", modelID: " ", wantErr: true},
 	}
 
@@ -42,11 +44,11 @@ func TestResolveModel(t *testing.T) {
 }
 
 func TestProviderByID(t *testing.T) {
-	info, ok := ProviderByID("opencode")
+	info, ok := ProviderByID("venice")
 	if !ok {
-		t.Fatal("opencode provider not found")
+		t.Fatal("venice provider not found")
 	}
-	if info.BaseURL != "https://opencode.ai/zen/go/v1" {
+	if info.BaseURL != "https://api.venice.ai/api/v1" {
 		t.Errorf("BaseURL = %q", info.BaseURL)
 	}
 	if _, ok := ProviderByID("nope"); ok {
@@ -56,8 +58,8 @@ func TestProviderByID(t *testing.T) {
 
 func TestModelCatalogCoversSeeds(t *testing.T) {
 	catalog := ModelCatalog()
-	if len(catalog) != 6 {
-		t.Fatalf("catalog len = %d, want 6", len(catalog))
+	if len(catalog) != 14 {
+		t.Fatalf("catalog len = %d, want 14", len(catalog))
 	}
 	for _, m := range catalog {
 		if info, ok := ProviderByID(m.Provider); !ok {
@@ -65,5 +67,12 @@ func TestModelCatalogCoversSeeds(t *testing.T) {
 		} else if m.UpstreamID == "" {
 			t.Errorf("model %q has empty UpstreamID", info.ID)
 		}
+	}
+}
+
+func TestDefaultProvider(t *testing.T) {
+	dp := DefaultProvider()
+	if dp.ID != "venice" {
+		t.Errorf("DefaultProvider = %q, want %q", dp.ID, "venice")
 	}
 }

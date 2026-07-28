@@ -5,17 +5,19 @@ import (
 	"fmt"
 
 	"github.com/pocketbase/pocketbase/core"
+	"keryx-server/internal/secure"
 )
 
 var ErrNotFound = errors.New("not found")
 var ErrForbidden = errors.New("forbidden")
 
 type Store struct {
-	App core.App
+	App       core.App
+	Encryptor *secure.Encryptor
 }
 
-func New(app core.App) *Store {
-	return &Store{App: app}
+func New(app core.App, encryptor *secure.Encryptor) *Store {
+	return &Store{App: app, Encryptor: encryptor}
 }
 
 func (s *Store) EnsureSchema() error {
@@ -41,6 +43,9 @@ func (s *Store) EnsureSchema() error {
 	}
 	if err := s.seedModels(); err != nil {
 		return fmt.Errorf("seed models: %w", err)
+	}
+	if err := s.ensureProviderKeysCollection(); err != nil {
+		return fmt.Errorf("ensure provider keys: %w", err)
 	}
 	if err := s.seedInitialAdmin(); err != nil {
 		return fmt.Errorf("seed initial admin: %w", err)

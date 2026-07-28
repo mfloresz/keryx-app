@@ -9,8 +9,8 @@ import { computed, ref } from "vue";
 import type { ModelProviderOption, ChatModel } from "@/domain/models/types";
 import { getModelRepository } from "@/services/runtime";
 
-const provider = ref("vercel");
-const model = ref("openai/gpt-5.4-nano");
+const provider = ref("managed");
+const model = ref("");
 const providers = ref<ModelProviderOption[]>([]);
 const models = ref<ChatModel[]>([]);
 const allowsLocalKeys = ref(true);
