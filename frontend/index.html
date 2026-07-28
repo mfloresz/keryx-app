@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script src="/initial-locale.js"></script>
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://ai-gateway.vercel.sh https://api.tavily.com https://*.supabase.co ws: wss: blob: data:; img-src 'self' blob: data: attachment: https://models.dev; font-src 'self' data:; media-src 'self' blob: data: attachment:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self';"
+        />
+        <title>Keryx</title>
+    </head>
+    <body>
+        <div id="app"></div>
+        <script src="/coi-serviceworker.js"></script>
+        <script type="module" src="/src/main.ts"></script>
+    </body>
+</html>

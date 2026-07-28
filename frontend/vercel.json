@@ -1,0 +1,40 @@
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        {
+          "key": "Permissions-Policy",
+          "value": "geolocation=(), microphone=(), camera=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://ai-gateway.vercel.sh https://api.tavily.com https://*.supabase.co ws: wss: blob: data:; img-src 'self' blob: data: attachment: https://models.dev; font-src 'self' data:; media-src 'self' blob: data: attachment:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self';"
+        },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "credentialless" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/ai-gateway/:path*",
+      "destination": "https://ai-gateway.vercel.sh/:path*"
+    },
+    {
+      "source": "/api/opencode/:path*",
+      "destination": "https://opencode.ai/zen/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/[...path]"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

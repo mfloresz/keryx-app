@@ -1,0 +1,9 @@
+declare module "@fontsource-variable/geist";
+declare module "@fontsource-variable/ibm-plex-sans";
+declare module "@fontsource/ibm-plex-mono";
+declare module "@fontsource-variable/manrope";
+declare module "@fontsource-variable/merriweather";
+declare module "@fontsource-variable/montserrat";
+declare module "@fontsource/spectral";
+declare module "@fontsource-variable/open-sans";
+declare module "@fontsource-variable/sn-pro";

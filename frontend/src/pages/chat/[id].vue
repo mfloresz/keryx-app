@@ -1,0 +1,611 @@
+<script setup lang="ts">
+/**
+ * Existing Chat Page (chat/[id].vue)
+ *
+ * Loads an existing chat from OPFS and handles the conversation
+ * using @ai-sdk/vue Chat class for streaming.
+ *
+ * Features:
+ * - Message editing and regeneration
+ * - Voting on assistant messages
+ * - Auto-regenerate on first load if only user message exists
+ */
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { Chat } from '@ai-sdk/vue'
+import { DefaultChatTransport } from 'ai'
+import type { UIMessage, ChatStatus } from 'ai'
+import { useChatStore } from '@/stores/chat'
+import type { ChatRecord } from '@/domain/chat/types'
+import { useModels } from '@/composables/useModels'
+import { useToast } from '@/composables/useToast'
+import { useSearchSettings } from '@/composables/useSearchSettings'
+import { getModelContextWindow } from '@/shared/utils/models'
+import { persistAttachmentFiles } from '@/utils/chatAttachments'
+import { getUserFacingChatError, validateCloudAttachmentUrls } from '@/utils/chatErrors'
+import { getChatRepository } from '@/services/runtime'
+import { getChatStreamApi, getChatTransportHeaders } from '@/services/chatTransport'
+import ChatMessages from '@/components/chat/ChatMessages.vue'
+import ChatInput from '@/components/chat/ChatInput.vue'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Context,
+  ContextContent,
+  ContextContentBody,
+  ContextContentFooter,
+  ContextContentHeader,
+  ContextIcon,
+  ContextTrigger,
+} from '@/components/ai-elements/context'
+import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
+
+const route = useRoute()
+const { t } = useI18n()
+const chatStore = useChatStore()
+const { model } = useModels()
+const { toast } = useToast()
+const searchSettings = useSearchSettings()
+const chatRepository = await getChatRepository()
+
+// Edit dialog state
+const isEditDialogOpen = ref(false)
+const editMessageId = ref<string | null>(null)
+const editText = ref('')
+const editTextareaRef = ref<any>(null)
+
+const chatId = computed(() => route.params.id as string)
+const compactNumberFormatter = new Intl.NumberFormat('en-US', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+
+// Load chat data
+const chatData = ref<ChatRecord | null>(null)
+const isLoading = ref(true)
+const loadError = ref<string | null>(null)
+
+// Derive title from store so it updates when the sidebar refreshes
+const chatTitle = computed(() => {
+  const storeChat = chatStore.chats.find(c => c.id === chatId.value)
+  return storeChat?.label || chatData.value?.title || 'Untitled'
+})
+
+const contextUsage = computed(() => chatData.value?.lastUsage)
+const currentModelId = computed(() => model.value)
+const maxContextTokens = computed(() => {
+  return getModelContextWindow(currentModelId.value) ?? 0
+})
+const usedTokens = computed(() => {
+  const usage = contextUsage.value
+  if (!usage)
+    return 0
+
+  return usage.totalTokens
+    ?? ((usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) + (usage.reasoningTokens ?? 0))
+})
+const formattedContextUsage = computed(() => {
+  if (maxContextTokens.value > 0) {
+    return `${compactNumberFormatter.format(usedTokens.value)} / ${compactNumberFormatter.format(maxContextTokens.value)}`
+  }
+
+  if (usedTokens.value <= 0)
+    return t('chat.context')
+
+  return compactNumberFormatter.format(usedTokens.value)
+})
+const contextUsageRows = computed(() => {
+  const usage = contextUsage.value
+  if (!usage)
+    return []
+
+  return [
+    { labelKey: 'chat.contextInput', value: usage.inputTokens ?? 0 },
+    { labelKey: 'chat.contextOutput', value: usage.outputTokens ?? 0 },
+    { labelKey: 'chat.contextReasoning', value: usage.reasoningTokens ?? 0 },
+    { labelKey: 'chat.contextCache', value: usage.cachedInputTokens ?? 0 },
+  ].filter(row => row.value > 0)
+})
+
+function formatTokenCount(value: number): string {
+  return compactNumberFormatter.format(value)
+}
+
+function buildSearchRequestBody(webSearch: boolean) {
+  return {
+    model: model.value,
+    webSearch,
+    searchEngine: searchSettings.engine.value,
+    tavilyApiKey: searchSettings.tavilyApiKey.value,
+    tavilyOptions: searchSettings.options.value,
+  }
+}
+
+async function loadChat() {
+  isLoading.value = true
+  loadError.value = null
+  try {
+    const loadedChat = await chatRepository.getChat(chatId.value)
+    if (!loadedChat) {
+      throw new Error('Chat not found')
+    }
+    chatData.value = loadedChat
+  }
+  catch (err: any) {
+    loadError.value = err.message || 'Failed to load chat'
+  }
+  finally {
+    isLoading.value = false
+  }
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value))
+}
+
+function getMessageCreatedAt(message: UIMessage): string | null {
+  return typeof (message as any).createdAt === 'string'
+    ? (message as any).createdAt
+    : null
+}
+
+function getMessageTextContent(message: UIMessage): string {
+  if (!Array.isArray(message.parts)) {
+    return ''
+  }
+
+  return message.parts
+    .filter((part): part is { type: 'text', text: string } => part.type === 'text')
+    .map(part => part.text)
+    .join('')
+}
+
+function findPersistedMessageMatch(
+  message: UIMessage,
+  persistedMessages: UIMessage[],
+  usedIds = new Set<string>(),
+): UIMessage | null {
+  const currentId = typeof message.id === 'string' && message.id.trim().length > 0
+    ? message.id
+    : null
+
+  if (currentId) {
+    const exactMatch = persistedMessages.find(item => item.id === currentId && !usedIds.has(item.id))
+    if (exactMatch) {
+      return exactMatch
+    }
+  }
+
+  const messageText = getMessageTextContent(message)
+  const sourceCreatedAt = getMessageCreatedAt(message)
+  const candidates = persistedMessages.filter((item) => {
+    if (!item.id || usedIds.has(item.id) || item.role !== message.role) {
+      return false
+    }
+
+    return getMessageTextContent(item) === messageText
+  })
+
+  if (sourceCreatedAt) {
+    const createdAtMatch = candidates.find(item => getMessageCreatedAt(item) === sourceCreatedAt)
+    if (createdAtMatch) {
+      return createdAtMatch
+    }
+  }
+
+  return candidates.length === 1 ? candidates[0] ?? null : null
+}
+
+function backfillVisibleMessageIds(visibleMessages: UIMessage[], persistedMessages: UIMessage[]): UIMessage[] {
+  const usedIds = new Set<string>()
+
+  return cloneJson(visibleMessages).map((message) => {
+    const persistedMatch = findPersistedMessageMatch(message, persistedMessages, usedIds)
+    if (persistedMatch?.id) {
+      usedIds.add(persistedMatch.id)
+    }
+
+    const currentId = typeof message.id === 'string' && message.id.trim().length > 0
+      ? message.id
+      : null
+
+    return {
+      ...message,
+      id: persistedMatch?.id || currentId || crypto.randomUUID(),
+    }
+  })
+}
+
+async function resolvePersistedMessageId(message: UIMessage): Promise<string | null> {
+  const currentId = typeof message.id === 'string' && message.id.trim().length > 0
+    ? message.id
+    : null
+
+  const persistedChat = await chatRepository.getChat(chatId.value)
+  if (!persistedChat) {
+    return currentId
+  }
+
+  const persistedMessages = (persistedChat.messages || []) as UIMessage[]
+  return findPersistedMessageMatch(message, persistedMessages)?.id ?? null
+}
+
+async function refreshChatMeta() {
+  const updatedChat = await chatRepository.getChat(chatId.value)
+  if (!updatedChat) {
+    throw new Error('Chat not found')
+  }
+  const visibleMessages = backfillVisibleMessageIds(chat.messages, updatedChat.messages as UIMessage[])
+  chat.messages = visibleMessages
+  chatData.value = {
+    ...updatedChat,
+    // Keep the visible transcript owned by the AI SDK Chat instance to avoid
+    // a post-stream rehydration flash from OPFS, but backfill persisted ids.
+    messages: visibleMessages,
+  }
+  return updatedChat
+}
+
+await loadChat()
+
+// Votes
+const votes = ref<Record<string, boolean | null>>({})
+async function loadVotes() {
+  try {
+    const voteList = await chatRepository.getVotes(chatId.value)
+    votes.value = voteList.reduce((acc: Record<string, boolean>, v: any) => {
+      acc[v.messageId] = v.isUpvoted
+      return acc
+    }, {})
+  }
+  catch {
+    // ignore vote load errors
+  }
+}
+loadVotes()
+
+// Initialize AI SDK Chat
+const chat = new Chat({
+  id: chatId.value,
+  messages: chatData.value?.messages || [],
+  transport: new DefaultChatTransport({
+    api: getChatStreamApi(chatId.value),
+    headers: getChatTransportHeaders,
+  }),
+  onError(error) {
+    let message = error.message
+    if (typeof message === 'string' && message[0] === '{') {
+      try {
+        message = JSON.parse(message).message || message
+      }
+      catch {
+        // keep original
+      }
+    }
+    toast(getUserFacingChatError(message, t))
+  }
+})
+
+// Watch for streaming completion — diferir la cascada post-stream fuera del render frame actual
+watch(() => chat.status, async (status, prevStatus) => {
+  if ((prevStatus === 'streaming' || prevStatus === 'submitted') && status === 'ready') {
+    // Esperar al próximo microtask para no bloquear el repintado final
+    await nextTick()
+    setTimeout(async () => {
+      try {
+        const [updatedChat] = await Promise.all([
+          refreshChatMeta(),
+          loadVotes(),
+        ])
+        // Actualizar solo el título en el sidebar sin releer todos los chats
+        chatStore.updateChat(chatId.value, { label: updatedChat?.title || 'Untitled' })
+      }
+      catch {
+        // ignore refresh errors after streaming; the visible response is already present locally
+      }
+    }, 0)
+  }
+})
+
+// Handle new message submission
+async function handleSubmit({ text, files, webSearch }: { text: string; files: AttachmentFile[]; webSearch: boolean }) {
+  try {
+    const cleanFiles = await persistAttachmentFiles(chatId.value, files)
+    validateCloudAttachmentUrls(cleanFiles)
+    if (chatData.value) {
+      chatData.value = {
+        ...chatData.value,
+        webSearch,
+      }
+    }
+    chat.sendMessage(
+      { text, files: cleanFiles },
+      { body: buildSearchRequestBody(webSearch) }
+    )
+  }
+  catch (error: any) {
+    toast(getUserFacingChatError(error?.message, t))
+  }
+}
+
+// Handle stop
+function handleStop() {
+  chat.stop()
+}
+
+// Edit message — open in-app dialog instead of window.prompt
+async function handleEdit(message: UIMessage) {
+  const textParts = message.parts.filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+  const currentText = textParts.map(p => p.text).join('')
+  editMessageId.value = message.id
+  editText.value = currentText
+  isEditDialogOpen.value = true
+  await nextTick()
+  editTextareaRef.value?.$el?.focus()
+}
+
+async function confirmEdit() {
+  if (!editMessageId.value) return
+  const text = editText.value.trim()
+  if (!text) return
+
+  isEditDialogOpen.value = false
+
+  try {
+    await chatRepository.deleteMessage(chatId.value, {
+      messageId: editMessageId.value,
+      type: 'edit'
+    })
+  }
+  catch {
+    toast(t('chat.failedEdit'))
+    return
+  }
+
+  chat.sendMessage({ text, messageId: editMessageId.value }, { body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+  editMessageId.value = null
+  editText.value = ''
+}
+
+function cancelEdit() {
+  isEditDialogOpen.value = false
+  editMessageId.value = null
+  editText.value = ''
+}
+
+// Regenerate message
+async function handleRegenerate(message: UIMessage) {
+  try {
+    await chatRepository.deleteMessage(chatId.value, {
+      messageId: message.id,
+      type: 'regenerate'
+    })
+  }
+  catch {
+    toast(t('chat.failedRegenerate'))
+    return
+  }
+
+  chat.regenerate({ messageId: message.id, body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+}
+
+async function handleBranchChange(payload: { rootMessageId: string, snapshotId: string }) {
+  try {
+    const updatedChat = await chatRepository.switchBranch(chatId.value, payload)
+    chatData.value = updatedChat
+    chat.messages = cloneJson(updatedChat.messages)
+    await loadVotes()
+  }
+  catch {
+    toast(t('chat.failedSwitchBranch'))
+  }
+}
+
+// Vote
+async function handleVote(message: UIMessage, isUpvoted: boolean) {
+  const resolvedMessageId = await resolvePersistedMessageId(message)
+  if (!resolvedMessageId) {
+    toast(t('chat.failedVote'))
+    return
+  }
+
+  const currentVote = votes.value[resolvedMessageId]
+  const toggling = currentVote === isUpvoted
+  const next = toggling ? undefined : isUpvoted
+
+  // Optimistic update
+  if (next === undefined) {
+    delete votes.value[resolvedMessageId]
+  }
+  else {
+    votes.value[resolvedMessageId] = next
+  }
+
+  try {
+    await chatRepository.saveVote(
+      chatId.value,
+      next === undefined
+        ? { messageId: resolvedMessageId }
+        : { messageId: resolvedMessageId, isUpvoted: next }
+    )
+  }
+  catch (error: any) {
+    if (typeof error?.message === 'string' && error.message.includes('Message not found')) {
+      try {
+        const retriedMessageId = await resolvePersistedMessageId(message)
+        if (retriedMessageId && retriedMessageId !== resolvedMessageId) {
+          await chatRepository.saveVote(
+            chatId.value,
+            next === undefined
+              ? { messageId: retriedMessageId }
+              : { messageId: retriedMessageId, isUpvoted: next }
+          )
+          if (resolvedMessageId !== retriedMessageId) {
+            delete votes.value[resolvedMessageId]
+            if (next !== undefined) {
+              votes.value[retriedMessageId] = next
+            }
+          }
+          return
+        }
+      }
+      catch (retryError) {
+        console.warn('[chat] vote retry failed', retryError)
+        // fall through to optimistic revert
+      }
+    }
+
+    // Revert on error
+    if (currentVote !== undefined) {
+      votes.value[resolvedMessageId] = currentVote
+    }
+    else {
+      delete votes.value[resolvedMessageId]
+    }
+    toast(t('chat.failedVote'))
+  }
+}
+
+// When navigating to a freshly created chat (only 1 user message, no assistant response yet),
+// use `regenerate` to trigger the first AI response. We use `regenerate` instead of `sendMessage`
+// because the user message already exists in the chat history — `sendMessage` would incorrectly
+// duplicate it, while `regenerate` correctly generates a response for the existing last message.
+onMounted(() => {
+  if (chatData.value?.messages?.length === 1 && chatData.value.messages[0]?.role === 'user') {
+    chat.regenerate({ body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+  }
+})
+</script>
+
+<template>
+  <div v-if="isLoading" class="flex-1 flex items-center justify-center">
+    <div class="text-muted-foreground">{{ $t('chat.loadingChat') }}</div>
+  </div>
+
+  <div v-else-if="loadError" class="flex-1 flex items-center justify-center">
+    <div class="text-center space-y-4">
+      <h2 class="text-xl font-semibold">{{ $t('chat.notFoundTitle') }}</h2>
+      <p class="text-muted-foreground">{{ loadError }}</p>
+      <RouterLink
+        to="/"
+        class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2"
+      >
+        {{ $t('chat.startNewChat') }}
+      </RouterLink>
+    </div>
+  </div>
+
+  <div v-else class="flex flex-col h-full">
+    <!-- Edit message dialog -->
+    <Dialog :open="isEditDialogOpen" @update:open="(v: boolean) => { if (!v) cancelEdit() }">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{{ $t('message.edit') }}</DialogTitle>
+        </DialogHeader>
+        <Textarea
+          ref="editTextareaRef"
+          v-model="editText"
+          class="min-h-[120px]"
+          @keydown.enter.meta="confirmEdit"
+          @keydown.enter.ctrl="confirmEdit"
+        />
+        <DialogFooter class="gap-2 sm:gap-0">
+          <Button variant="outline" @click="cancelEdit">
+            {{ $t('app.cancel') }}
+          </Button>
+          <Button @click="confirmEdit">
+            {{ $t('message.edit') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Chat header -->
+    <div class="border-b px-4 py-3 flex items-center justify-between gap-3">
+      <h2 class="font-semibold truncate">
+        {{ chatTitle }}
+      </h2>
+
+      <Context
+        :used-tokens="usedTokens"
+        :max-tokens="maxContextTokens"
+        :usage="contextUsage"
+        :model-id="currentModelId"
+      >
+        <ContextTrigger>
+          <Button
+            type="button"
+            variant="ghost"
+            class="h-auto gap-2 px-2 py-1 text-xs text-muted-foreground"
+          >
+            <span class="font-medium">{{ formattedContextUsage }}</span>
+            <ContextIcon class="size-4" />
+          </Button>
+        </ContextTrigger>
+
+        <ContextContent class="w-72">
+          <ContextContentHeader>
+            <div class="space-y-1">
+              <div class="flex items-center justify-between gap-3 text-xs">
+                <span class="text-muted-foreground">{{ $t('chat.contextUsed') }}</span>
+                <span class="font-mono">
+                  {{ formatTokenCount(usedTokens) }}
+                  <template v-if="maxContextTokens > 0">
+                    / {{ formatTokenCount(maxContextTokens) }}
+                  </template>
+                </span>
+              </div>
+              <p v-if="currentModelId" class="text-[11px] text-muted-foreground break-all">
+                {{ currentModelId }}
+              </p>
+            </div>
+          </ContextContentHeader>
+
+          <ContextContentBody>
+            <div v-if="contextUsageRows.length" class="space-y-2">
+              <div
+                v-for="row in contextUsageRows"
+                :key="row.labelKey"
+                class="flex items-center justify-between text-xs"
+              >
+                <span class="text-muted-foreground">{{ $t(row.labelKey) }}</span>
+                <span>{{ formatTokenCount(row.value) }}</span>
+              </div>
+            </div>
+            <p v-else class="text-xs text-muted-foreground">
+              {{ $t('chat.contextNoUsage') }}
+            </p>
+          </ContextContentBody>
+
+          <ContextContentFooter>
+            <span class="text-muted-foreground">{{ $t('chat.messages') }}</span>
+            <span>{{ chat.messages.length }}</span>
+          </ContextContentFooter>
+        </ContextContent>
+      </Context>
+    </div>
+
+    <!-- Messages -->
+    <ChatMessages
+      :messages="chat.messages"
+      :status="(chat.status as ChatStatus)"
+      :votes="votes"
+      @branch-change="handleBranchChange"
+      @edit="handleEdit"
+      @regenerate="handleRegenerate"
+      @vote="handleVote"
+    />
+
+    <!-- Input -->
+    <ChatInput
+      :status="chat.status"
+      :model="model"
+      :web-search="chatData?.webSearch"
+      @submit="handleSubmit"
+      @update:model="model = $event"
+      @stop="handleStop"
+    />
+  </div>
+</template>
