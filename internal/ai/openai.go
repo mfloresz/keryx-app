@@ -1,214 +1,168 @@
 package ai
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"time"
+
+	"github.com/zendev-sh/goai"
+	"github.com/zendev-sh/goai/provider"
+	"github.com/zendev-sh/goai/provider/openai"
 )
 
-// OpenAIProvider implements Provider for OpenAI-compatible APIs.
+// OpenAIProvider implements Provider for OpenAI-compatible APIs using goai.
 type OpenAIProvider struct {
 	APIKey  string
 	BaseURL string
+	Model   string
 	Timeout time.Duration
+	// ProviderOptions are passed to goai on every call. Use for provider-specific
+	// behavior toggles like forcing Chat Completions (e.g. Venice).
+	ProviderOptions map[string]any
+	// GoAIOptions are the static provider options from the registry (GoAIOptions).
+	GoAIOptions map[string]any
 }
 
-// chatCompletionRequest is the OpenAI-compatible chat completions request body.
-type chatCompletionRequest struct {
-	Model       string          `json:"model"`
-	Messages    []chatMessage   `json:"messages"`
-	Stream      bool            `json:"stream,omitempty"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Temperature float64         `json:"temperature,omitempty"`
+func (p *OpenAIProvider) model() (provider.LanguageModel, error) {
+	if p == nil || p.APIKey == "" {
+		return nil, fmt.Errorf("openai-compatible provider not configured: missing API key")
+	}
+	opts := []openai.Option{openai.WithAPIKey(p.APIKey)}
+	if p.BaseURL != "" {
+		opts = append(opts, openai.WithBaseURL(p.BaseURL))
+	}
+	modelID := p.Model
+	return openai.Chat(modelID, opts...), nil
 }
 
-type chatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+// mergedOptions merges static GoAIOptions with per-call ProviderOptions.
+// For Chat/ChatStream (text generation), strictJsonSchema is excluded.
+func (p *OpenAIProvider) mergedOptions() map[string]any {
+	out := make(map[string]any)
+	if p.GoAIOptions != nil {
+		for k, v := range p.GoAIOptions {
+			out[k] = v
+		}
+	}
+	if p.ProviderOptions != nil {
+		for k, v := range p.ProviderOptions {
+			out[k] = v
+		}
+	}
+	// DeepSeek models don't support structured outputs
+	if strings.Contains(p.Model, "deepseek") {
+		out["structuredOutputs"] = false
+	}
+	// For text generation, strictJsonSchema is not needed
+	delete(out, "strictJsonSchema")
+	return out
 }
 
-// chatCompletionResponse is the non-streaming response.
-type chatCompletionResponse struct {
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage,omitempty"`
-}
+func (p *OpenAIProvider) goaiOpts(req ChatRequest) []goai.Option {
+	var o []goai.Option
 
-// streamEvent is a single SSE event from a streaming response.
-type streamEvent struct {
-	Choices []struct {
-		Delta struct {
-			Content string `json:"content"`
-		} `json:"delta"`
-		FinishReason *string `json:"finish_reason"`
-	} `json:"choices"`
-}
-
-func (p *OpenAIProvider) doRequest(ctx context.Context, req chatCompletionRequest) (*http.Response, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+	if req.System != "" {
+		o = append(o, goai.WithSystem(req.System))
 	}
 
-	baseURL := strings.TrimRight(p.BaseURL, "/")
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/chat/completions", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+	if len(req.Messages) > 0 {
+		msgs := make([]provider.Message, 0, len(req.Messages))
+		for _, m := range req.Messages {
+			msgs = append(msgs, provider.Message{
+				Role:    provider.Role(m.Role),
+				Content: []provider.Part{{Type: provider.PartText, Text: m.Content}},
+			})
+		}
+		o = append(o, goai.WithMessages(msgs...))
 	}
 
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+p.APIKey)
-
-	client := &http.Client{}
-	if p.Timeout > 0 {
-		client.Timeout = p.Timeout
+	if req.MaxTokens > 0 {
+		o = append(o, goai.WithMaxOutputTokens(req.MaxTokens))
 	}
 
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("http request: %w", err)
+	timeout := p.Timeout
+	if req.Timeout > 0 {
+		timeout = req.Timeout
 	}
-	return resp, nil
+	if timeout <= 0 {
+		timeout = 120 * time.Second
+	}
+	o = append(o, goai.WithTimeout(timeout))
+
+	// Provider-specific options
+	opts := p.mergedOptions()
+	if len(opts) > 0 {
+		o = append(o, goai.WithProviderOptions(opts))
+	}
+
+	return o
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (string, error) {
-	chatReq := chatCompletionRequest{
-		Model:       req.Model,
-		Messages:    convertMessages(req.System, req.Messages),
-		MaxTokens:   req.MaxTokens,
-		Temperature: 0.7,
-	}
-
-	resp, err := p.doRequest(ctx, chatReq)
+	model, err := p.model()
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	// Override model from request if provided
+	if req.Model != "" {
+		opts := []openai.Option{openai.WithAPIKey(p.APIKey)}
+		if p.BaseURL != "" {
+			opts = append(opts, openai.WithBaseURL(p.BaseURL))
+		}
+		model = openai.Chat(req.Model, opts...)
 	}
 
-	var result chatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+	result, err := goai.GenerateText(ctx, model, p.goaiOpts(req)...)
+	if err != nil {
+		return "", fmt.Errorf("chat completion: %w", err)
 	}
-
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
-	}
-
-	return strings.TrimSpace(result.Choices[0].Message.Content), nil
+	return strings.TrimSpace(result.Text), nil
 }
 
 func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(string)) (string, error) {
-	chatReq := chatCompletionRequest{
-		Model:       req.Model,
-		Messages:    convertMessages(req.System, req.Messages),
-		Stream:      true,
-		MaxTokens:   req.MaxTokens,
-		Temperature: 0.7,
-	}
-
-	resp, err := p.doRequest(ctx, chatReq)
+	model, err := p.model()
 	if err != nil {
 		return "", err
 	}
 
-	if resp.StatusCode != 200 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return "", fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(bodyBytes))
+	// Override model from request if provided
+	if req.Model != "" {
+		opts := []openai.Option{openai.WithAPIKey(p.APIKey)}
+		if p.BaseURL != "" {
+			opts = append(opts, openai.WithBaseURL(p.BaseURL))
+		}
+		model = openai.Chat(req.Model, opts...)
 	}
 
-	defer resp.Body.Close()
+	stream, err := goai.StreamText(ctx, model, p.goaiOpts(req)...)
+	if err != nil {
+		return "", fmt.Errorf("chat stream: %w", err)
+	}
 
 	var fullText strings.Builder
-	scanner := bufio.NewScanner(resp.Body)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
-			break
-		}
-
-		var event streamEvent
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			continue
-		}
-
-		if len(event.Choices) > 0 {
-			content := event.Choices[0].Delta.Content
-			if content != "" {
-				fullText.WriteString(content)
-				if onChunk != nil {
-					onChunk(content)
-				}
-			}
-
-			if event.Choices[0].FinishReason != nil {
-				break
-			}
+	for text := range stream.TextStream() {
+		fullText.WriteString(text)
+		if onChunk != nil {
+			onChunk(text)
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fullText.String(), fmt.Errorf("stream read error: %w", err)
+	if err := stream.Err(); err != nil {
+		return fullText.String(), fmt.Errorf("stream error: %w", err)
 	}
 
 	return strings.TrimSpace(fullText.String()), nil
 }
 
-func (p *OpenAIProvider) GenerateTitle(ctx context.Context, userMessage string) (string, error) {
-	titlePrompt := `Generate a very short, concise title (max 6 words) in Spanish for a chat conversation that starts with this user message. Respond with ONLY the title text, no quotes, no punctuation.
+func (p *OpenAIProvider) GenerateTitle(ctx context.Context, userMessage string, language string) (string, error) {
+	titlePrompt := fmt.Sprintf(`Summarize the conversation in a clear and concise title of no more than 10 words in "%s", without punctuation or special symbols. No markdown format. Return only the title.`, language)
 
-User message: ` + userMessage
+	fullPrompt := titlePrompt + "\n\nUser message: " + userMessage
 
-	req := ChatRequest{
-		Model: "mistral/ministral-8b", // lightweight model for titles
-		Messages: []ChatMessage{
-			{Role: "user", Content: titlePrompt},
-		},
+	return p.Chat(ctx, ChatRequest{
+		Messages:  []ChatMessage{{Role: "user", Content: fullPrompt}},
 		MaxTokens: 20,
-	}
-
-	return p.Chat(ctx, req)
-}
-
-func convertMessages(system string, messages []ChatMessage) []chatMessage {
-	var result []chatMessage
-
-	if system != "" {
-		result = append(result, chatMessage{Role: "system", Content: system})
-	}
-
-	for _, msg := range messages {
-		result = append(result, chatMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
-		})
-	}
-
-	return result
+	})
 }

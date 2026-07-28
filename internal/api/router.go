@@ -79,6 +79,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/invitations", s.withAdminAuth(s.handleAdminCreateInvitation))
 	mux.HandleFunc("DELETE /api/admin/invitations/{id}", s.withAdminAuth(s.handleAdminDeleteInvitation))
 
+	// Admin provider key routes
+	mux.HandleFunc("GET /api/admin/provider-keys", s.withAdminAuth(s.handleAdminListProviderKeys))
+	mux.HandleFunc("PUT /api/admin/provider-keys/{provider}", s.withAdminAuth(s.handleAdminUpsertProviderKey))
+	mux.HandleFunc("DELETE /api/admin/provider-keys/{provider}", s.withAdminAuth(s.handleAdminDeleteProviderKey))
+
 	// SPA static files (catch-all)
 	mux.HandleFunc("/", StaticHandler(s.Cfg.StaticDir))
 
@@ -141,11 +146,11 @@ func userRoleFromContext(r *http.Request) (string, bool) {
 
 // getProviderForModel returns the appropriate AI provider and upstream model
 // ID for a public model ID, resolving against the static catalog in the ai
-// package (same pattern as Yara's newAIProvider).
+// package.
 //
-// Known provider prefixes resolve directly (e.g. "opencode/mimo-v2.5" sends
-// "mimo-v2.5" to the OpenCode GO API). Any other ID is routed through the
-// gateway provider, passing the full ID upstream (e.g. "openai/gpt-5.4-nano").
+// Known provider prefixes resolve directly (e.g. "venice/e2ee-deepseek-v4-flash"
+// sends "e2ee-deepseek-v4-flash" to the Venice API, "google/gemma-4-31b-it"
+// sends "gemma-4-31b-it" to the Google API).
 func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error) {
 	info, upstreamModel, err := ai.ResolveModel(modelID)
 	if err != nil {
@@ -161,28 +166,56 @@ func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error
 		return nil, "", err
 	}
 
-	p := &ai.OpenAIProvider{
-		APIKey:  apiKey,
-		BaseURL: info.BaseURL,
-		Timeout: 120 * time.Second,
+	var p ai.Provider
+	if info.ID == "google" {
+		p = &ai.GoogleProvider{
+			APIKey:  apiKey,
+			Model:   upstreamModel,
+			Timeout: 120 * time.Second,
+		}
+	} else {
+		p = &ai.OpenAIProvider{
+			APIKey:      apiKey,
+			BaseURL:     info.BaseURL,
+			Model:       upstreamModel,
+			Timeout:     120 * time.Second,
+			GoAIOptions: info.GoAIOptions,
+		}
 	}
 	s.AIProviders[info.ID] = p
 	return p, upstreamModel, nil
 }
 
-// apiKeyForProvider maps a catalog provider ID to its configured API key.
+// apiKeyForProvider returns the API key for a provider.
+// It first checks the encrypted store (set by admin via UI), then falls back
+// to the environment variable configured at startup.
 func (s *Server) apiKeyForProvider(providerID string) (string, error) {
+	// 1. Try the encrypted DB store first (admin-configured keys).
+	if dbKey, err := s.Store.GetDecryptedAPIKey(providerID); err != nil {
+		return "", fmt.Errorf("read stored key for %s: %w", providerID, err)
+	} else if dbKey != "" {
+		return dbKey, nil
+	}
+
+	// 2. Fall back to env vars.
 	switch providerID {
-	case "vercel-ai-gateway":
-		if s.Cfg.AIGatewayAPIKey == "" {
-			return "", fmt.Errorf("AI Gateway API key not configured")
+	case "venice":
+		if s.Cfg.VeniceAPIKey == "" {
+			return "", fmt.Errorf("Venice API key not configured (set VENICE_API_KEY or configure via admin UI)")
 		}
-		return s.Cfg.AIGatewayAPIKey, nil
-	case "opencode":
-		if s.Cfg.OpenCodeAPIKey == "" {
-			return "", fmt.Errorf("OpenCode GO API key not configured")
+		return s.Cfg.VeniceAPIKey, nil
+	case "opencode-go":
+		if s.Cfg.OpenCodeGoAPIKey == "" {
+			return "", fmt.Errorf("OpenCode Go API key not configured (set OPENCODEGO_API_KEY or configure via admin UI)")
 		}
-		return s.Cfg.OpenCodeAPIKey, nil
+		return s.Cfg.OpenCodeGoAPIKey, nil
+	case "google":
+		if s.Cfg.GoogleAPIKey == "" {
+			return "", fmt.Errorf("Google API key not configured (set GOOGLE_API_KEY or configure via admin UI)")
+		}
+		return s.Cfg.GoogleAPIKey, nil
+	case "lmstudio":
+		return "", nil // local, no API key needed
 	default:
 		return "", fmt.Errorf("unknown provider: %s", providerID)
 	}

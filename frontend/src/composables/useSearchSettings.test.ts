@@ -73,15 +73,29 @@ describe("useSearchSettings", () => {
     expect(settings.options.value.chunksPerSource).toBe(2);
   });
 
+  const searchCapableModel = {
+    label: "Search Model",
+    value: "venice/with-search",
+    supportsImages: true,
+    supportsSearch: true,
+    maxContextTokens: 128000,
+    maxOutputTokens: 16384,
+  };
+  const plainModel = {
+    label: "Plain Model",
+    value: "venice/plain",
+    supportsImages: false,
+    supportsSearch: false,
+    maxContextTokens: 128000,
+    maxOutputTokens: 16384,
+  };
+  const allModels = [searchCapableModel, plainModel];
+
   it("isSearchAvailable returns supportsSearch for native engine", () => {
     const settings = useSearchSettings();
-    expect(settings.isSearchAvailable.value("openai/gpt-5.4-nano")).toBe(true);
-    expect(settings.isSearchAvailable.value("google/gemini-3.5-flash")).toBe(
-      false,
-    );
-    expect(settings.isSearchAvailable.value("deepseek/deepseek-v4-flash")).toBe(
-      false,
-    );
+    expect(settings.isSearchAvailable.value(allModels, "venice/with-search")).toBe(true);
+    expect(settings.isSearchAvailable.value(allModels, "venice/plain")).toBe(false);
+    expect(settings.isSearchAvailable.value(allModels, "unknown/model")).toBe(false);
   });
 
   it("isSearchAvailable returns true for all models when tavily is configured", async () => {
@@ -89,19 +103,14 @@ describe("useSearchSettings", () => {
     await secureSetItem("tavily-api-key", "tvly-test");
     const settings = useSearchSettings();
     await flushPromises();
-    expect(settings.isSearchAvailable.value("openai/gpt-5.4-nano")).toBe(true);
-    expect(settings.isSearchAvailable.value("google/gemini-3.5-flash")).toBe(
-      true,
-    );
-    expect(settings.isSearchAvailable.value("deepseek/deepseek-v4-flash")).toBe(
-      true,
-    );
+    expect(settings.isSearchAvailable.value(allModels, "venice/with-search")).toBe(true);
+    expect(settings.isSearchAvailable.value(allModels, "venice/plain")).toBe(true);
   });
 
   it("isSearchAvailable returns false for tavily when api key is missing", () => {
     store["search-engine"] = "tavily";
     const settings = useSearchSettings();
-    expect(settings.isSearchAvailable.value("openai/gpt-5.4-nano")).toBe(false);
+    expect(settings.isSearchAvailable.value(allModels, "venice/with-search")).toBe(false);
   });
 
   it("saveEngine persists to localStorage", () => {

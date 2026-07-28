@@ -2,7 +2,6 @@ import type { ModelRepository } from "@/domain/models/ports";
 import type { ChatModel, ModelProviderOption, ModelSelection } from "@/domain/models/types";
 import { getAuthAdapter } from "@/services/runtime";
 
-const DEFAULT_MODEL = "openai/gpt-5.4-nano";
 const ALLOWED_MODELS_CACHE_TTL_MS = 60_000;
 
 let allowedModelsCache: {
@@ -16,7 +15,7 @@ async function fetchAllowedModels(): Promise<ChatModel[]> {
   const auth = await getAuthAdapter();
   const session = await auth.getSession();
   const token = session?.accessToken ?? null;
-  if (!token) return [{ label: "GPT-5.4 Nano", value: DEFAULT_MODEL, supportsImages: true, supportsSearch: true, maxContextTokens: 128000, maxOutputTokens: 16384 }];
+  if (!token) return [];
 
   const now = Date.now();
   if (allowedModelsCache?.token === token && now - allowedModelsCache.cachedAt < ALLOWED_MODELS_CACHE_TTL_MS) {
@@ -30,7 +29,7 @@ async function fetchAllowedModels(): Promise<ChatModel[]> {
     const response = await fetch("/api/models/allowed", {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!response.ok) return [{ label: "GPT-5.4 Nano", value: DEFAULT_MODEL, supportsImages: true, supportsSearch: true, maxContextTokens: 128000, maxOutputTokens: 16384 }];
+    if (!response.ok) return [];
 
     const payload = (await response.json()) as Array<{
       displayName?: string; id: string; provider?: string;
@@ -69,7 +68,7 @@ export const apiModelRepository: ModelRepository = {
   async getSelection(): Promise<ModelSelection> {
     const models = await fetchAllowedModels();
     const stored = localStorage.getItem("keryx-model");
-    const model = models.some((m) => m.value === stored) ? stored! : (models[0]?.value ?? DEFAULT_MODEL);
+    const model = models.some((m) => m.value === stored) ? stored! : (models[0]?.value ?? "");
     return { provider: "managed", model };
   },
 

@@ -51,22 +51,32 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
     }
 
     const body = (options.body as Record<string, unknown>) ?? {};
-    const model = (body.model as string) ?? 'openai/gpt-5.4-nano';
+    const model = body.model as string | undefined;
+    if (!model) {
+      throw new Error('No model selected');
+    }
 
-    // Convert UIMessage[] to backend ChatMessage[] (role + content)
-    const messages = options.messages.map((msg: any) => {
-      // Extract text content from parts or legacy content field
-      let content = '';
-      if (Array.isArray(msg.parts)) {
-        content = msg.parts
-          .filter((p: any) => p.type === 'text')
-          .map((p: any) => p.text ?? '')
-          .join('');
-      } else if (typeof msg.content === 'string') {
-        content = msg.content;
-      }
-      return { role: msg.role ?? 'user', content };
-    });
+    // Convert UIMessage[] to backend ChatMessage[] (role + content).
+    // Messages with empty text content are skipped: sending them makes
+    // providers reject the whole request with 400.
+    const messages = options.messages
+      .map((msg: any) => {
+        // Extract text content from parts or legacy content field
+        let content = '';
+        if (Array.isArray(msg.parts)) {
+          content = msg.parts
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text ?? '')
+            .join('');
+        } else if (typeof msg.content === 'string') {
+          content = msg.content;
+        }
+        const role = msg.role ?? 'user';
+        if (role !== 'user' && role !== 'assistant') return null;
+        if (!content.trim()) return null;
+        return { role, content };
+      })
+      .filter((msg: unknown) => msg !== null);
 
     const response = await fetch(this.api, {
       method: 'POST',
@@ -76,7 +86,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         messages,
         system: (body.system as string) ?? '',
         webSearch: Boolean(body.webSearch),
-        searchEngine: (body.searchEngine as string) ?? 'native',
+        language: body.language as string,
       }),
       signal: options.abortSignal,
     });

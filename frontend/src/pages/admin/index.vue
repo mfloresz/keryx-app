@@ -58,6 +58,13 @@ interface AdminModel {
   enabled: boolean;
 }
 
+interface ProviderKeyEntry {
+  provider: string;
+  label: string;
+  configured: boolean;
+  updatedAt: string | null;
+}
+
 const { t } = useI18n();
 const { toast } = useToast();
 const auth = await getAuthAdapter();
@@ -80,6 +87,14 @@ const isSendingInvitationEmail = ref(false);
 const updatingUserId = ref<string | null>(null);
 const updatingModelId = ref<string | null>(null);
 const deletingInvitationId = ref<string | null>(null);
+
+// Provider key state
+const providerKeys = ref<ProviderKeyEntry[]>([]);
+const isProviderKeyDialogOpen = ref(false);
+const editingProviderKey = ref<ProviderKeyEntry | null>(null);
+const providerKeyValue = ref("");
+const isSavingProviderKey = ref(false);
+const isDeletingProviderKey = ref(false);
 
 const adminCount = computed(
   () => users.value.filter((user) => user.role === "admin").length,
@@ -109,20 +124,24 @@ async function assertOk(response: Response, fallbackMessage: string): Promise<vo
 async function loadData(): Promise<void> {
   isLoading.value = true;
   try {
-    const [usersResponse, invitationsResponse, modelsResponse] = await Promise.all([
+    const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse] = await Promise.all([
       apiFetch("/api/admin/users"),
       apiFetch("/api/admin/invitations"),
       apiFetch("/api/admin/models"),
+      apiFetch("/api/admin/provider-keys"),
     ]);
 
     await assertOk(usersResponse, t("admin.shared.loadError"));
     await assertOk(invitationsResponse, t("admin.shared.loadError"));
     await assertOk(modelsResponse, t("admin.shared.loadError"));
+    await assertOk(providerKeysResponse, t("admin.shared.loadError"));
 
     users.value = (await readPayload<AdminUser[]>(usersResponse)) ?? [];
     invitations.value =
       (await readPayload<AdminInvitation[]>(invitationsResponse)) ?? [];
     models.value = (await readPayload<AdminModel[]>(modelsResponse)) ?? [];
+    providerKeys.value =
+      (await readPayload<ProviderKeyEntry[]>(providerKeysResponse)) ?? [];
   } catch (error) {
     toast(
       error instanceof Error ? error.message : t("admin.shared.loadError"),
@@ -137,6 +156,56 @@ function formatDateTime(value: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+// ---- Provider key handlers ----
+
+function openProviderKeyDialog(entry: ProviderKeyEntry): void {
+  editingProviderKey.value = entry;
+  providerKeyValue.value = "";
+  isProviderKeyDialogOpen.value = true;
+}
+
+async function handleSaveProviderKey(): Promise<void> {
+  if (isSavingProviderKey.value || !editingProviderKey.value) return;
+
+  isSavingProviderKey.value = true;
+  try {
+    const response = await apiFetch(
+      `/api/admin/provider-keys/${encodeURIComponent(editingProviderKey.value.provider)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ apiKey: providerKeyValue.value }),
+      },
+    );
+    await assertOk(response, t("admin.providerKeys.saveError"));
+    isProviderKeyDialogOpen.value = false;
+    await loadData();
+    toast(t("admin.providerKeys.saveSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.providerKeys.saveError"));
+  } finally {
+    isSavingProviderKey.value = false;
+  }
+}
+
+async function handleDeleteProviderKey(entry: ProviderKeyEntry): Promise<void> {
+  if (isDeletingProviderKey.value) return;
+
+  isDeletingProviderKey.value = true;
+  try {
+    const response = await apiFetch(
+      `/api/admin/provider-keys/${encodeURIComponent(entry.provider)}`,
+      { method: "DELETE" },
+    );
+    await assertOk(response, t("admin.providerKeys.deleteError"));
+    await loadData();
+    toast(t("admin.providerKeys.deleteSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.providerKeys.deleteError"));
+  } finally {
+    isDeletingProviderKey.value = false;
+  }
 }
 
 function resetInvitationForm(): void {
@@ -425,6 +494,76 @@ onMounted(() => {
 
       <Separator />
 
+      <!-- Provider API Keys -->
+      <Card>
+        <CardHeader>
+          <CardTitle>{{ t('admin.providerKeys.title') }}</CardTitle>
+          <p class="text-sm text-muted-foreground">
+            {{ t('admin.providerKeys.description') }}
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div class="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{{ t('admin.providerKeys.providerColumn') }}</TableHead>
+                  <TableHead>{{ t('admin.providerKeys.statusColumn') }}</TableHead>
+                  <TableHead class="w-[200px]">{{ t('admin.providerKeys.actionsColumn') }}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableEmpty v-if="!isLoading && providerKeys.length === 0" :colspan="3">
+                  {{ t('admin.providerKeys.noKeys') }}
+                </TableEmpty>
+                <TableRow v-for="entry in providerKeys" :key="entry.provider">
+                  <TableCell class="font-medium">{{ entry.label }}</TableCell>
+                  <TableCell>
+                    <div class="flex items-center gap-2">
+                      <span
+                        class="inline-block size-2 rounded-full"
+                        :class="entry.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
+                      />
+                      <span>
+                        {{ entry.configured ? t('admin.providerKeys.statusConfigured') : t('admin.providerKeys.statusNotConfigured') }}
+                      </span>
+                    </div>
+                    <p
+                      v-if="entry.configured && entry.updatedAt"
+                      class="mt-1 text-xs text-muted-foreground"
+                    >
+                      {{ t('admin.providerKeys.updatedAt') }}: {{ formatDateTime(entry.updatedAt) }}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <div class="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        @click="openProviderKeyDialog(entry)"
+                      >
+                        {{ entry.configured ? t('app.save') : t('admin.providerKeys.saveButton') }}
+                      </Button>
+                      <Button
+                        v-if="entry.configured"
+                        variant="outline"
+                        size="sm"
+                        :disabled="isDeletingProviderKey"
+                        @click="handleDeleteProviderKey(entry)"
+                      >
+                        {{ t('admin.providerKeys.deleteButton') }}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
       <Card>
         <CardHeader>
           <CardTitle>{{ t('admin.models.title') }}</CardTitle>
@@ -523,6 +662,39 @@ onMounted(() => {
           </Button>
           <Button :disabled="isCreatingInvitation" @click="handleCreateInvitation">
             {{ isCreatingInvitation ? t('admin.invitations.creating') : t('admin.invitations.createButton') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="isProviderKeyDialogOpen">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{{ t('admin.providerKeys.modifyTitle') }}</DialogTitle>
+          <DialogDescription>
+            {{ editingProviderKey?.label }} — {{ t('admin.providerKeys.keyHint') }}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <Label for="api-key-input">{{ t('admin.providerKeys.keyLabel') }}</Label>
+            <Input
+              id="api-key-input"
+              v-model="providerKeyValue"
+              type="password"
+              :placeholder="t('admin.providerKeys.keyPlaceholder')"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="isProviderKeyDialogOpen = false">
+            {{ t('app.cancel') }}
+          </Button>
+          <Button :disabled="isSavingProviderKey || !providerKeyValue.trim()" @click="handleSaveProviderKey">
+            {{ isSavingProviderKey ? t('admin.providerKeys.saving') : t('admin.providerKeys.saveButton') }}
           </Button>
         </DialogFooter>
       </DialogContent>

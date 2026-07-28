@@ -257,6 +257,28 @@
       "lastAdminHint": "Siempre debe existir al menos un administrador.",
       "updateError": "No se pudo actualizar el rol del usuario",
       "updateSuccess": "Rol actualizado correctamente"
+    },
+    "providerKeys": {
+      "title": "API Keys de Proveedores",
+      "description": "Gestiona las API keys globales para los proveedores de IA. Todos los usuarios comparten estas claves y la clave real nunca se muestra después de guardarse.",
+      "providerColumn": "Proveedor",
+      "statusColumn": "Estado",
+      "actionsColumn": "Acciones",
+      "statusConfigured": "Configurada",
+      "statusNotConfigured": "No configurada",
+      "modifyTitle": "Establecer API Key",
+      "keyLabel": "API Key",
+      "keyPlaceholder": "Ingresa la API key…",
+      "keyHint": "La clave se encripta antes de almacenarse. Una vez guardada, solo se puede reemplazar o eliminar — nunca se puede ver.",
+      "saveButton": "Guardar Key",
+      "saving": "Guardando…",
+      "deleteButton": "Eliminar Key",
+      "deleting": "Eliminando…",
+      "saveSuccess": "API key guardada correctamente",
+      "saveError": "No se pudo guardar la API key",
+      "deleteSuccess": "API key eliminada correctamente",
+      "deleteError": "No se pudo eliminar la API key",
+      "updatedAt": "Actualizada"
     }
   },
   "auth": {

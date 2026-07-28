@@ -84,13 +84,7 @@ const selectedModelLabel = computed(() => {
 
 const searchSettings = useSearchSettings()
 const modelSupportsSearch = computed(() => {
-  const found = models.value.find(m => m.value === props.model)
-  if (found) {
-    return searchSettings.engine.value === 'tavily'
-      ? searchSettings.isSearchAvailable.value(props.model)
-      : found.supportsSearch
-  }
-  return searchSettings.isSearchAvailable.value(props.model)
+  return searchSettings.isSearchAvailable.value(models.value, props.model)
 })
 const modelSupportsImages = computed(() => {
   const found = models.value.find(m => m.value === props.model)
@@ -124,7 +118,7 @@ function handleModelSelect(value: string) {
   emit('update:model', value)
   selectorOpen.value = false
   // Reset web search when switching models to avoid unsupported state
-  if (!searchSettings.isSearchAvailable.value(value)) {
+  if (!searchSettings.isSearchAvailable.value(models.value, value)) {
     useWebSearch.value = false
   }
 }

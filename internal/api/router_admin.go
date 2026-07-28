@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"keryx-server/internal/ai"
 	"keryx-server/internal/store"
 )
 
@@ -199,6 +200,98 @@ func (s *Server) handleAdminDeleteInvitation(w http.ResponseWriter, r *http.Requ
 		errorResponse(w, "Invitation not found", http.StatusNotFound)
 		return
 	}
+	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
+}
+
+// ---- Provider key admin handlers ----
+
+// providerKeyEntry is returned by list/GET — the actual key is never exposed.
+type providerKeyEntry struct {
+	Provider    string  `json:"provider"`
+	Label       string  `json:"label"`
+	Configured  bool    `json:"configured"`
+	UpdatedAt   *string `json:"updatedAt,omitempty"`
+}
+
+func knownProvidersWithLabel() []providerKeyEntry {
+	providers := ai.Providers()
+	out := make([]providerKeyEntry, 0, len(providers))
+	for _, p := range providers {
+		out = append(out, providerKeyEntry{
+			Provider: p.ID,
+			Label:    p.Name,
+		})
+	}
+	return out
+}
+
+func (s *Server) handleAdminListProviderKeys(w http.ResponseWriter, r *http.Request) {
+	// Build the full list of known providers, overlaying DB-configured state.
+	all := knownProvidersWithLabel()
+	byProvider := make(map[string]int, len(all))
+	for i, entry := range all {
+		byProvider[entry.Provider] = i
+	}
+
+	stored, err := s.Store.ListProviderKeys()
+	if err != nil {
+		errorResponse(w, "Failed to list provider keys", http.StatusInternalServerError)
+		return
+	}
+	for _, k := range stored {
+		if idx, ok := byProvider[k.Provider]; ok {
+			all[idx].Configured = k.Configured
+			if k.UpdatedAt != "" {
+				t := k.UpdatedAt
+				all[idx].UpdatedAt = &t
+			}
+		}
+	}
+
+	jsonResponse(w, all, http.StatusOK)
+}
+
+func (s *Server) handleAdminUpsertProviderKey(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+	if provider == "" {
+		errorResponse(w, "Missing provider", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		APIKey string `json:"apiKey"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if strings.TrimSpace(req.APIKey) == "" {
+		errorResponse(w, "API key cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	info, err := s.Store.UpsertProviderAPIKey(provider, req.APIKey)
+	if err != nil {
+		errorResponse(w, "Failed to save API key: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, info, http.StatusOK)
+}
+
+func (s *Server) handleAdminDeleteProviderKey(w http.ResponseWriter, r *http.Request) {
+	provider := r.PathValue("provider")
+	if provider == "" {
+		errorResponse(w, "Missing provider", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.Store.DeleteProviderAPIKey(provider); err != nil {
+		errorResponse(w, "Failed to delete API key", http.StatusInternalServerError)
+		return
+	}
+
 	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
 }
 

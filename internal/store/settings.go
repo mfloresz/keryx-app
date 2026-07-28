@@ -14,6 +14,7 @@ const (
 	UserModelAccessCollection = "user_model_access"
 	InvitationsCollection     = "invitations"
 	AttachmentsCollection     = "attachments"
+	ProviderKeysCollection    = "provider_keys"
 )
 
 // User roles

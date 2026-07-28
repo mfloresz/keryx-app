@@ -8,7 +8,6 @@ import { useChatStore } from '@/stores/chat'
 import type { ChatRecord } from '@/domain/chat/types'
 import { useModels } from '@/composables/useModels'
 import { useToast } from '@/composables/useToast'
-import { useSearchSettings } from '@/composables/useSearchSettings'
 import { getModelContextWindow } from '@/shared/utils/models'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
@@ -32,11 +31,10 @@ import {
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const route = useRoute()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const chatStore = useChatStore()
-const { model } = useModels()
+const { model, models } = useModels()
 const { toast } = useToast()
-const searchSettings = useSearchSettings()
 const chatRepository = await getChatRepository()
 
 // Edit dialog state
@@ -59,7 +57,7 @@ const chatTitle = computed(() => {
 
 const contextUsage = computed(() => chatData.value?.lastUsage)
 const currentModelId = computed(() => model.value)
-const maxContextTokens = computed(() => getModelContextWindow(currentModelId.value) ?? 0)
+const maxContextTokens = computed(() => getModelContextWindow(models.value, currentModelId.value) ?? 0)
 const usedTokens = computed(() => {
   const usage = contextUsage.value
   if (!usage) return 0
@@ -91,9 +89,7 @@ function buildSearchRequestBody(webSearch: boolean) {
   return {
     model: model.value,
     webSearch,
-    searchEngine: searchSettings.engine.value,
-    tavilyApiKey: searchSettings.tavilyApiKey.value,
-    tavilyOptions: searchSettings.options.value,
+    language: locale.value,
   }
 }
 
