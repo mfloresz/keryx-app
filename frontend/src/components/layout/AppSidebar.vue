@@ -128,7 +128,9 @@ const themeOptions: { value: Theme; icon: typeof Sun; labelKey: string }[] = [
 ]
 
 const userEmail = computed(() => authStore.session?.user.email ?? '')
+const userName = computed(() => authStore.session?.user.name ?? '')
 const userDisplayName = computed(() => {
+  if (userName.value) return userName.value
   const local = userEmail.value.split('@')[0] ?? ''
   if (!local) return t('sidebar.user')
   return local.charAt(0).toUpperCase() + local.slice(1)
@@ -474,8 +476,13 @@ function onKeyDown(e: KeyboardEvent) {
               ]"
               :aria-label="$t('sidebar.userMenu')"
             >
-              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium text-muted-foreground">
-                {{ userInitial }}
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground overflow-hidden">
+                <template v-if="authStore.avatarUrl">
+                  <img :src="authStore.avatarUrl" alt="" class="h-full w-full object-cover" />
+                </template>
+                <template v-else>
+                  {{ userInitial }}
+                </template>
               </span>
               <span v-if="!collapsed" class="min-w-0 flex-1 leading-tight">
                 <span class="block truncate text-sm font-medium">{{ userDisplayName }}</span>
@@ -486,8 +493,13 @@ function onKeyDown(e: KeyboardEvent) {
           <DropdownMenuContent :side="collapsed ? 'right' : 'top'" align="start" class="w-64">
             <!-- User header -->
             <DropdownMenuLabel class="flex items-center gap-2.5 font-normal">
-              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium text-muted-foreground">
-                {{ userInitial }}
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground overflow-hidden">
+                <template v-if="authStore.avatarUrl">
+                  <img :src="authStore.avatarUrl" alt="" class="h-full w-full object-cover" />
+                </template>
+                <template v-else>
+                  {{ userInitial }}
+                </template>
               </span>
               <span class="min-w-0 leading-tight">
                 <span class="block truncate text-sm font-medium">{{ userDisplayName }}</span>

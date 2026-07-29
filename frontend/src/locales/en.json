@@ -47,6 +47,7 @@
     "description": "Configure your AI Gateway API key to enable chat functionality.",
     "sections": {
       "general": "General",
+      "account": "Account",
       "search": "Search",
       "privacy": "Privacy"
     },
@@ -135,7 +136,28 @@
     "deleteConfirmDescription": "This will permanently delete all your chats and their attachments. This action cannot be undone.",
     "deleteHint": "Permanently remove all chats and associated files from local storage.",
     "deleting": "Deleting...",
-    "confirmDelete": "Confirm Delete"
+    "confirmDelete": "Confirm Delete",
+    "account": {
+      "avatarLabel": "Profile Photo",
+      "changePhoto": "Change photo",
+      "removePhoto": "Remove photo",
+      "nameLabel": "Name",
+      "namePlaceholder": "Your display name",
+      "nameHint": "This is how your name will appear in the app.",
+      "emailLabel": "Email",
+      "emailHint": "Your email address is read-only.",
+      "saving": "Saving...",
+      "saveProfile": "Save Profile",
+      "changePassword": "Change Password",
+      "currentPassword": "Current Password",
+      "currentPasswordPlaceholder": "Enter your current password",
+      "newPassword": "New Password",
+      "newPasswordPlaceholder": "Enter your new password",
+      "confirmNewPassword": "Confirm New Password",
+      "confirmNewPasswordPlaceholder": "Confirm your new password",
+      "changing": "Changing...",
+      "updatePassword": "Update Password"
+    }
   },
   "favorites": {
     "title": "Favorites",

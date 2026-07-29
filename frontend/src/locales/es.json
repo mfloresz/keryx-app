@@ -47,6 +47,7 @@
     "description": "Configura tu proveedor de IA para habilitar la funcionalidad de chat.",
     "sections": {
       "general": "General",
+      "account": "Cuenta",
       "search": "Búsqueda",
       "privacy": "Privacidad"
     },
@@ -135,7 +136,28 @@
     "deleteConfirmDescription": "Esto eliminará permanentemente todos tus chats y sus adjuntos. Esta acción no se puede deshacer.",
     "deleteHint": "Elimina permanentemente todos los chats y archivos asociados del almacenamiento local.",
     "deleting": "Eliminando...",
-    "confirmDelete": "Confirmar Eliminación"
+    "confirmDelete": "Confirmar Eliminación",
+    "account": {
+      "avatarLabel": "Foto de perfil",
+      "changePhoto": "Cambiar foto",
+      "removePhoto": "Eliminar foto",
+      "nameLabel": "Nombre",
+      "namePlaceholder": "Tu nombre visible",
+      "nameHint": "Así aparecerá tu nombre en la aplicación.",
+      "emailLabel": "Correo electrónico",
+      "emailHint": "Tu correo electrónico es de solo lectura.",
+      "saving": "Guardando...",
+      "saveProfile": "Guardar Perfil",
+      "changePassword": "Cambiar Contraseña",
+      "currentPassword": "Contraseña actual",
+      "currentPasswordPlaceholder": "Ingresa tu contraseña actual",
+      "newPassword": "Nueva contraseña",
+      "newPasswordPlaceholder": "Ingresa tu nueva contraseña",
+      "confirmNewPassword": "Confirmar nueva contraseña",
+      "confirmNewPasswordPlaceholder": "Confirma tu nueva contraseña",
+      "changing": "Cambiando...",
+      "updatePassword": "Actualizar Contraseña"
+    }
   },
   "favorites": {
     "title": "Favoritos",

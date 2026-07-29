@@ -31,17 +31,23 @@ async function fetchAppSession(accessToken: string): Promise<AuthSession | null>
     });
     if (!response.ok) return null;
     const payload = await response.json();
-    return {
-      accessToken,
-      user: {
-        id: String(payload.id),
-        email: typeof payload.email === "string" ? payload.email : null,
-        role: payload.role === "admin" ? "admin" : "user",
-      },
-    };
+    return userFromPayload(payload, accessToken);
   } catch {
     return null;
   }
+}
+
+function userFromPayload(payload: any, accessToken?: string): AuthSession {
+  return {
+    accessToken,
+    user: {
+      id: String(payload.id ?? payload.user?.id ?? ""),
+      email: typeof payload.email === "string" ? payload.email : (payload.user?.email ?? null),
+      name: payload.name ?? payload.user?.name ?? "",
+      role: (payload.role ?? payload.user?.role) === "admin" ? "admin" : "user",
+      avatarUrl: payload.avatarUrl ?? payload.user?.avatarUrl ?? null,
+    },
+  };
 }
 
 export const apiAuthAdapter: AuthAdapter = {
@@ -85,14 +91,7 @@ export const apiAuthAdapter: AuthAdapter = {
     const storage = getLocalStorage();
     storage?.setItem(ACCESS_TOKEN_KEY, payload.token);
 
-    const session: AuthSession = {
-      accessToken: payload.token,
-      user: {
-        id: String(payload.user?.id ?? payload.id ?? ""),
-        email: payload.user?.email ?? email,
-        role: payload.user?.role === "admin" ? "admin" : "user",
-      },
-    };
+    const session = userFromPayload(payload.user, payload.token);
 
     const verifiedSession = await fetchAppSession(payload.token);
     const finalSession = verifiedSession ?? session;
@@ -113,5 +112,58 @@ export const apiAuthAdapter: AuthAdapter = {
       headers.Authorization = `Bearer ${token}`;
     }
     return headers;
+  },
+
+  async updateProfile(data) {
+    const token = readStoredToken();
+    if (!token) throw new Error("Not authenticated");
+
+    const formData = new FormData();
+    if (data.name !== undefined) {
+      formData.append("name", data.name);
+    }
+    if (data.avatar) {
+      formData.append("avatar", data.avatar);
+    }
+    if (data.removeAvatar) {
+      formData.append("removeAvatar", "true");
+    }
+
+    const response = await fetch("/api/auth/profile", {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: "Failed to update profile" }));
+      throw new Error(err.message);
+    }
+
+    const payload = await response.json();
+    const session = userFromPayload(payload, token);
+    cachedSession = session;
+    cachedSessionToken = token;
+    cachedSessionAt = Date.now();
+    return session;
+  },
+
+  async changePassword(currentPassword, newPassword) {
+    const token = readStoredToken();
+    if (!token) throw new Error("Not authenticated");
+
+    const response = await fetch("/api/auth/password", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: "Failed to change password" }));
+      throw new Error(err.message);
+    }
   },
 };

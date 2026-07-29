@@ -58,6 +58,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
 	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
 	mux.HandleFunc("GET /api/auth/me", s.withAuth(s.handleAuthMe))
+	mux.HandleFunc("PATCH /api/auth/profile", s.withAuth(s.handleUpdateProfile))
+	mux.HandleFunc("POST /api/auth/password", s.withAuth(s.handleChangePassword))
+	mux.HandleFunc("GET /api/auth/avatar/{id}", s.handleGetAvatar)
 
 	// Invitation routes (some public, some admin)
 	mux.HandleFunc("POST /api/invitations/validate", s.handleInvitationValidate)

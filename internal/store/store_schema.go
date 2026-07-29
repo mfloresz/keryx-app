@@ -19,6 +19,7 @@ func (s *Store) ensureUsersCollection() (*core.Collection, error) {
 	c.Fields.Add(&core.TextField{Name: "name", Max: 120})
 	c.Fields.Add(&core.SelectField{Name: "role", Values: []string{RoleAdmin, RoleUser}, MaxSelect: 1})
 	c.Fields.Add(&core.TextField{Name: "theme", Max: 20})
+	c.Fields.Add(&core.FileField{Name: "avatar", MaxSelect: 1, MaxSize: 5 << 20})
 	if err := s.App.Save(c); err != nil {
 		return nil, err
 	}
@@ -33,6 +34,9 @@ func (s *Store) migrateUsersCollection(c *core.Collection) (*core.Collection, er
 		return nil, err
 	}
 	if err := s.ensureField(c, &core.TextField{Name: "theme", Max: 20}); err != nil {
+		return nil, err
+	}
+	if err := s.ensureField(c, &core.FileField{Name: "avatar", MaxSelect: 1, MaxSize: 5 << 20}); err != nil {
 		return nil, err
 	}
 	return c, nil

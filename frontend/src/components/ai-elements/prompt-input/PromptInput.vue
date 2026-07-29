@@ -130,13 +130,13 @@ function onSubmit(e: Event) {
       @change="onFileChange"
     >
     <form
-      :class="cn('w-full bg-white', props.class)"
+      :class="cn('w-full', props.class)"
       autocomplete="off"
       @submit="onSubmit"
       @dragover.prevent="handleDragOver"
       @drop.prevent.stop="handleDrop"
     >
-      <InputGroup class="overflow-hidden flex-wrap">
+      <InputGroup class="overflow-hidden flex-wrap bg-background">
         <slot />
       </InputGroup>
     </form>

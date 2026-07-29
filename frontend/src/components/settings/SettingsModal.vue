@@ -35,7 +35,9 @@ import {
   TooltipContent,
 } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
+import { Separator } from '@/components/ui/separator'
 import { useChatStore } from '@/stores/chat'
+import { useAuthStore } from '@/stores/auth'
 import { useTheme, type Theme } from '@/composables/useTheme'
 import { useLanguage } from '@/composables/useLanguage'
 import { useAppFont, type AppFont, type AppFontSize } from '@/composables/useAppFont'
@@ -44,7 +46,7 @@ import { useModels } from '@/composables/useModels'
 import { useToast } from '@/composables/useToast'
 import { secureGetItem, secureSetItem } from '@/utils/secureStorage'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Trash2, CircleHelp, Settings, Search, Shield } from 'lucide-vue-next'
+import { Trash2, CircleHelp, Settings, Search, Shield, User, Camera, KeyRound } from 'lucide-vue-next'
 import { ENABLE_LOCAL_KEYS } from '@/app/config'
 
 const props = defineProps<{
@@ -61,6 +63,7 @@ const { theme, setTheme } = useTheme()
 const { locale, setLocale } = useLanguage()
 const { appFont, appFontSize, setFont, setFontSize } = useAppFont()
 const { provider, providers, allowsLocalKeys } = useModels()
+const authStore = useAuthStore()
 const chatStore = useChatStore()
 const router = useRouter()
 const deletePopoverOpen = ref(false)
@@ -68,7 +71,7 @@ const isDeletingAll = ref(false)
 
 const searchSettings = useSearchSettings()
 const { toast } = useToast()
-const activeSection = ref<'general' | 'search' | 'privacy'>('general')
+const activeSection = ref<'general' | 'search' | 'privacy' | 'account'>('general')
 
 // Local refs for search settings
 const localEngine = ref(searchSettings.engine.value)
@@ -91,6 +94,20 @@ const showProviderSelector = computed(() => canManageLocalKeys.value && provider
 const showVercelKeyInput = computed(() => canManageLocalKeys.value && localProvider.value === 'vercel')
 const showOpenCodeKeyInput = computed(() => canManageLocalKeys.value && localProvider.value === 'opencode')
 
+// Account form
+const localName = ref('')
+const localAvatarFile = ref<File | null>(null)
+const localAvatarPreview = ref<string | null>(null)
+const avatarInputRef = ref<HTMLInputElement | null>(null)
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const isSavingProfile = ref(false)
+const isChangingPassword = ref(false)
+const passwordError = ref('')
+const passwordSuccess = ref('')
+const profileSuccess = ref('')
+
 // Load existing values on open
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
@@ -109,9 +126,106 @@ watch(() => props.open, (isOpen) => {
     localTimeRange.value = searchSettings.options.value.timeRange
     localExactMatch.value = searchSettings.options.value.exactMatch
     localChunksPerSource.value = searchSettings.options.value.chunksPerSource
+    localName.value = authStore.userName || ''
+    localAvatarFile.value = null
+    localAvatarPreview.value = null
+    currentPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+    passwordError.value = ''
+    passwordSuccess.value = ''
+    profileSuccess.value = ''
     activeSection.value = 'general'
   }
 })
+
+const userEmail = computed(() => authStore.session?.user?.email ?? '')
+
+async function handleSaveAccount() {
+  isSavingProfile.value = true
+  profileSuccess.value = ''
+  try {
+    const name = localName.value.trim()
+    if (name && name !== authStore.userName) {
+      await authStore.updateProfile({ name })
+    }
+    if (localAvatarFile.value) {
+      await authStore.updateProfile({ avatar: localAvatarFile.value })
+    }
+    profileSuccess.value = 'Profile saved successfully'
+    localAvatarFile.value = null
+    localAvatarPreview.value = null
+  }
+  catch (err: any) {
+    toast(err?.message || 'Failed to update profile')
+  }
+  finally {
+    isSavingProfile.value = false
+  }
+}
+
+async function handleRemoveAvatar() {
+  try {
+    await authStore.updateProfile({ removeAvatar: true })
+    localAvatarPreview.value = null
+    localAvatarFile.value = null
+    profileSuccess.value = 'Avatar removed'
+  }
+  catch (err: any) {
+    toast(err?.message || 'Failed to remove avatar')
+  }
+}
+
+function handleAvatarSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Image must be under 5MB')
+    return
+  }
+  localAvatarFile.value = file
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    localAvatarPreview.value = e.target?.result as string
+  }
+  reader.readAsDataURL(file)
+}
+
+async function handleChangePassword() {
+  passwordError.value = ''
+  passwordSuccess.value = ''
+
+  if (!currentPassword.value || !newPassword.value) {
+    passwordError.value = 'All fields are required'
+    return
+  }
+  if (newPassword.value.length < 8) {
+    passwordError.value = 'Password must be at least 8 characters'
+    return
+  }
+  if (newPassword.value !== confirmPassword.value) {
+    passwordError.value = 'Passwords do not match'
+    return
+  }
+
+  isChangingPassword.value = true
+  try {
+    await authStore.changePassword(currentPassword.value, newPassword.value)
+    passwordSuccess.value = 'Password changed successfully'
+    currentPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+  }
+  catch (err: any) {
+    passwordError.value = err?.message === 'Current password is incorrect'
+      ? 'Current password is incorrect'
+      : (err?.message || 'Failed to change password')
+  }
+  finally {
+    isChangingPassword.value = false
+  }
+}
 
 async function save() {
   provider.value = localProvider.value
@@ -162,6 +276,7 @@ async function handleDeleteAllChats() {
 
 const navItems = [
   { key: 'general' as const, label: 'settings.sections.general', icon: Settings },
+  { key: 'account' as const, label: 'settings.sections.account', icon: User },
   { key: 'search' as const, label: 'settings.sections.search', icon: Search },
   { key: 'privacy' as const, label: 'settings.sections.privacy', icon: Shield },
 ]
@@ -340,6 +455,159 @@ const navItems = [
                 <p class="text-xs text-muted-foreground">
                   {{ $t('settings.languageHint') }}
                 </p>
+              </div>
+            </div>
+
+            <!-- Account -->
+            <div v-if="activeSection === 'account'" class="space-y-6">
+              <!-- Profile photo -->
+              <div class="space-y-2">
+                <Label>{{ $t('settings.account.avatarLabel') }}</Label>
+                <div class="flex items-center gap-4">
+                  <div class="relative">
+                    <span class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-xl font-medium text-muted-foreground overflow-hidden">
+                      <template v-if="localAvatarPreview">
+                        <img :src="localAvatarPreview" alt="Preview" class="h-full w-full object-cover" />
+                      </template>
+                      <template v-else-if="authStore.avatarUrl">
+                        <img :src="authStore.avatarUrl" alt="Avatar" class="h-full w-full object-cover" />
+                      </template>
+                      <template v-else>
+                        {{ (localName || authStore.userName || userEmail || 'U').charAt(0).toUpperCase() }}
+                      </template>
+                    </span>
+                    <button
+                      type="button"
+                      class="absolute -bottom-1 -right-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
+                      @click="avatarInputRef?.click()"
+                    >
+                      <Camera class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <div class="flex flex-col gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="gap-2"
+                      @click="avatarInputRef?.click()"
+                    >
+                      <Camera class="h-3.5 w-3.5" />
+                      {{ $t('settings.account.changePhoto') }}
+                    </Button>
+                    <Button
+                      v-if="authStore.avatarUrl"
+                      variant="ghost"
+                      size="sm"
+                      class="text-destructive gap-2"
+                      @click="handleRemoveAvatar"
+                    >
+                      {{ $t('settings.account.removePhoto') }}
+                    </Button>
+                  </div>
+                </div>
+                <input
+                  ref="avatarInputRef"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  class="hidden"
+                  @change="handleAvatarSelected"
+                />
+              </div>
+
+              <!-- Name -->
+              <div class="space-y-2">
+                <Label for="account-name">{{ $t('settings.account.nameLabel') }}</Label>
+                <Input
+                  id="account-name"
+                  v-model="localName"
+                  type="text"
+                  :placeholder="$t('settings.account.namePlaceholder')"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ $t('settings.account.nameHint') }}
+                </p>
+              </div>
+
+              <!-- Email (read-only) -->
+              <div class="space-y-2">
+                <Label for="account-email">{{ $t('settings.account.emailLabel') }}</Label>
+                <Input
+                  id="account-email"
+                  :model-value="userEmail"
+                  type="email"
+                  disabled
+                  class="opacity-60"
+                />
+                <p class="text-xs text-muted-foreground">
+                  {{ $t('settings.account.emailHint') }}
+                </p>
+              </div>
+
+              <div v-if="profileSuccess" class="text-sm text-green-600 dark:text-green-400">
+                {{ profileSuccess }}
+              </div>
+
+              <Button
+                :disabled="isSavingProfile"
+                @click="handleSaveAccount"
+              >
+                {{ isSavingProfile ? $t('settings.account.saving') : $t('settings.account.saveProfile') }}
+              </Button>
+
+              <Separator class="my-4" />
+
+              <!-- Change password -->
+              <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                  <KeyRound class="h-4 w-4 text-muted-foreground" />
+                  <h3 class="text-sm font-medium">{{ $t('settings.account.changePassword') }}</h3>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="current-password">{{ $t('settings.account.currentPassword') }}</Label>
+                  <Input
+                    id="current-password"
+                    v-model="currentPassword"
+                    type="password"
+                    :placeholder="$t('settings.account.currentPasswordPlaceholder')"
+                  />
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="new-password">{{ $t('settings.account.newPassword') }}</Label>
+                  <Input
+                    id="new-password"
+                    v-model="newPassword"
+                    type="password"
+                    :placeholder="$t('settings.account.newPasswordPlaceholder')"
+                  />
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="confirm-password">{{ $t('settings.account.confirmNewPassword') }}</Label>
+                  <Input
+                    id="confirm-password"
+                    v-model="confirmPassword"
+                    type="password"
+                    :placeholder="$t('settings.account.confirmNewPasswordPlaceholder')"
+                  />
+                </div>
+
+                <div v-if="passwordError" class="text-sm text-destructive">
+                  {{ passwordError }}
+                </div>
+
+                <div v-if="passwordSuccess" class="text-sm text-green-600 dark:text-green-400">
+                  {{ passwordSuccess }}
+                </div>
+
+                <Button
+                  variant="secondary"
+                  :disabled="isChangingPassword"
+                  @click="handleChangePassword"
+                >
+                  {{ isChangingPassword ? $t('settings.account.changing') : $t('settings.account.updatePassword') }}
+                </Button>
               </div>
             </div>
 

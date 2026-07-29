@@ -23,10 +23,13 @@ const chatRepository = await getChatRepository()
 const isSubmitting = ref(false)
 
 const authStore = useAuthStore()
+const userName = computed(() => authStore.session?.user.name ?? '')
 const userDisplayName = computed(() => {
+  if (userName.value) return userName.value
   const email = authStore.session?.user.email ?? ''
   const local = email.split('@')[0] ?? ''
-  return local ? local.charAt(0).toUpperCase() + local.slice(1) : ''
+  if (!local) return ''
+  return local.charAt(0).toUpperCase() + local.slice(1)
 })
 
 async function handleSubmit({ text, files, webSearch }: { text: string; files: AttachmentFile[]; webSearch: boolean }) {
