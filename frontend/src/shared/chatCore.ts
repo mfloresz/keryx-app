@@ -1,4 +1,5 @@
 import type { ChatBranchState, ChatRecord } from "../domain/chat/types.js";
+import { randomUUID } from "./uuid.js";
 
 export function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
@@ -34,7 +35,7 @@ export function ensureBranchState(
   if (branchState) return branchState;
 
   const createdAt = new Date().toISOString();
-  const snapshotId = crypto.randomUUID();
+  const snapshotId = randomUUID();
   branchState = {
     rootMessageId,
     includeRoot,
@@ -70,7 +71,7 @@ export function openNewBranch(
   const createdAt = new Date().toISOString();
   const nextNumber = branchState.snapshots.length + 1;
   const nextSnapshot = {
-    id: crypto.randomUUID(),
+    id: randomUUID(),
     label: `${labelPrefix} ${nextNumber}`,
     createdAt,
     messages: [] as any[],
@@ -156,7 +157,7 @@ export function ensureMessageIdentifiers(messages: any[]): any[] {
 
     return {
       ...message,
-      id: crypto.randomUUID(),
+      id: randomUUID(),
     };
   });
 }

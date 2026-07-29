@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { randomUUID } from '../shared/uuid.js'
 
 export interface Toast {
   id: string
@@ -10,7 +11,7 @@ const toasts = ref<Toast[]>([])
 
 export function useToast() {
   function toast(message: string, type: Toast['type'] = 'error') {
-    const id = crypto.randomUUID()
+    const id = randomUUID()
     toasts.value.push({ id, message, type })
     setTimeout(() => {
       dismiss(id)

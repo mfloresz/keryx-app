@@ -30,7 +30,6 @@ func (s *Store) CreateInvitation(inv *InvitationRecord) error {
 		return err
 	}
 	record := core.NewRecord(collection)
-	record.Set("id", inv.ID)
 	record.Set("email", inv.Email)
 	record.Set("token_hash", inv.TokenHash)
 	record.Set("role", inv.Role)
@@ -39,7 +38,11 @@ func (s *Store) CreateInvitation(inv *InvitationRecord) error {
 	if len(inv.InitialModelAccess) > 0 {
 		record.Set("initial_model_access", inv.InitialModelAccess)
 	}
-	return s.App.Save(record)
+	if err := s.App.Save(record); err != nil {
+		return err
+	}
+	inv.ID = record.Id
+	return nil
 }
 
 func (s *Store) GetInvitationByTokenHash(tokenHash string) (*InvitationRecord, error) {
