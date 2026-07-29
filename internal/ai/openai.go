@@ -173,12 +173,9 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	return result, nil
 }
 
-func (p *OpenAIProvider) GenerateTitle(ctx context.Context, userMessage string, language string) (string, error) {
-	titlePrompt := fmt.Sprintf(`Summarize the conversation in a clear and concise title of no more than 10 words in "%s", without punctuation or special symbols. No markdown format. Return only the title.`, language)
-
-	fullPrompt := titlePrompt + "\n\nUser message: " + userMessage
-
+func (p *OpenAIProvider) GenerateTitle(ctx context.Context, systemPrompt string, userMessage string, language string) (string, error) {
 	return p.Chat(ctx, ChatRequest{
-		Messages: []ChatMessage{{Role: "user", Content: fullPrompt}},
+		System:   systemPrompt,
+		Messages: []ChatMessage{{Role: "user", Content: userMessage}},
 	})
 }

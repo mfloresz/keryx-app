@@ -471,7 +471,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	systemPrompt := req.System
 	if systemPrompt == "" {
-		systemPrompt = baseSystemPrompt
+		systemPrompt = s.Cfg.BaseSystemPrompt
 	}
 	if req.WebSearch {
 		systemPrompt += webSearchPrompt
@@ -580,7 +580,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			}
 
 			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			title, err := titleProvider.GenerateTitle(titleCtx, firstUserMsg, lang)
+			title, err := titleProvider.GenerateTitle(titleCtx, s.Cfg.TitleGenerationSystemPrompt, firstUserMsg, lang)
 			cancel()
 			if err == nil && title != "" {
 				chat.Title = title
@@ -715,8 +715,6 @@ func (s *Server) resolveAttachments(userID string, m ai.ChatMessage) (ai.ChatMes
 	}
 	return m, nil
 }
-
-const baseSystemPrompt = `Eres un asistente de IA útil, respetuoso y honesto. Respondes en el mismo idioma en que te hablan. Proporcionas respuestas claras, concisas y útiles.`
 
 // writeSSEEvent writes a single SSE data frame with a JSON payload of the
 // form {"type": <event>, ...extra}. Payload fields are marshaled with
