@@ -74,19 +74,35 @@ const stacked = computed(() => isMultiline.value || hasAttachments.value)
 
 let resizeObserver: ResizeObserver | undefined
 let mutationObserver: MutationObserver | undefined
+let removeTextareaInputListener: (() => void) | undefined
 
 onMounted(() => {
   const textarea = rootRef.value?.querySelector('textarea')
   if (textarea) {
-    resizeObserver = new ResizeObserver(() => {
-      const styles = getComputedStyle(textarea)
-      const paddingY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
-      const lineHeight = parseFloat(styles.lineHeight) || 20
-      const lines = Math.round((textarea.scrollHeight - paddingY) / lineHeight)
-      isMultiline.value = lines > 1
-    })
+    const updateMultiline = () => {
+      requestAnimationFrame(() => {
+        const styles = getComputedStyle(textarea)
+        const paddingY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
+        const lineHeight = parseFloat(styles.lineHeight) || 20
+        const lines = Math.round((textarea.scrollHeight - paddingY) / lineHeight)
+
+        // Keep the stacked layout once wrapping has started. Letting it switch
+        // back immediately would change the textarea width and recreate the
+        // wrapping condition, causing a layout feedback loop.
+        if (lines > 1)
+          isMultiline.value = true
+        else if (textarea.value === '')
+          isMultiline.value = false
+      })
+    }
+
+    textarea.addEventListener('input', updateMultiline)
+    removeTextareaInputListener = () => textarea.removeEventListener('input', updateMultiline)
+    resizeObserver = new ResizeObserver(updateMultiline)
     resizeObserver.observe(textarea)
+    updateMultiline()
   }
+
   if (attachmentsRef.value) {
     const target = attachmentsRef.value
     const check = () => {
@@ -100,6 +116,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  removeTextareaInputListener?.()
   mutationObserver?.disconnect()
 })
 
@@ -191,9 +208,9 @@ function handleStop() {
            full-width row when stacked -->
       <PromptInputTextarea
         :placeholder="$t('chat.inputPlaceholder')"
-        :class="[
-          'resize-none',
-          stacked ? 'order-1 w-full flex-none !pt-3 px-3' : 'order-2 !py-3 min-h-0 self-center'
+        class="resize-none"
+        :container-class="[
+          stacked ? 'order-1 w-full flex-none pt-3 px-3' : 'order-2 min-w-0 flex-1 min-h-0 self-center'
         ]"
       />
 
