@@ -37,6 +37,18 @@ jobs:
             goarm: 7
             suffix: linux-armv7
 
+          - os: ubuntu-latest
+            goos: android
+            goarch: arm64
+            suffix: android-arm64
+
+          - os: ubuntu-latest
+            goos: android
+            goarch: arm
+            goarm: 7
+            cgo: 1
+            suffix: android-armv7
+
     runs-on: ubuntu-latest
 
     steps:
@@ -59,6 +71,13 @@ jobs:
           npm install
           npm run build
 
+      - name: Setup Android NDK
+        if: matrix.goos == 'android' && matrix.goarch == 'arm'
+        id: ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26d
+
       - name: Determine version
         id: version
         run: |
@@ -75,7 +94,8 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           GOARM: ${{ matrix.goarm }}
-          CGO_ENABLED: 0
+          CGO_ENABLED: ${{ matrix.cgo || '0' }}
+          CC: ${{ (matrix.goos == 'android' && matrix.goarch == 'arm') && format('{0}/toolchains/llvm/prebuilt/linux-x86_64/bin/armv7a-linux-androideabi21-clang', steps.ndk.outputs.ndk-path) || '' }}
         run: |
           BIN="keryx-server-${{ matrix.suffix }}-${{ steps.version.outputs.value }}"
           go build \

@@ -193,7 +193,7 @@ function handleStop() {
         :placeholder="$t('chat.inputPlaceholder')"
         :class="[
           'resize-none',
-          stacked ? 'order-1 w-full flex-none !pt-3 px-3' : 'order-2 !py-0 self-center min-h-0'
+          stacked ? 'order-1 w-full flex-none !pt-3 px-3' : 'order-2 !py-3 min-h-0 self-center'
         ]"
       />
 

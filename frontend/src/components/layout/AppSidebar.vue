@@ -225,7 +225,7 @@ function onKeyDown(e: KeyboardEvent) {
       <div class="flex items-center gap-2 p-3">
         <template v-if="!collapsed">
           <RouterLink to="/" class="flex items-center gap-2 flex-1">
-            <img src="/logo.svg" alt="Keryx" class="h-8 w-8 object-contain" />
+            <img src="/logo.webp" alt="Keryx" class="h-8 w-8 object-contain" />
             <span class="font-bold text-sidebar-foreground">{{ $t('app.name') }}</span>
           </RouterLink>
 

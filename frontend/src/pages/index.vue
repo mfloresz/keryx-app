@@ -80,8 +80,8 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
   <div class="flex flex-col h-full overflow-hidden">
     <div class="flex-1 flex flex-col items-center justify-center px-4">
       <div class="w-full max-w-3xl min-w-0">
-        <div class="mb-6">
-          <img src="/logo.svg" alt="" class="h-12 w-12 object-contain" />
+        <div class="mb-6 px-4">
+          <img src="/logo.webṕ" alt="" class="h-12 w-12 object-contain" />
           <h1 class="mt-4 text-3xl font-semibold tracking-tight">
             {{ userDisplayName ? $t('chat.greeting', { name: userDisplayName }) : $t('chat.welcomeTitle') }}
           </h1>
