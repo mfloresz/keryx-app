@@ -36,6 +36,9 @@
     "last7Days": "Last 7 Days",
     "last30Days": "Last 30 Days",
     "settings": "Settings",
+    "user": "User",
+    "userMenu": "User menu",
+    "logout": "Log out",
     "rename": "Rename",
     "delete": "Delete"
   },
@@ -145,6 +148,7 @@
   },
   "chat": {
     "welcomeTitle": "Hello, I'm Keryx. How can I help you?",
+    "greeting": "Hello, {name}",
     "welcomeSubtitle": "Start a conversation and I'll assist you with information, analysis, coding, creative writing, and more.",
     "loadingChat": "Loading chat...",
     "notFoundTitle": "Chat not found",

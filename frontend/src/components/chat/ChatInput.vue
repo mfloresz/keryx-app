@@ -14,13 +14,9 @@ import {
   PromptInputActionMenu,
   PromptInputActionMenuContent,
   PromptInputActionMenuTrigger,
-  PromptInputBody,
   PromptInputButton,
-  PromptInputFooter,
-  PromptInputHeader,
   PromptInputSubmit,
   PromptInputTextarea,
-  PromptInputTools,
 } from '@/components/ai-elements/prompt-input'
 import {
   ModelSelector,
@@ -47,7 +43,7 @@ import {
 import { useModels } from '@/composables/useModels'
 import { useSearchSettings } from '@/composables/useSearchSettings'
 import { GlobeIcon } from 'lucide-vue-next'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 
 const DOCUMENT_ACCEPT = '.pdf,.txt,.md,.doc,.docx,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.cpp,.go,.rs'
@@ -67,6 +63,45 @@ const emit = defineEmits<{
 const selectorOpen = ref(false)
 const useWebSearch = ref(props.webSearch ?? false)
 const unsupportedImageDialogOpen = ref(false)
+
+// Layout switching: single-line keeps buttons/textarea on one row;
+// multiline (or attachments present) stacks textarea over a toolbar row.
+const rootRef = ref<HTMLElement | null>(null)
+const attachmentsRef = ref<HTMLElement | null>(null)
+const isMultiline = ref(false)
+const hasAttachments = ref(false)
+const stacked = computed(() => isMultiline.value || hasAttachments.value)
+
+let resizeObserver: ResizeObserver | undefined
+let mutationObserver: MutationObserver | undefined
+
+onMounted(() => {
+  const textarea = rootRef.value?.querySelector('textarea')
+  if (textarea) {
+    resizeObserver = new ResizeObserver(() => {
+      const styles = getComputedStyle(textarea)
+      const paddingY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
+      const lineHeight = parseFloat(styles.lineHeight) || 20
+      const lines = Math.round((textarea.scrollHeight - paddingY) / lineHeight)
+      isMultiline.value = lines > 1
+    })
+    resizeObserver.observe(textarea)
+  }
+  if (attachmentsRef.value) {
+    const target = attachmentsRef.value
+    const check = () => {
+      hasAttachments.value = target.childElementCount > 0
+    }
+    mutationObserver = new MutationObserver(check)
+    mutationObserver.observe(target, { childList: true, subtree: true })
+    check()
+  }
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+  mutationObserver?.disconnect()
+})
 
 watch(() => props.webSearch, (value) => {
   if (value !== undefined) {
@@ -133,7 +168,7 @@ function handleStop() {
 </script>
 
 <template>
-  <div class="bg-background px-4 pb-4 pt-0">
+  <div ref="rootRef" class="bg-background px-4 pb-4 pt-0">
     <PromptInput
       class="max-w-3xl mx-auto"
       multiple
@@ -143,38 +178,52 @@ function handleStop() {
       @submit="handleSubmit"
       @error="handleAttachmentError"
     >
-      <PromptInputHeader class="pb-1">
+      <!-- Attachments row (wrapper stays empty when no files) -->
+      <div
+        ref="attachmentsRef"
+        class="order-first w-full"
+        :class="stacked && 'px-3 pt-3'"
+      >
         <PromptInputAttachmentsDisplay />
-      </PromptInputHeader>
+      </div>
 
-      <PromptInputBody>
-        <PromptInputTextarea
-          :placeholder="$t('chat.inputPlaceholder')"
-          class="min-h-[80px] resize-none !pt-1"
-        />
-      </PromptInputBody>
+      <!-- Textarea: inline with the toolbar on a single line,
+           full-width row when stacked -->
+      <PromptInputTextarea
+        :placeholder="$t('chat.inputPlaceholder')"
+        :class="[
+          'resize-none',
+          stacked ? 'order-1 w-full flex-none !pt-3 px-3' : 'order-2 !py-0 self-center min-h-0'
+        ]"
+      />
 
-      <PromptInputFooter class="flex items-center justify-between pt-2">
-        <PromptInputTools class="flex items-center gap-2">
-          <PromptInputActionMenu>
-            <PromptInputActionMenuTrigger />
-            <PromptInputActionMenuContent>
-              <PromptInputActionAddAttachments />
-            </PromptInputActionMenuContent>
-          </PromptInputActionMenu>
+      <!-- Left tools -->
+      <div
+        class="flex items-center gap-2 ms-2"
+        :class="[stacked ? 'order-2 my-1.5' : 'order-1']"
+      >
+        <PromptInputActionMenu>
+          <PromptInputActionMenuTrigger />
+          <PromptInputActionMenuContent>
+            <PromptInputActionAddAttachments />
+          </PromptInputActionMenuContent>
+        </PromptInputActionMenu>
 
-          <PromptInputButton
-            v-if="modelSupportsSearch"
-            :variant="useWebSearch ? 'default' : 'ghost'"
-            @click="useWebSearch = !useWebSearch"
-          >
-            <GlobeIcon :size="16" />
-            <span>{{ $t('chat.search') }}</span>
-          </PromptInputButton>
+        <PromptInputButton
+          v-if="modelSupportsSearch"
+          :variant="useWebSearch ? 'default' : 'ghost'"
+          @click="useWebSearch = !useWebSearch"
+        >
+          <GlobeIcon :size="16" />
+          <span>{{ $t('chat.search') }}</span>
+        </PromptInputButton>
+      </div>
 
-        </PromptInputTools>
-
-        <div class="flex items-center gap-2">
+      <!-- Right tools -->
+      <div
+        class="ms-auto flex items-center gap-2 me-2"
+        :class="[stacked ? 'order-3 my-1.5' : 'order-3']"
+      >
           <ModelSelector v-model:open="selectorOpen">
             <ModelSelectorTrigger as-child>
               <button
@@ -216,8 +265,7 @@ function handleStop() {
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
           </button>
-        </div>
-      </PromptInputFooter>
+      </div>
     </PromptInput>
 
     <AlertDialog v-model:open="unsupportedImageDialogOpen">

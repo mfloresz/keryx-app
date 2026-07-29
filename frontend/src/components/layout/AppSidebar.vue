@@ -30,6 +30,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
@@ -69,7 +71,11 @@ import {
   LogOut,
   Shield,
   Star,
+  Sun,
+  Moon,
+  Monitor,
 } from 'lucide-vue-next'
+import { useTheme, type Theme } from '@/composables/useTheme'
 
 const router = useRouter()
 const route = useRoute()
@@ -110,6 +116,24 @@ const recentChats = computed(() => {
 })
 
 const isAdmin = computed(() => authStore.session?.user.role === 'admin')
+
+// User menu: theme selector and profile actions
+const { theme, setTheme } = useTheme()
+const userMenuOpen = ref(false)
+
+const themeOptions: { value: Theme; icon: typeof Sun; labelKey: string }[] = [
+  { value: 'light', icon: Sun, labelKey: 'settings.themeLight' },
+  { value: 'dark', icon: Moon, labelKey: 'settings.themeDark' },
+  { value: 'system', icon: Monitor, labelKey: 'settings.themeSystem' },
+]
+
+const userEmail = computed(() => authStore.session?.user.email ?? '')
+const userDisplayName = computed(() => {
+  const local = userEmail.value.split('@')[0] ?? ''
+  if (!local) return t('sidebar.user')
+  return local.charAt(0).toUpperCase() + local.slice(1)
+})
+const userInitial = computed(() => userDisplayName.value.charAt(0).toUpperCase())
 
 function renameChat(id: string, currentLabel: string) {
   chatToRenameId.value = id
@@ -439,89 +463,79 @@ function onKeyDown(e: KeyboardEvent) {
 
       <Separator />
 
-      <!-- Footer -->
-      <div class="p-3 space-y-1">
-        <template v-if="ENABLE_AUTH && isAdmin">
-          <Tooltip v-if="collapsed">
-            <TooltipTrigger as-child>
-              <Button
-                variant="ghost"
-                class="w-full justify-center"
-                size="sm"
-                @click="router.push('/admin')"
-              >
-                <Shield class="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>Admin</p>
-            </TooltipContent>
-          </Tooltip>
-          <Button
-            v-else
-            variant="ghost"
-            class="w-full justify-start gap-2"
-            size="sm"
-            @click="router.push('/admin')"
-          >
-            <Shield class="h-4 w-4" />
-            Admin
-          </Button>
-        </template>
-
-        <Tooltip v-if="collapsed">
-          <TooltipTrigger as-child>
-            <Button
-              variant="ghost"
-              class="w-full justify-center"
-              size="sm"
-              @click="settingsOpen = true"
+      <!-- Footer: user card with account menu -->
+      <div class="p-3">
+        <DropdownMenu v-model:open="userMenuOpen">
+          <DropdownMenuTrigger as-child>
+            <button
+              :class="[
+                'group flex w-full items-center gap-2.5 rounded-md text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+                collapsed ? 'justify-center p-1.5' : 'p-2'
+              ]"
+              :aria-label="$t('sidebar.userMenu')"
             >
-              <Settings class="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            <p>{{ $t('sidebar.settings') }}</p>
-          </TooltipContent>
-        </Tooltip>
-        <Button
-          v-else
-          variant="ghost"
-          class="w-full justify-start gap-2"
-          size="sm"
-          @click="settingsOpen = true"
-        >
-          <Settings class="h-4 w-4" />
-          {{ $t('sidebar.settings') }}
-        </Button>
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium text-muted-foreground">
+                {{ userInitial }}
+              </span>
+              <span v-if="!collapsed" class="min-w-0 flex-1 leading-tight">
+                <span class="block truncate text-sm font-medium">{{ userDisplayName }}</span>
+                <span class="block truncate text-xs text-muted-foreground">{{ userEmail }}</span>
+              </span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent :side="collapsed ? 'right' : 'top'" align="start" class="w-64">
+            <!-- User header -->
+            <DropdownMenuLabel class="flex items-center gap-2.5 font-normal">
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium text-muted-foreground">
+                {{ userInitial }}
+              </span>
+              <span class="min-w-0 leading-tight">
+                <span class="block truncate text-sm font-medium">{{ userDisplayName }}</span>
+                <span class="block truncate text-xs text-muted-foreground">{{ userEmail }}</span>
+              </span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
 
-        <template v-if="ENABLE_AUTH">
-          <Tooltip v-if="collapsed">
-            <TooltipTrigger as-child>
-              <Button
-                variant="ghost"
-                class="w-full justify-center"
-                size="sm"
-                @click="handleLogout"
+            <DropdownMenuItem @click="settingsOpen = true">
+              <Settings class="mr-2 h-4 w-4" />
+              {{ $t('sidebar.settings') }}
+            </DropdownMenuItem>
+            <DropdownMenuItem v-if="ENABLE_AUTH && isAdmin" @click="router.push('/admin')">
+              <Shield class="mr-2 h-4 w-4" />
+              Admin
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-if="ENABLE_AUTH"
+              class="text-destructive focus:text-destructive"
+              @click="handleLogout"
+            >
+              <LogOut class="mr-2 h-4 w-4" />
+              {{ $t('sidebar.logout') }}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+
+            <!-- Theme selector -->
+            <div class="flex items-center justify-center gap-1 p-1.5">
+              <button
+                v-for="option in themeOptions"
+                :key="option.value"
+                type="button"
+                :title="$t(option.labelKey)"
+                :aria-label="$t(option.labelKey)"
+                :aria-pressed="theme === option.value"
+                :class="[
+                  'flex h-8 w-10 items-center justify-center rounded-md transition-colors',
+                  theme === option.value
+                    ? 'bg-muted text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                ]"
+                @click.stop="setTheme(option.value)"
               >
-                <LogOut class="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">
-              <p>Logout</p>
-            </TooltipContent>
-          </Tooltip>
-          <Button
-            v-else
-            variant="ghost"
-            class="w-full justify-start gap-2"
-            size="sm"
-            @click="handleLogout"
-          >
-            <LogOut class="h-4 w-4" />
-            Logout
-          </Button>
-        </template>
+                <component :is="option.icon" class="h-4 w-4" />
+              </button>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
 

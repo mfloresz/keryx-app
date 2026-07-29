@@ -2,7 +2,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
+import { useAuthStore } from '@/stores/auth'
 import { useModels } from '@/composables/useModels'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
@@ -19,6 +21,13 @@ const { toast } = useToast()
 const chatRepository = await getChatRepository()
 
 const isSubmitting = ref(false)
+
+const authStore = useAuthStore()
+const userDisplayName = computed(() => {
+  const email = authStore.session?.user.email ?? ''
+  const local = email.split('@')[0] ?? ''
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : ''
+})
 
 async function handleSubmit({ text, files, webSearch }: { text: string; files: AttachmentFile[]; webSearch: boolean }) {
   if (isSubmitting.value) return
@@ -70,17 +79,21 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
 <template>
   <div class="flex flex-col h-full overflow-hidden">
     <div class="flex-1 flex flex-col items-center justify-center px-4">
-      <div class="text-center space-y-4 max-w-lg min-w-0 overflow-hidden break-words">
-        <h1 class="text-3xl font-bold tracking-tight">{{ $t('chat.welcomeTitle') }}</h1>
-        <p class="text-muted-foreground">{{ $t('chat.welcomeSubtitle') }}</p>
+      <div class="w-full max-w-3xl min-w-0">
+        <div class="mb-6">
+          <img src="/logo.svg" alt="" class="h-12 w-12 object-contain" />
+          <h1 class="mt-4 text-3xl font-semibold tracking-tight">
+            {{ userDisplayName ? $t('chat.greeting', { name: userDisplayName }) : $t('chat.welcomeTitle') }}
+          </h1>
+        </div>
+
+        <ChatInput
+          :status="isSubmitting ? 'submitted' : 'ready'"
+          :model="model"
+          @submit="handleSubmit"
+          @update:model="model = $event"
+        />
       </div>
     </div>
-
-    <ChatInput
-      :status="isSubmitting ? 'submitted' : 'ready'"
-      :model="model"
-      @submit="handleSubmit"
-      @update:model="model = $event"
-    />
   </div>
 </template>
