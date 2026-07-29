@@ -90,6 +90,21 @@ var knownProviders = []ProviderInfo{
 		},
 	},
 	{
+		ID:           "chutes",
+		Name:         "Chutes",
+		BaseURL:      "https://llm.chutes.ai/v1",
+		OpenAICompat: true,
+		DefaultModel: "google/gemma-4-31B-turbo-TEE",
+		GoAIOptions: map[string]any{
+			"useResponsesAPI":  false,
+		},
+		Models: []ModelInfo{
+			{ID: "chutes/gemma-4-31B-turbo-TEE", UpstreamID: "google/gemma-4-31B-turbo-TEE", Provider: "chutes", DisplayName: "Google Gemma 4 31B Turbo TEE", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "chutes/nemotron-3-nano-omni-30B-TEE", UpstreamID: "Nemotron-3-Nano-Omni-30B-TEE", Provider: "chutes", DisplayName: "Nemotron 3 Nano Omni 30B TEE", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "chutes/mistral-nemo-instruct-2407-TEE", UpstreamID: "unsloth/Mistral-Nemo-Instruct-2407-TEE", Provider: "chutes", DisplayName: "Mistral Nemo Instruct 2407 TEE", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+		},
+	},
+	{
 		ID:           "google",
 		Name:         "Google Gemma",
 		BaseURL:      "https://generativelanguage.googleapis.com",

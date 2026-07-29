@@ -22,6 +22,8 @@ type Config struct {
 	OpenCodeGoAPIKey string
 	// Google API Key (env fallback)
 	GoogleAPIKey string
+	// Chutes API Key (env fallback)
+	ChutesAPIKey string
 	// App base URL (for invitation links)
 	AppBaseURL string
 
@@ -94,6 +96,7 @@ func Load() (*Config, error) {
 	cfg.VeniceAPIKey = strings.TrimSpace(os.Getenv("VENICE_API_KEY"))
 	cfg.OpenCodeGoAPIKey = strings.TrimSpace(os.Getenv("OPENCODEGO_API_KEY"))
 	cfg.GoogleAPIKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
+	cfg.ChutesAPIKey = strings.TrimSpace(os.Getenv("CHUTES_API_KEY"))
 	cfg.AppBaseURL = strings.TrimSpace(os.Getenv("APP_BASE_URL"))
 
 	return cfg, nil

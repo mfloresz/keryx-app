@@ -237,6 +237,11 @@ func (s *Server) apiKeyForProvider(providerID string) (string, error) {
 			return "", fmt.Errorf("Google API key not configured (set GOOGLE_API_KEY or configure via admin UI)")
 		}
 		return s.Cfg.GoogleAPIKey, nil
+	case "chutes":
+		if s.Cfg.ChutesAPIKey == "" {
+			return "", fmt.Errorf("Chutes API key not configured (set CHUTES_API_KEY or configure via admin UI)")
+		}
+		return s.Cfg.ChutesAPIKey, nil
 	case "lmstudio":
 		return "", nil // local, no API key needed
 	default:
