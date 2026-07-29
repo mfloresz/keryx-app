@@ -19,7 +19,8 @@ type Provider interface {
 	// Returns the full combined text and reasoning.
 	ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (ChatStreamResult, error)
 	// GenerateTitle generates a concise title for a chat based on a user message and language.
-	GenerateTitle(ctx context.Context, userMessage string, language string) (string, error)
+	// The systemPrompt provides the instructions for title generation.
+	GenerateTitle(ctx context.Context, systemPrompt string, userMessage string, language string) (string, error)
 }
 
 // StreamChunkKind identifies the kind of a streamed chunk.

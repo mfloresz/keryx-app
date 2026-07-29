@@ -34,6 +34,17 @@ type Config struct {
 
 	// Encryptor is initialised after Load() by InitEncryptor.
 	Encryptor *secure.Encryptor
+
+	// BaseSystemPrompt is the system prompt used for chat conversations.
+	// Defaults to the prompt from prompts.ts.
+	// Override via BASE_SYSTEM_PROMPT env var or BASE_SYSTEM_PROMPT_PATH file.
+	BaseSystemPrompt string
+
+	// TitleGenerationSystemPrompt is the system prompt used for generating
+	// chat titles. Defaults to the prompt from prompts.ts.
+	// Override via TITLE_GENERATION_SYSTEM_PROMPT env var
+	// or TITLE_GENERATION_SYSTEM_PROMPT_PATH file.
+	TitleGenerationSystemPrompt string
 }
 
 func Load() (*Config, error) {
@@ -99,7 +110,26 @@ func Load() (*Config, error) {
 	cfg.ChutesAPIKey = strings.TrimSpace(os.Getenv("CHUTES_API_KEY"))
 	cfg.AppBaseURL = strings.TrimSpace(os.Getenv("APP_BASE_URL"))
 
+	// System prompts — env var > file path > default
+	cfg.BaseSystemPrompt = loadPrompt("BASE_SYSTEM_PROMPT", defaultBaseSystemPrompt)
+	cfg.TitleGenerationSystemPrompt = loadPrompt("TITLE_GENERATION_SYSTEM_PROMPT", defaultTitleGenerationSystemPrompt)
+
 	return cfg, nil
+}
+
+// loadPrompt loads a prompt from an environment variable or file.
+// Priority: env var > file path env var > default.
+func loadPrompt(envName, defaultPrompt string) string {
+	if v := strings.TrimSpace(os.Getenv(envName)); v != "" {
+		return v
+	}
+	if path := strings.TrimSpace(os.Getenv(envName + "_PATH")); path != "" {
+		data, err := os.ReadFile(path)
+		if err == nil && len(data) > 0 {
+			return string(data)
+		}
+	}
+	return defaultPrompt
 }
 
 // InitEncryptor creates the Encryptor from the configured env key or app.key file.
