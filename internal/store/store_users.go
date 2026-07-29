@@ -140,7 +140,7 @@ func (s *Store) GetUserAvatarData(userID string) ([]byte, string, error) {
 		return nil, "", err
 	}
 	defer fsys.Close()
-	reader, err := fsys.GetFile(record.BaseFilesPath() + "/" + avatar)
+	reader, err := fsys.GetReader(record.BaseFilesPath() + "/" + avatar)
 	if err != nil {
 		return nil, "", err
 	}
