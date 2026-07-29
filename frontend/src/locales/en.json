@@ -328,9 +328,21 @@
       "saveError": "Unable to save API key",
       "deleteSuccess": "API key deleted successfully",
       "deleteError": "Unable to delete API key",
-      "updatedAt": "Updated"
-    }
-  },
+  	    "updatedAt": "Updated"
+	    },
+	    "titleGeneration": {
+	      "title": "Title Generation",
+	      "description": "Choose which model generates chat titles. A lightweight model avoids rate limits on your main chat model.",
+	      "modeChatModel": "Use the same model as the chat",
+	      "modeCustom": "Use a dedicated lightweight model",
+	      "modelLabel": "Model",
+	      "modelPlaceholder": "Select a model…",
+	      "saveButton": "Save",
+	      "saving": "Saving…",
+	      "saveSuccess": "Title generation policy saved",
+	      "saveError": "Unable to save title generation policy"
+	    }
+	  },
   "auth": {
     "login": {
       "welcome": "Welcome back",

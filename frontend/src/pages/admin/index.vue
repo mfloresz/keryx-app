@@ -65,6 +65,17 @@ interface ProviderKeyEntry {
   updatedAt: string | null;
 }
 
+interface CatalogModel {
+  id: string;
+  provider: string;
+  displayName: string;
+}
+
+interface TitleGenerationPolicy {
+  mode: "chat_model" | "custom";
+  modelId: string;
+}
+
 const { t } = useI18n();
 const { toast } = useToast();
 const auth = await getAuthAdapter();
@@ -95,6 +106,12 @@ const editingProviderKey = ref<ProviderKeyEntry | null>(null);
 const providerKeyValue = ref("");
 const isSavingProviderKey = ref(false);
 const isDeletingProviderKey = ref(false);
+
+// Title generation policy state
+const catalog = ref<CatalogModel[]>([]);
+const titleGenPolicy = ref<TitleGenerationPolicy>({ mode: "chat_model", modelId: "" });
+const originalTitleGenPolicy = ref<TitleGenerationPolicy>({ mode: "chat_model", modelId: "" });
+const isSavingTitleGen = ref(false);
 
 const adminCount = computed(
   () => users.value.filter((user) => user.role === "admin").length,
@@ -127,24 +144,33 @@ async function loadData(): Promise<void> {
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
-    const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse] = await Promise.all([
-      apiFetch("/api/admin/users", { signal: controller.signal }),
-      apiFetch("/api/admin/invitations", { signal: controller.signal }),
-      apiFetch("/api/admin/models", { signal: controller.signal }),
-      apiFetch("/api/admin/provider-keys", { signal: controller.signal }),
-    ]);
+	    const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse, titleGenResponse] = await Promise.all([
+	      apiFetch("/api/admin/users", { signal: controller.signal }),
+	      apiFetch("/api/admin/invitations", { signal: controller.signal }),
+	      apiFetch("/api/admin/models", { signal: controller.signal }),
+	      apiFetch("/api/admin/provider-keys", { signal: controller.signal }),
+	      apiFetch("/api/admin/title-generation-policy", { signal: controller.signal }),
+	    ]);
 
-    await assertOk(usersResponse, t("admin.shared.loadError"));
-    await assertOk(invitationsResponse, t("admin.shared.loadError"));
-    await assertOk(modelsResponse, t("admin.shared.loadError"));
-    await assertOk(providerKeysResponse, t("admin.shared.loadError"));
+	    await assertOk(usersResponse, t("admin.shared.loadError"));
+	    await assertOk(invitationsResponse, t("admin.shared.loadError"));
+	    await assertOk(modelsResponse, t("admin.shared.loadError"));
+	    await assertOk(providerKeysResponse, t("admin.shared.loadError"));
+	    await assertOk(titleGenResponse, t("admin.shared.loadError"));
 
-    users.value = (await readPayload<AdminUser[]>(usersResponse)) ?? [];
-    invitations.value =
-      (await readPayload<AdminInvitation[]>(invitationsResponse)) ?? [];
-    models.value = (await readPayload<AdminModel[]>(modelsResponse)) ?? [];
-    providerKeys.value =
-      (await readPayload<ProviderKeyEntry[]>(providerKeysResponse)) ?? [];
+	    users.value = (await readPayload<AdminUser[]>(usersResponse)) ?? [];
+	    invitations.value =
+	      (await readPayload<AdminInvitation[]>(invitationsResponse)) ?? [];
+	    models.value = (await readPayload<AdminModel[]>(modelsResponse)) ?? [];
+	    providerKeys.value =
+	      (await readPayload<ProviderKeyEntry[]>(providerKeysResponse)) ?? [];
+
+	    const titleGenData = await readPayload<{ policy: TitleGenerationPolicy; catalog: CatalogModel[] }>(titleGenResponse);
+	    if (titleGenData) {
+	      titleGenPolicy.value = { ...titleGenData.policy };
+	      originalTitleGenPolicy.value = { ...titleGenData.policy };
+	      catalog.value = titleGenData.catalog ?? [];
+	    }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       toast(t("admin.shared.loadError"));
@@ -224,6 +250,39 @@ async function handleDeleteProviderKey(entry: ProviderKeyEntry): Promise<void> {
     toast(error instanceof Error ? error.message : t("admin.providerKeys.deleteError"));
   } finally {
     isDeletingProviderKey.value = false;
+  }
+}
+
+	// ---- Title generation policy handlers ----
+
+const titleGenHasChanges = computed(() => {
+  return titleGenPolicy.value.mode !== originalTitleGenPolicy.value.mode ||
+    (titleGenPolicy.value.mode === "custom" && titleGenPolicy.value.modelId !== originalTitleGenPolicy.value.modelId);
+});
+
+function handleTitleGenModelChange(value: any) {
+  titleGenPolicy.value.modelId = typeof value === "string" ? value : "";
+}
+
+async function handleSaveTitleGenPolicy(): Promise<void> {
+  if (isSavingTitleGen.value) return;
+
+  isSavingTitleGen.value = true;
+  try {
+    const response = await apiFetch("/api/admin/title-generation-policy", {
+      method: "PUT",
+      body: JSON.stringify({
+        mode: titleGenPolicy.value.mode,
+        modelId: titleGenPolicy.value.modelId,
+      }),
+    });
+    await assertOk(response, t("admin.titleGeneration.saveError"));
+    originalTitleGenPolicy.value = { ...titleGenPolicy.value };
+    toast(t("admin.titleGeneration.saveSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.titleGeneration.saveError"));
+  } finally {
+    isSavingTitleGen.value = false;
   }
 }
 
@@ -592,11 +651,80 @@ onMounted(() => {
         </CardContent>
       </Card>
 
-      <Separator />
+	      <Separator />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{{ t('admin.models.title') }}</CardTitle>
+	      <!-- Title Generation Policy -->
+	      <Card>
+	        <CardHeader>
+	          <CardTitle>{{ t('admin.titleGeneration.title') }}</CardTitle>
+	          <p class="text-sm text-muted-foreground">
+	            {{ t('admin.titleGeneration.description') }}
+	          </p>
+	        </CardHeader>
+	        <CardContent class="space-y-4">
+	          <div class="space-y-3">
+	            <label class="flex items-center gap-3 text-sm">
+	              <input
+	                type="radio"
+	                name="titleGenMode"
+	                value="chat_model"
+	                class="size-4 accent-primary"
+	                :checked="titleGenPolicy.mode === 'chat_model'"
+	                @change="titleGenPolicy.mode = 'chat_model'"
+	              />
+	              <span>{{ t('admin.titleGeneration.modeChatModel') }}</span>
+	            </label>
+	            <label class="flex items-center gap-3 text-sm">
+	              <input
+	                type="radio"
+	                name="titleGenMode"
+	                value="custom"
+	                class="size-4 accent-primary"
+	                :checked="titleGenPolicy.mode === 'custom'"
+	                @change="titleGenPolicy.mode = 'custom'"
+	              />
+	              <span>{{ t('admin.titleGeneration.modeCustom') }}</span>
+	            </label>
+	          </div>
+
+	          <div v-if="titleGenPolicy.mode === 'custom'" class="space-y-2">
+	            <Label for="titleGenModel">{{ t('admin.titleGeneration.modelLabel') }}</Label>
+	            <Select
+	              :model-value="titleGenPolicy.modelId"
+	@update:model-value="($event) => handleTitleGenModelChange($event)"
+	            >
+	              <SelectTrigger id="titleGenModel" class="w-full">
+	                <SelectValue :placeholder="t('admin.titleGeneration.modelPlaceholder')" />
+	              </SelectTrigger>
+	              <SelectContent>
+	                <SelectItem
+	                  v-for="model in catalog"
+	                  :key="model.id"
+	                  :value="model.id"
+	                >
+	                  {{ model.displayName }}
+	                  <span class="text-muted-foreground">&middot; {{ model.provider }}</span>
+	                </SelectItem>
+	              </SelectContent>
+	            </Select>
+	          </div>
+
+	          <div class="flex justify-end">
+	            <Button
+	              :disabled="isSavingTitleGen || !titleGenHasChanges"
+	              @click="handleSaveTitleGenPolicy"
+	            >
+	              {{ isSavingTitleGen ? t('admin.titleGeneration.saving') : t('admin.titleGeneration.saveButton') }}
+	            </Button>
+	          </div>
+	        </CardContent>
+	      </Card>
+
+	      <Separator />
+
+	      <Card>
+	        <CardHeader>
+	          <CardTitle>{{ t('admin.models.title') }}</CardTitle>
           <p class="text-sm text-muted-foreground">
             {{ t('admin.models.description') }}
           </p>

@@ -47,6 +47,9 @@ func (s *Store) EnsureSchema() error {
 	if err := s.ensureProviderKeysCollection(); err != nil {
 		return fmt.Errorf("ensure provider keys: %w", err)
 	}
+	if err := s.ensureTitleGenerationPolicyCollection(); err != nil {
+		return fmt.Errorf("ensure title generation policy: %w", err)
+	}
 	if err := s.seedInitialAdmin(); err != nil {
 		return fmt.Errorf("seed initial admin: %w", err)
 	}

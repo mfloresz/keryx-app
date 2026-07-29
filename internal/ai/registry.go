@@ -57,6 +57,7 @@ var knownProviders = []ProviderInfo{
 			{ID: "venice/google-gemma-4-26b-a4b-it:disable_thinking=true", UpstreamID: "google-gemma-4-26b-a4b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 26B A4B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/xiaomi-mimo-v2-5", UpstreamID: "xiaomi-mimo-v2-5", Provider: "venice", DisplayName: "Xiaomi Mimo V2.5", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/mistral-small-2603", UpstreamID: "mistral-small-2603", Provider: "venice", DisplayName: "Mistral Small 2603", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/openai-gpt-oss-120b", UpstreamID: "openai-gpt-oss-120b", Provider: "venice", DisplayName: "OpenAI GPT OSS 120B", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{

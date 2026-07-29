@@ -299,3 +299,51 @@ func sha256Hex(input string) string {
 	h := sha256.Sum256([]byte(input))
 	return fmt.Sprintf("%x", h)
 }
+
+// ---- Title generation policy admin handlers ----
+
+func (s *Server) handleAdminGetTitleGenerationPolicy(w http.ResponseWriter, r *http.Request) {
+	policy, err := s.Store.GetTitleGenerationPolicy()
+	if err != nil {
+		errorResponse(w, "Failed to load title generation policy", http.StatusInternalServerError)
+		return
+	}
+	// Include the model catalog so the admin UI can populate the model selector.
+	catalog := store.GetCatalogModels()
+	jsonResponse(w, map[string]any{
+		"policy":  policy,
+		"catalog": catalog,
+	}, http.StatusOK)
+}
+
+func (s *Server) handleAdminSetTitleGenerationPolicy(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Mode    string `json:"mode"`
+		ModelID string `json:"modelId"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.Mode != string(store.TitleModeChatModel) && req.Mode != string(store.TitleModeCustom) {
+		errorResponse(w, "Invalid mode: must be 'chat_model' or 'custom'", http.StatusBadRequest)
+		return
+	}
+
+	if req.Mode == string(store.TitleModeCustom) && req.ModelID == "" {
+		errorResponse(w, "Model ID is required when mode is 'custom'", http.StatusBadRequest)
+		return
+	}
+
+	policy, err := s.Store.SetTitleGenerationPolicy(&store.TitleGenerationPolicy{
+		Mode:    store.TitleGenerationMode(req.Mode),
+		ModelID: req.ModelID,
+	})
+	if err != nil {
+		errorResponse(w, "Failed to save title generation policy: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	jsonResponse(w, policy, http.StatusOK)
+}

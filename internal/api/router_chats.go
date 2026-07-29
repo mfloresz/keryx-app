@@ -549,8 +549,38 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			if lang == "" {
 				lang = "en"
 			}
+
+			// Resolve the provider to use for title generation.
+			// The admin can configure a dedicated lightweight model;
+			// otherwise fall back to the chat model's provider.
+			titleProvider := provider
+			policy, policyErr := s.Store.GetTitleGenerationPolicy()
+			if policyErr == nil && policy.Mode == store.TitleModeCustom && policy.ModelID != "" {
+				info, upstreamModel, resolveErr := ai.ResolveModel(policy.ModelID)
+				if resolveErr == nil {
+					apiKey, keyErr := s.apiKeyForProvider(info.ID)
+					if keyErr == nil {
+						if info.ID == "google" {
+							titleProvider = &ai.GoogleProvider{
+								APIKey:  apiKey,
+								Model:   upstreamModel,
+								Timeout: 120 * time.Second,
+							}
+						} else {
+							titleProvider = &ai.OpenAIProvider{
+								APIKey:      apiKey,
+								BaseURL:     info.BaseURL,
+								Model:       upstreamModel,
+								Timeout:     120 * time.Second,
+								GoAIOptions: info.GoAIOptions,
+							}
+						}
+					}
+				}
+			}
+
 			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			title, err := provider.GenerateTitle(titleCtx, firstUserMsg, lang)
+			title, err := titleProvider.GenerateTitle(titleCtx, firstUserMsg, lang)
 			cancel()
 			if err == nil && title != "" {
 				chat.Title = title
