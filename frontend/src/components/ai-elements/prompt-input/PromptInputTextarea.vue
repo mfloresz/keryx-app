@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
 import { InputGroupTextarea } from '@/components/ui/input-group'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { reactiveOmit } from '@vueuse/core'
 import { cn } from '@/lib/utils'
 import { computed, ref } from 'vue'
 import { usePromptInput } from './context'
@@ -9,9 +11,11 @@ type PromptInputTextareaProps = InstanceType<typeof InputGroupTextarea>['$props'
 
 interface Props extends /* @vue-ignore */ PromptInputTextareaProps {
   class?: HTMLAttributes['class']
+  containerClass?: HTMLAttributes['class']
 }
 
 const props = defineProps<Props>()
+const textareaProps = reactiveOmit(props, 'class', 'containerClass')
 
 const { textInput, setTextInput, addFiles, files, removeFile } = usePromptInput()
 const isComposing = ref(false)
@@ -70,16 +74,24 @@ const modelValue = computed({
 </script>
 
 <template>
-  <InputGroupTextarea
-    v-model="modelValue"
-    placeholder="What would you like to know?"
-    name="message"
-    autocomplete="off"
-    :class="cn('field-sizing-content max-h-36 min-h-[3rem]', props.class)"
-    v-bind="props"
-    @keydown="handleKeyDown"
-    @paste="handlePaste"
-    @compositionstart="isComposing = true"
-    @compositionend="isComposing = false"
-  />
+  <ScrollArea
+    :class="cn(
+          'min-w-0 flex-1 h-fit min-h-0 max-h-36 overflow-hidden',
+          '[&>[data-slot=scroll-area-viewport]]:min-h-0 [&>[data-slot=scroll-area-viewport]]:max-h-36',
+          props.containerClass,
+        )"
+  >
+    <InputGroupTextarea
+      v-model="modelValue"
+      placeholder="What would you like to know?"
+      name="message"
+      autocomplete="off"
+      :class="cn('w-full field-sizing-content min-h-[3rem] overflow-hidden', props.class)"
+      v-bind="textareaProps"
+      @keydown="handleKeyDown"
+      @paste="handlePaste"
+      @compositionstart="isComposing = true"
+      @compositionend="isComposing = false"
+    />
+  </ScrollArea>
 </template>
