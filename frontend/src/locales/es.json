@@ -327,9 +327,21 @@
       "saveError": "No se pudo guardar la API key",
       "deleteSuccess": "API key eliminada correctamente",
       "deleteError": "No se pudo eliminar la API key",
-      "updatedAt": "Actualizada"
-    }
-  },
+  	    "updatedAt": "Actualizada"
+	    },
+	    "titleGeneration": {
+	      "title": "Generación de títulos",
+	      "description": "Elige qué modelo genera los títulos del chat. Un modelo ligero evita los límites de tasa en tu modelo principal.",
+	      "modeChatModel": "Usar el mismo modelo que el chat",
+	      "modeCustom": "Usar un modelo ligero dedicado",
+	      "modelLabel": "Modelo",
+	      "modelPlaceholder": "Selecciona un modelo…",
+	      "saveButton": "Guardar",
+	      "saving": "Guardando…",
+	      "saveSuccess": "Política de generación de títulos guardada",
+	      "saveError": "No se pudo guardar la política de generación de títulos"
+	    }
+	  },
   "auth": {
     "login": {
       "welcome": "Bienvenido de nuevo",

@@ -103,6 +103,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/admin/provider-keys/{provider}", s.withAdminAuth(s.handleAdminUpsertProviderKey))
 	mux.HandleFunc("DELETE /api/admin/provider-keys/{provider}", s.withAdminAuth(s.handleAdminDeleteProviderKey))
 
+	// Admin title generation policy routes
+	mux.HandleFunc("GET /api/admin/title-generation-policy", s.withAdminAuth(s.handleAdminGetTitleGenerationPolicy))
+	mux.HandleFunc("PUT /api/admin/title-generation-policy", s.withAdminAuth(s.handleAdminSetTitleGenerationPolicy))
+
 	// SPA static files (catch-all)
 	mux.HandleFunc("/", StaticHandler(s.Cfg.StaticDir))
 

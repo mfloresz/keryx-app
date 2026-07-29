@@ -8,13 +8,14 @@ import (
 
 // Collection names
 const (
-	UsersCollection           = "users"
-	ChatsCollection           = "chats"
-	ModelsCollection          = "models"
-	UserModelAccessCollection = "user_model_access"
-	InvitationsCollection     = "invitations"
-	AttachmentsCollection     = "attachments"
-	ProviderKeysCollection    = "provider_keys"
+	UsersCollection                  = "users"
+	ChatsCollection                  = "chats"
+	ModelsCollection                 = "models"
+	UserModelAccessCollection        = "user_model_access"
+	InvitationsCollection            = "invitations"
+	AttachmentsCollection            = "attachments"
+	ProviderKeysCollection           = "provider_keys"
+	TitleGenerationPolicyCollection  = "title_generation_policy"
 )
 
 // User roles
@@ -97,6 +98,20 @@ type InvitationRecord struct {
 	CreatedBy          string   `json:"createdBy"`
 	CreatedAt          string   `json:"createdAt"`
 	InitialModelAccess []string `json:"initialModelAccess"`
+}
+
+// TitleGenerationMode defines how the chat title is generated.
+type TitleGenerationMode string
+
+const (
+	TitleModeChatModel TitleGenerationMode = "chat_model"
+	TitleModeCustom    TitleGenerationMode = "custom"
+)
+
+// TitleGenerationPolicy holds the admin-defined title generation policy.
+type TitleGenerationPolicy struct {
+	Mode      TitleGenerationMode `json:"mode"`
+	ModelID   string              `json:"modelId,omitempty"`
 }
 
 type AllowedModel struct {
