@@ -67,7 +67,7 @@ func (s *Store) GetAttachmentData(attachmentID, ownerID string) (*AttachmentInfo
 	}
 	defer fsys.Close()
 
-	reader, err := fsys.GetFile(record.BaseFilesPath() + "/" + record.GetString("file"))
+	reader, err := fsys.GetReader(record.BaseFilesPath() + "/" + record.GetString("file"))
 	if err != nil {
 		return nil, nil, err
 	}
