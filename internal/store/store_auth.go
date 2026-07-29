@@ -59,9 +59,19 @@ func (s *Store) FindAuthRecord(token string) (*core.Record, error) {
 
 func userFromRecord(record *core.Record) User {
 	return User{
-		ID:    record.Id,
-		Email: record.Email(),
-		Name:  record.GetString("name"),
-		Role:  record.GetString("role"),
+		ID:         record.Id,
+		Email:      record.Email(),
+		Name:       record.GetString("name"),
+		Role:       record.GetString("role"),
+		Avatar:     record.GetString("avatar"),
+		AvatarURL:  avatarURL(record),
 	}
+}
+
+func avatarURL(record *core.Record) string {
+	avatar := record.GetString("avatar")
+	if avatar == "" {
+		return ""
+	}
+	return "/api/auth/avatar/" + record.Id
 }

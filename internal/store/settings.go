@@ -36,6 +36,8 @@ type User struct {
 	Email     string `json:"email"`
 	Name      string `json:"name,omitempty"`
 	Role      string `json:"role"`
+	Avatar    string `json:"avatar,omitempty"`
+	AvatarURL string `json:"avatarUrl,omitempty"`
 	CreatedAt string `json:"createdAt,omitempty"`
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }

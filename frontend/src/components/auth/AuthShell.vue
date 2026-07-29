@@ -11,7 +11,7 @@ const imageError = ref(false)
 
 <template>
   <div
-    class="box-border h-[100dvh] overflow-hidden bg-[#f4f0e8] p-6 sm:p-8 lg:p-10"
+    class="box-border h-[100dvh] overflow-hidden bg-muted p-6 sm:p-8 lg:p-10"
   >
     <div class="mx-auto flex h-full w-full max-w-6xl items-center justify-center">
       <div
@@ -24,7 +24,7 @@ const imageError = ref(false)
         </div>
 
         <div
-          class="relative hidden min-h-0 overflow-hidden border-l border-border/50 bg-[linear-gradient(180deg,rgba(255,255,255,0.7),rgba(250,246,239,0.95))] md:aspect-[2/3] md:flex"
+          class="relative hidden min-h-0 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.7),rgba(250,246,239,0.95))] md:aspect-[2/3] md:flex"
         >
           <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,250,235,0.96),rgba(240,241,235,0.72)_40%,rgba(225,236,228,0.38)_100%)]" />
           <div class="absolute left-6 top-8 h-24 w-24 rounded-full bg-amber-200/30 blur-3xl" />
