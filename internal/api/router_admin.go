@@ -161,7 +161,6 @@ func (s *Server) handleAdminCreateInvitation(w http.ResponseWriter, r *http.Requ
 	tokenHash := sha256Hex(rawToken)
 
 	inv := &store.InvitationRecord{
-		ID:        uuid.New().String(),
 		Email:     email,
 		TokenHash: tokenHash,
 		Role:      role,

@@ -10,6 +10,7 @@ import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
 import { getChatRepository } from '@/services/runtime'
+import { randomUUID } from '@/shared/uuid'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
@@ -39,11 +40,11 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
   try {
     // Create the chat first: attachments are stored against a chat record.
     const baseChat = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       title: '' as string | null,
       visibility: 'private' as const,
       createdAt: new Date().toISOString(),
-      messages: [{ id: crypto.randomUUID(), role: 'user', parts: [{ type: 'text', text }], createdAt: new Date().toISOString() }],
+      messages: [{ id: randomUUID(), role: 'user', parts: [{ type: 'text', text }], createdAt: new Date().toISOString() }],
       votes: [],
       webSearch: Boolean(webSearch),
     }

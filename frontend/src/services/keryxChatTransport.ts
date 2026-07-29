@@ -7,6 +7,7 @@
  */
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from 'ai';
+import { randomUUID } from '../shared/uuid.js';
 
 interface KeryxChatTransportOptions {
   api: string;
@@ -123,7 +124,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
 
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
-    const messageId = crypto.randomUUID();
+    const messageId = randomUUID();
 
     return new ReadableStream({
       async start(controller) {
@@ -132,7 +133,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         // Emit initial chunks: start-step, then text-start.
         // Reasoning chunks (reasoning-start/delta/end) are emitted lazily only
         // when the backend actually sends reasoning events.
-        const reasoningId = crypto.randomUUID();
+        const reasoningId = randomUUID();
         let reasoningOpen = false;
         let startSent = false;
 
