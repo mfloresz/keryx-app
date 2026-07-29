@@ -130,7 +130,7 @@ function onSubmit(e: Event) {
       @change="onFileChange"
     >
     <form
-      :class="cn('w-full', props.class)"
+      :class="cn('w-full bg-white', props.class)"
       autocomplete="off"
       @submit="onSubmit"
       @dragover.prevent="handleDragOver"
