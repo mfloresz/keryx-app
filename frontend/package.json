@@ -29,6 +29,7 @@
     "@fontsource-variable/sn-pro": "^5.2.1",
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/spectral": "^5.2.8",
+    "@lucide/vue": "^1.28.0",
     "@rive-app/webgl2": "^2.37.5",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/vue-table": "^8.21.3",
@@ -42,7 +43,6 @@
     "ansi-to-vue3": "^0.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-
     "date-fns": "^4.1.0",
     "embla-carousel-vue": "^8.6.0",
     "lucide-vue-next": "^0.562.0",
@@ -50,7 +50,7 @@
     "motion-v": "^1.8.1",
     "nanoid": "^5.1.6",
     "pinia": "^3.0.2",
-    "reka-ui": "^2.9.8",
+    "reka-ui": "^2.10.1",
     "shiki": "^3.21.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18",
@@ -62,7 +62,6 @@
     "vue-stream-markdown": "^0.7.2"
   },
   "devDependencies": {
-
     "@types/node": "^24.10.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/tsconfig": "^0.8.1",

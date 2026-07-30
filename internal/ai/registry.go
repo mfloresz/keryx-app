@@ -102,6 +102,7 @@ var knownProviders = []ProviderInfo{
 			{ID: "chutes/gemma-4-31B-turbo-TEE", UpstreamID: "google/gemma-4-31B-turbo-TEE", Provider: "chutes", DisplayName: "Google Gemma 4 31B Turbo TEE", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 			{ID: "chutes/nemotron-3-nano-omni-30B-TEE", UpstreamID: "Nemotron-3-Nano-Omni-30B-TEE", Provider: "chutes", DisplayName: "Nemotron 3 Nano Omni 30B TEE", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 			{ID: "chutes/mistral-nemo-instruct-2407-TEE", UpstreamID: "unsloth/Mistral-Nemo-Instruct-2407-TEE", Provider: "chutes", DisplayName: "Mistral Nemo Instruct 2407 TEE", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+							{ID: "chutes/Qwen/Qwen3.6-27B-TEE", UpstreamID: "Qwen/Qwen3.6-27B-TEE", Provider: "chutes", DisplayName: "Qwen 3.6 27B TEE", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{

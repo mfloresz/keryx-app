@@ -401,6 +401,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Model        string           `json:"model"`
+		Preset       string           `json:"preset"`
 		Messages     []ai.ChatMessage `json:"messages"`
 		System       string           `json:"system"`
 		WebSearch    bool             `json:"webSearch"`
@@ -414,6 +415,16 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	// Resolve preset to model ID if provided.
+	if req.Preset != "" {
+		preset, err := s.Store.GetModelPreset(req.Preset)
+		if err != nil {
+			errorResponse(w, "Invalid preset", http.StatusBadRequest)
+			return
+		}
+		req.Model = preset.ModelID
 	}
 
 	if req.Model == "" {

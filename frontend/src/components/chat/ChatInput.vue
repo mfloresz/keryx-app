@@ -3,7 +3,7 @@
  * ChatInput
  *
  * Uses AI Elements PromptInput components for a rich chat input experience.
- * Handles text input, file attachments, web search toggle, and model selection.
+ * Handles text input, file attachments, web search toggle, and preset selection.
  */
 import type { PromptInputMessage } from '@/components/ai-elements/prompt-input'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
@@ -19,17 +19,12 @@ import {
   PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input'
 import {
-  ModelSelector,
-  ModelSelectorTrigger,
-  ModelSelectorContent,
-  ModelSelectorInput,
-  ModelSelectorList,
-  ModelSelectorGroup,
-  ModelSelectorItem,
-  ModelSelectorLogo,
-  ModelSelectorName,
-  ModelSelectorEmpty,
-} from '@/components/ai-elements/model-selector'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import PromptInputAttachmentsDisplay from '@/components/prompt-input-attachments-display.vue'
 import {
   AlertDialog,
@@ -40,33 +35,43 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useModels } from '@/composables/useModels'
-import { useSearchSettings } from '@/composables/useSearchSettings'
 import { GlobeIcon } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
-import { ChevronDown } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+
+export interface ModelPreset {
+  preset: string
+  label: string
+  description?: string
+  supportsImages: boolean
+  supportsSearch: boolean
+}
+
+const PRESET_DESCRIPTION_KEYS: Record<string, { title: string; subtitle: string }> = {
+  fast: { title: 'chat.presetFast', subtitle: 'chat.presetFastDesc' },
+  reflect: { title: 'chat.presetReflect', subtitle: 'chat.presetReflectDesc' },
+  extended_context: { title: 'chat.presetExtended', subtitle: 'chat.presetExtendedDesc' },
+}
 
 const DOCUMENT_ACCEPT = '.pdf,.txt,.md,.doc,.docx,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.cpp,.go,.rs'
 
 const props = defineProps<{
   status?: ChatStatus
-  model: string
+  preset: string
+  presets: ModelPreset[]
   webSearch?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'submit', payload: { text: string; files: AttachmentFile[]; webSearch: boolean }): void
-  (e: 'update:model', value: string): void
+  (e: 'update:preset', value: string): void
   (e: 'stop'): void
 }>()
 
-const selectorOpen = ref(false)
 const useWebSearch = ref(props.webSearch ?? false)
 const unsupportedImageDialogOpen = ref(false)
-
-// Layout is always stacked (textarea above, toolbar below) for stability.
-// No ResizeObserver, no layout toggling — eliminates the mobile flicker
-// caused by placeholder text wrapping on narrow viewports.
 
 watch(() => props.webSearch, (value) => {
   if (value !== undefined) {
@@ -74,22 +79,27 @@ watch(() => props.webSearch, (value) => {
   }
 })
 
-const { models } = useModels()
+const selectedPresetData = computed(() =>
+  props.presets.find(p => p.preset === props.preset)
+)
 
-const selectedModelLabel = computed(() => {
-  // Find the model in the provider's list to get the label, or fallback to the short name
-  const found = models.value.find(m => m.value === props.model)
-  return found?.label || props.model.split('/').pop() || props.model
+const modelSupportsSearch = computed(() =>
+  selectedPresetData.value?.supportsSearch ?? false
+)
+
+const modelSupportsImages = computed(() =>
+  selectedPresetData.value?.supportsImages ?? true
+)
+
+const activePresetTitle = computed(() => {
+  const key = PRESET_DESCRIPTION_KEYS[props.preset]?.title
+  return key ? t(key) : selectedPresetData.value?.label ?? props.preset
 })
 
-const searchSettings = useSearchSettings()
-const modelSupportsSearch = computed(() => {
-  return searchSettings.isSearchAvailable.value(models.value, props.model)
-})
-const modelSupportsImages = computed(() => {
-  const found = models.value.find(m => m.value === props.model)
-  return found?.supportsImages ?? true
-})
+function presetSubtitle(presetId: string) {
+  const key = PRESET_DESCRIPTION_KEYS[presetId]?.subtitle
+  return key ? t(key) : ''
+}
 
 function handleAttachmentError(err: { code: string, message: string }) {
   if (err.code === 'accept' && !modelSupportsImages.value) {
@@ -114,17 +124,13 @@ function handleSubmit(message: PromptInputMessage) {
   })
 }
 
-function handleModelSelect(value: string) {
-  emit('update:model', value)
-  selectorOpen.value = false
-  // Reset web search when switching models to avoid unsupported state
-  if (!searchSettings.isSearchAvailable.value(models.value, value)) {
+function handlePresetSelect(value: string) {
+  emit('update:preset', value)
+  // Reset web search when switching to a preset that doesn't support it
+  const next = props.presets.find(p => p.preset === value)
+  if (next && !next.supportsSearch) {
     useWebSearch.value = false
   }
-}
-
-function getProvider(value: string): string {
-  return value.split('/')[0] ?? 'unknown'
 }
 
 function handleStop() {
@@ -177,33 +183,28 @@ function handleStop() {
 
       <!-- Right tools -->
       <div class="order-3 my-1.5 ms-auto flex items-center gap-2 me-2">
-          <ModelSelector v-model:open="selectorOpen">
-            <ModelSelectorTrigger as-child>
-              <button
-                class="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+          <!-- Preset selector -->
+          <Select
+            :model-value="props.preset"
+            @update:model-value="value => handlePresetSelect(String(value))"
+          >
+            <SelectTrigger class="h-8 px-3 text-xs">
+              <SelectValue :placeholder="activePresetTitle" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="p in props.presets"
+                :key="p.preset"
+                :value="p.preset"
+                class="py-2"
               >
-                {{ selectedModelLabel }}
-                <ChevronDown class="size-3 opacity-50" />
-              </button>
-            </ModelSelectorTrigger>
-            <ModelSelectorContent>
-              <ModelSelectorInput :placeholder="$t('chat.searchModels')" />
-              <ModelSelectorList>
-                <ModelSelectorEmpty>{{ $t('chat.noModels') }}</ModelSelectorEmpty>
-                <ModelSelectorGroup :heading="$t('chat.models')">
-                  <ModelSelectorItem
-                    v-for="m in models"
-                    :key="m.value"
-                    :value="m.value"
-                    @select="handleModelSelect(m.value)"
-                  >
-                    <ModelSelectorLogo :provider="getProvider(m.value)" />
-                    <ModelSelectorName>{{ m.label }}</ModelSelectorName>
-                  </ModelSelectorItem>
-                </ModelSelectorGroup>
-              </ModelSelectorList>
-            </ModelSelectorContent>
-          </ModelSelector>
+                {{ p.label }}
+                <template #description>
+                  {{ presetSubtitle(p.preset) }}
+                </template>
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
           <PromptInputSubmit
             v-if="props.status !== 'streaming'"

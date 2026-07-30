@@ -109,7 +109,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
 
 	// Model routes
-	mux.HandleFunc("GET /api/models/allowed", s.withAuth(s.handleAllowedModels))
+	mux.HandleFunc("GET /api/models/presets", s.withAuth(s.handleModelPresets))
+	mux.HandleFunc("GET /api/models/allowed", s.adminRoute(s.handleAllowedModels))
 
 	// Admin routes
 	mux.HandleFunc("GET /api/admin/users", s.adminRoute(s.handleAdminListUsers))
@@ -130,6 +131,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/title-generation-policy", s.adminRoute(s.handleAdminGetTitleGenerationPolicy))
 	mux.HandleFunc("PUT /api/admin/title-generation-policy", s.adminRoute(s.handleAdminSetTitleGenerationPolicy))
 
+	// Admin model preset routes
+	mux.HandleFunc("GET /api/admin/model-presets", s.adminRoute(s.handleAdminListModelPresets))
+	mux.HandleFunc("PUT /api/admin/model-presets/{preset}", s.adminRoute(s.handleAdminUpdateModelPreset))
+
+	// SPA static files
 	// SPA static files (catch-all)
 	mux.HandleFunc("/", StaticHandler(s.Cfg.StaticDir))
 

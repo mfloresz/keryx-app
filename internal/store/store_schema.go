@@ -262,3 +262,64 @@ func (s *Store) ensureTitleGenerationPolicyCollection() error {
 	}
 	return nil
 }
+
+func (s *Store) ensureModelPresetsCollection() error {
+	if _, err := s.App.FindCollectionByNameOrId(ModelPresetsCollection); err == nil {
+		return nil
+	}
+	c := core.NewBaseCollection(ModelPresetsCollection)
+	adminOnly := "@request.auth.id != '' && @collection.users.id = @request.auth.id && @collection.users.role = 'admin'"
+	c.ListRule = new(adminOnly)
+	c.ViewRule = new(adminOnly)
+	c.CreateRule = new(adminOnly)
+	c.UpdateRule = new(adminOnly)
+	c.DeleteRule = new(adminOnly)
+	c.Fields.Add(&core.TextField{Name: "preset_id", Required: true, Max: 30})
+	c.Fields.Add(&core.TextField{Name: "model_id", Required: true, Max: 200})
+	c.Fields.Add(&core.TextField{Name: "label", Required: true, Max: 50})
+	c.AddIndex("idx_preset_id_unique", true, "preset_id", "")
+	addSystemDateFields(c)
+	if err := s.App.Save(c); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Store) seedModelPresets() error {
+	collection, err := s.App.FindCollectionByNameOrId(ModelPresetsCollection)
+	if err != nil {
+		return err
+	}
+
+	defaults := []struct {
+		PresetID string
+		ModelID  string
+		Label    string
+	}{
+		{PresetID: "fast", ModelID: "chutes/gemma-4-31B-turbo-TEE", Label: "Rápido"},
+		{PresetID: "reflect", ModelID: "chutes/Qwen/Qwen3.6-27B-TEE", Label: "Reflexionar"},
+		{PresetID: "extended_context", ModelID: "venice/xiaomi-mimo-v2-5", Label: "Pensamiento Extendido"},
+	}
+
+	for _, d := range defaults {
+		record, err := s.App.FindFirstRecordByFilter(ModelPresetsCollection, "preset_id = {:pid}", dbx.Params{"pid": d.PresetID})
+		if err != nil {
+			record = core.NewRecord(collection)
+			record.Set("preset_id", d.PresetID)
+			record.Set("model_id", d.ModelID)
+			record.Set("label", d.Label)
+			if err := s.App.Save(record); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if record.GetString("label") != d.Label {
+			record.Set("label", d.Label)
+			if err := s.App.Save(record); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}

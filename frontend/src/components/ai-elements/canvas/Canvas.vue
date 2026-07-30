@@ -17,7 +17,13 @@ const props = withDefaults(defineProps<FlowProps>(), {
 
 const emits = defineEmits<FlowEmits>()
 const slots = defineSlots<FlowSlots>()
-const forwarded = useForwardPropsEmits(props, emits)
+
+// Keep reka-ui's prop forwarding behavior while preventing its mapped types
+// from expanding Vue Flow's deeply recursive Component<NodeProps> types.
+const forwarded = useForwardPropsEmits(
+  props as unknown as Record<string, any>,
+  emits as any,
+)
 </script>
 
 <template>
