@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/sha256"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -10,6 +11,12 @@ import (
 	"keryx-server/internal/ai"
 	"keryx-server/internal/store"
 )
+
+// auditLog records a privileged action with actor, target, and outcome fields.
+func auditLog(r *http.Request, action, target string, fields ...any) {
+	actor, _ := userIDFromContext(r)
+	slog.Info("admin action", append([]any{"action", action, "actor", actor, "target", target}, fields...)...)
+}
 
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := s.Store.ListUsers()
@@ -59,6 +66,7 @@ func (s *Server) handleAdminUpdateUserRole(w http.ResponseWriter, r *http.Reques
 		errorResponse(w, "Failed to update role", http.StatusInternalServerError)
 		return
 	}
+	auditLog(r, "user.role_change", userID, "role", req.Role)
 
 	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
 }
@@ -87,6 +95,7 @@ func (s *Server) handleAdminUpdateModel(w http.ResponseWriter, r *http.Request) 
 		errorResponse(w, "Model not found", http.StatusNotFound)
 		return
 	}
+	auditLog(r, "model.set_enabled", modelID, "enabled", req.Enabled)
 	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
 }
 
@@ -169,9 +178,10 @@ func (s *Server) handleAdminCreateInvitation(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := s.Store.CreateInvitation(inv); err != nil {
-		errorResponse(w, "Failed to create invitation: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "Failed to create invitation", err)
 		return
 	}
+	auditLog(r, "invitation.create", inv.ID, "email", email, "role", role)
 
 	baseURL := s.Cfg.AppBaseURL
 	if baseURL == "" {
@@ -199,6 +209,7 @@ func (s *Server) handleAdminDeleteInvitation(w http.ResponseWriter, r *http.Requ
 		errorResponse(w, "Invitation not found", http.StatusNotFound)
 		return
 	}
+	auditLog(r, "invitation.delete", invitationID)
 	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
 }
 
@@ -272,9 +283,10 @@ func (s *Server) handleAdminUpsertProviderKey(w http.ResponseWriter, r *http.Req
 
 	info, err := s.Store.UpsertProviderAPIKey(provider, req.APIKey)
 	if err != nil {
-		errorResponse(w, "Failed to save API key: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "Failed to save API key", err)
 		return
 	}
+	auditLog(r, "provider_key.upsert", provider)
 
 	jsonResponse(w, info, http.StatusOK)
 }
@@ -290,6 +302,7 @@ func (s *Server) handleAdminDeleteProviderKey(w http.ResponseWriter, r *http.Req
 		errorResponse(w, "Failed to delete API key", http.StatusInternalServerError)
 		return
 	}
+	auditLog(r, "provider_key.delete", provider)
 
 	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
 }
@@ -340,9 +353,10 @@ func (s *Server) handleAdminSetTitleGenerationPolicy(w http.ResponseWriter, r *h
 		ModelID: req.ModelID,
 	})
 	if err != nil {
-		errorResponse(w, "Failed to save title generation policy: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "Failed to save title generation policy", err)
 		return
 	}
+	auditLog(r, "title_policy.set", req.Mode, "modelId", req.ModelID)
 
 	jsonResponse(w, policy, http.StatusOK)
 }

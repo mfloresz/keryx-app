@@ -33,11 +33,17 @@ type Server struct {
 	// can't consume the same invitation (check-then-use race).
 	invitationMu sync.Mutex
 
+	// bootstrapMu serializes first-user registration so two concurrent requests
+	// can't both observe an empty users table and both become admin.
+	bootstrapMu sync.Mutex
+
 	// Rate limiters for public/sensitive endpoints. Behind a tunnel the real
 	// client IP comes from proxy headers (see clientIP).
 	loginLimiter      *rateLimiter
 	invitationLimiter *rateLimiter
 	streamLimiter     *rateLimiter
+	accountLimiter    *rateLimiter
+	adminLimiter      *rateLimiter
 }
 
 func New(st *store.Store, cfg *config.Config) *Server {
@@ -48,6 +54,8 @@ func New(st *store.Store, cfg *config.Config) *Server {
 		loginLimiter:      newRateLimiter(5),  // 5 login attempts/min per IP
 		invitationLimiter: newRateLimiter(10), // 10 invitation ops/min per IP
 		streamLimiter:     newRateLimiter(10), // 10 stream starts/min per user
+		accountLimiter:    newRateLimiter(10), // 10 account changes/min per user
+		adminLimiter:      newRateLimiter(30), // 30 admin ops/min per user
 	}
 }
 
@@ -69,11 +77,12 @@ func (s *Server) Handler() http.Handler {
 
 	// Public auth routes
 	mux.HandleFunc("POST /api/auth/login", s.withRateLimit(s.loginLimiter, clientIP, s.handleLogin))
+	mux.HandleFunc("GET /api/auth/setup-status", s.withRateLimit(s.loginLimiter, clientIP, s.handleSetupStatus))
 	mux.HandleFunc("POST /api/auth/register", s.withRateLimit(s.invitationLimiter, clientIP, s.handleRegister))
 	mux.HandleFunc("GET /api/auth/me", s.withAuth(s.handleAuthMe))
-	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
-	mux.HandleFunc("PATCH /api/auth/profile", s.withAuth(s.handleUpdateProfile))
-	mux.HandleFunc("POST /api/auth/password", s.withAuth(s.handleChangePassword))
+	mux.HandleFunc("POST /api/auth/logout", s.withRateLimit(s.accountLimiter, clientIP, s.handleLogout))
+	mux.HandleFunc("PATCH /api/auth/profile", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleUpdateProfile)))
+	mux.HandleFunc("POST /api/auth/password", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleChangePassword)))
 	mux.HandleFunc("GET /api/auth/avatar/{id}", s.handleGetAvatar)
 
 	// Invitation routes (some public, some admin)
@@ -103,28 +112,55 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/models/allowed", s.withAuth(s.handleAllowedModels))
 
 	// Admin routes
-	mux.HandleFunc("GET /api/admin/users", s.withAdminAuth(s.handleAdminListUsers))
-	mux.HandleFunc("PATCH /api/admin/users/{id}", s.withAdminAuth(s.handleAdminUpdateUserRole))
-	mux.HandleFunc("GET /api/admin/models", s.withAdminAuth(s.handleAdminListModels))
-	mux.HandleFunc("PATCH /api/admin/models/{id}", s.withAdminAuth(s.handleAdminUpdateModel))
-	mux.HandleFunc("GET /api/admin/models/catalog", s.withAdminAuth(s.handleAdminModelCatalog))
-	mux.HandleFunc("GET /api/admin/invitations", s.withAdminAuth(s.handleAdminListInvitations))
-	mux.HandleFunc("POST /api/admin/invitations", s.withAdminAuth(s.handleAdminCreateInvitation))
-	mux.HandleFunc("DELETE /api/admin/invitations/{id}", s.withAdminAuth(s.handleAdminDeleteInvitation))
+	mux.HandleFunc("GET /api/admin/users", s.adminRoute(s.handleAdminListUsers))
+	mux.HandleFunc("PATCH /api/admin/users/{id}", s.adminRoute(s.handleAdminUpdateUserRole))
+	mux.HandleFunc("GET /api/admin/models", s.adminRoute(s.handleAdminListModels))
+	mux.HandleFunc("PATCH /api/admin/models/{id}", s.adminRoute(s.handleAdminUpdateModel))
+	mux.HandleFunc("GET /api/admin/models/catalog", s.adminRoute(s.handleAdminModelCatalog))
+	mux.HandleFunc("GET /api/admin/invitations", s.adminRoute(s.handleAdminListInvitations))
+	mux.HandleFunc("POST /api/admin/invitations", s.adminRoute(s.handleAdminCreateInvitation))
+	mux.HandleFunc("DELETE /api/admin/invitations/{id}", s.adminRoute(s.handleAdminDeleteInvitation))
 
 	// Admin provider key routes
-	mux.HandleFunc("GET /api/admin/provider-keys", s.withAdminAuth(s.handleAdminListProviderKeys))
-	mux.HandleFunc("PUT /api/admin/provider-keys/{provider}", s.withAdminAuth(s.handleAdminUpsertProviderKey))
-	mux.HandleFunc("DELETE /api/admin/provider-keys/{provider}", s.withAdminAuth(s.handleAdminDeleteProviderKey))
+	mux.HandleFunc("GET /api/admin/provider-keys", s.adminRoute(s.handleAdminListProviderKeys))
+	mux.HandleFunc("PUT /api/admin/provider-keys/{provider}", s.adminRoute(s.handleAdminUpsertProviderKey))
+	mux.HandleFunc("DELETE /api/admin/provider-keys/{provider}", s.adminRoute(s.handleAdminDeleteProviderKey))
 
 	// Admin title generation policy routes
-	mux.HandleFunc("GET /api/admin/title-generation-policy", s.withAdminAuth(s.handleAdminGetTitleGenerationPolicy))
-	mux.HandleFunc("PUT /api/admin/title-generation-policy", s.withAdminAuth(s.handleAdminSetTitleGenerationPolicy))
+	mux.HandleFunc("GET /api/admin/title-generation-policy", s.adminRoute(s.handleAdminGetTitleGenerationPolicy))
+	mux.HandleFunc("PUT /api/admin/title-generation-policy", s.adminRoute(s.handleAdminSetTitleGenerationPolicy))
 
 	// SPA static files (catch-all)
 	mux.HandleFunc("/", StaticHandler(s.Cfg.StaticDir))
 
-	return withCORS(mux)
+	return withCORS(withSecurityHeaders(mux))
+}
+
+// adminRoute composes admin-only routes: auth + role check first (so the
+// user ID is in context), then per-user rate limiting.
+func (s *Server) adminRoute(next http.HandlerFunc) http.HandlerFunc {
+	return s.withAdminAuth(s.withRateLimit(s.adminLimiter, userKey, next))
+}
+
+// withSecurityHeaders sets baseline security headers on every response so
+// non-Vercel deployments (Docker, self-hosted) are protected too. HSTS is
+// only sent over HTTPS so local HTTP development keeps working.
+func withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; "+
+				"connect-src 'self' ws: wss:; worker-src 'self' blob:; object-src 'none'; "+
+				"base-uri 'self'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self'")
+		if isSecureRequest(r) {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func withCORS(next http.Handler) http.Handler {

@@ -50,9 +50,8 @@ func (s *Store) EnsureSchema() error {
 	if err := s.ensureTitleGenerationPolicyCollection(); err != nil {
 		return fmt.Errorf("ensure title generation policy: %w", err)
 	}
-	if err := s.seedInitialAdmin(); err != nil {
-		return fmt.Errorf("seed initial admin: %w", err)
-	}
+	// NOTE: no admin user is seeded here. On a fresh install the first user
+	// registers via the browser and is promoted to admin by handleRegister.
 	return nil
 }
 
