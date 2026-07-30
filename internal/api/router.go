@@ -152,9 +152,11 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
-				"img-src 'self' blob: data:; font-src 'self' data:; media-src 'self' blob: data:; "+
-				"connect-src 'self' ws: wss:; worker-src 'self' blob:; object-src 'none'; "+
+			"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' blob: data: attachment: https://models.dev; font-src 'self' data:; "+
+				"media-src 'self' blob: data: attachment:; "+
+				"connect-src 'self' https://ai-gateway.vercel.sh https://*.supabase.co ws: wss: blob: data:; "+
+				"worker-src 'self' blob:; object-src 'none'; "+
 				"base-uri 'self'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self'")
 		if isSecureRequest(r) {
 			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
