@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -41,14 +42,10 @@ func (p *OpenAIProvider) model() (provider.LanguageModel, error) {
 func (p *OpenAIProvider) mergedOptions() map[string]any {
 	out := make(map[string]any)
 	if p.GoAIOptions != nil {
-		for k, v := range p.GoAIOptions {
-			out[k] = v
-		}
+		maps.Copy(out, p.GoAIOptions)
 	}
 	if p.ProviderOptions != nil {
-		for k, v := range p.ProviderOptions {
-			out[k] = v
-		}
+		maps.Copy(out, p.ProviderOptions)
 	}
 	// DeepSeek models don't support structured outputs
 	if strings.Contains(p.Model, "deepseek") {

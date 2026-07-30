@@ -3,7 +3,6 @@ package store
 import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/types"
 )
 
 func (s *Store) ensureUsersCollection() (*core.Collection, error) {
@@ -11,9 +10,9 @@ func (s *Store) ensureUsersCollection() (*core.Collection, error) {
 		return s.migrateUsersCollection(existing)
 	}
 	c := core.NewAuthCollection(UsersCollection)
-	c.ListRule = types.Pointer("@request.auth.id != '' && @request.auth.id = id")
-	c.ViewRule = types.Pointer("@request.auth.id != '' && @request.auth.id = id")
-	c.UpdateRule = types.Pointer("@request.auth.id != '' && @request.auth.id = id")
+	c.ListRule = new("@request.auth.id != '' && @request.auth.id = id")
+	c.ViewRule = new("@request.auth.id != '' && @request.auth.id = id")
+	c.UpdateRule = new("@request.auth.id != '' && @request.auth.id = id")
 	c.DeleteRule = nil
 	c.CreateRule = nil
 	c.Fields.Add(&core.TextField{Name: "name", Max: 120})
@@ -47,8 +46,8 @@ func (s *Store) ensureModelsCollection() (*core.Collection, error) {
 		return s.migrateModelsCollection(existing)
 	}
 	c := core.NewBaseCollection(ModelsCollection)
-	c.ListRule = types.Pointer("@request.auth.id != ''")
-	c.ViewRule = types.Pointer("@request.auth.id != ''")
+	c.ListRule = new("@request.auth.id != ''")
+	c.ViewRule = new("@request.auth.id != ''")
 	c.CreateRule = nil
 	c.UpdateRule = nil
 	c.DeleteRule = nil
@@ -88,11 +87,11 @@ func (s *Store) ensureUserModelAccessCollection(users *core.Collection) (*core.C
 	}
 	c := core.NewBaseCollection(UserModelAccessCollection)
 	ownerOnly := "@request.auth.id != '' && user = @request.auth.id"
-	c.ListRule = types.Pointer(ownerOnly)
-	c.ViewRule = types.Pointer(ownerOnly)
-	c.CreateRule = types.Pointer(ownerOnly)
-	c.UpdateRule = types.Pointer(ownerOnly)
-	c.DeleteRule = types.Pointer(ownerOnly)
+	c.ListRule = new(ownerOnly)
+	c.ViewRule = new(ownerOnly)
+	c.CreateRule = new(ownerOnly)
+	c.UpdateRule = new(ownerOnly)
+	c.DeleteRule = new(ownerOnly)
 	c.Fields.Add(&core.RelationField{Name: "user", Required: true, CollectionId: users.Id, MaxSelect: 1})
 	c.Fields.Add(&core.TextField{Name: "model_id", Required: true, Max: 200})
 	c.AddIndex("idx_user_model_access_unique", true, "user,model_id", "")
@@ -108,11 +107,11 @@ func (s *Store) ensureInvitationsCollection(users *core.Collection) (*core.Colle
 	}
 	c := core.NewBaseCollection(InvitationsCollection)
 	adminOnly := "@request.auth.id != '' && @collection.users.id = @request.auth.id && @collection.users.role = 'admin'"
-	c.ListRule = types.Pointer(adminOnly)
-	c.ViewRule = types.Pointer(adminOnly)
-	c.CreateRule = types.Pointer(adminOnly)
-	c.UpdateRule = types.Pointer(adminOnly)
-	c.DeleteRule = types.Pointer(adminOnly)
+	c.ListRule = new(adminOnly)
+	c.ViewRule = new(adminOnly)
+	c.CreateRule = new(adminOnly)
+	c.UpdateRule = new(adminOnly)
+	c.DeleteRule = new(adminOnly)
 	c.Fields.Add(&core.EmailField{Name: "email", Required: true})
 	c.Fields.Add(&core.TextField{Name: "token_hash", Required: true, Max: 128})
 	c.Fields.Add(&core.SelectField{Name: "role", Values: []string{RoleAdmin, RoleUser}, MaxSelect: 1, Required: true})
@@ -134,11 +133,11 @@ func (s *Store) ensureChatsCollection(users *core.Collection) (*core.Collection,
 	}
 	c := core.NewBaseCollection(ChatsCollection)
 	ownerOnly := "@request.auth.id != '' && owner = @request.auth.id"
-	c.ListRule = types.Pointer(ownerOnly)
-	c.ViewRule = types.Pointer(ownerOnly)
-	c.CreateRule = types.Pointer(ownerOnly)
-	c.UpdateRule = types.Pointer(ownerOnly)
-	c.DeleteRule = types.Pointer(ownerOnly)
+	c.ListRule = new(ownerOnly)
+	c.ViewRule = new(ownerOnly)
+	c.CreateRule = new(ownerOnly)
+	c.UpdateRule = new(ownerOnly)
+	c.DeleteRule = new(ownerOnly)
 	c.Fields.Add(&core.RelationField{Name: "owner", Required: true, CollectionId: users.Id, MaxSelect: 1})
 	c.Fields.Add(&core.TextField{Name: "title", Max: 500})
 	c.Fields.Add(&core.SelectField{Name: "visibility", Values: []string{VisibilityPublic, VisibilityPrivate}, MaxSelect: 1})
@@ -161,11 +160,11 @@ func (s *Store) ensureAttachmentsCollection(users *core.Collection, chats *core.
 	}
 	c := core.NewBaseCollection(AttachmentsCollection)
 	ownerOnly := "@request.auth.id != '' && owner = @request.auth.id"
-	c.ListRule = types.Pointer(ownerOnly)
-	c.ViewRule = types.Pointer(ownerOnly)
-	c.CreateRule = types.Pointer(ownerOnly)
-	c.UpdateRule = types.Pointer(ownerOnly)
-	c.DeleteRule = types.Pointer(ownerOnly)
+	c.ListRule = new(ownerOnly)
+	c.ViewRule = new(ownerOnly)
+	c.CreateRule = new(ownerOnly)
+	c.UpdateRule = new(ownerOnly)
+	c.DeleteRule = new(ownerOnly)
 	c.Fields.Add(&core.RelationField{Name: "owner", Required: true, CollectionId: users.Id, MaxSelect: 1})
 	c.Fields.Add(&core.RelationField{Name: "chat", CollectionId: chats.Id, MaxSelect: 1})
 	c.Fields.Add(&core.TextField{Name: "filename", Required: true, Max: 500})
@@ -228,21 +227,21 @@ func (s *Store) ensureProviderKeysCollection() error {
 	c := core.NewBaseCollection(ProviderKeysCollection)
 	// Only admins can read/write provider keys; the actual key is encrypted anyway.
 	adminOnly := "@request.auth.id != '' && @collection.users.id = @request.auth.id && @collection.users.role = 'admin'"
-	c.ListRule = types.Pointer(adminOnly)
-	c.ViewRule = types.Pointer(adminOnly)
-	c.CreateRule = types.Pointer(adminOnly)
-	c.UpdateRule = types.Pointer(adminOnly)
-	c.DeleteRule = types.Pointer(adminOnly)
+	c.ListRule = new(adminOnly)
+	c.ViewRule = new(adminOnly)
+	c.CreateRule = new(adminOnly)
+	c.UpdateRule = new(adminOnly)
+	c.DeleteRule = new(adminOnly)
 	c.Fields.Add(&core.TextField{Name: "provider", Required: true, Max: 80})
 	c.Fields.Add(&core.TextField{Name: "api_key_encrypted"})
 	c.Fields.Add(&core.BoolField{Name: "configured"})
 	c.Fields.Add(&core.DateField{Name: "updated_at"})
 	c.AddIndex("idx_provider_keys_provider_unique", true, "provider", "")
 	if err := s.App.Save(c); err != nil {
-			return err
-		}
-		return nil
+		return err
 	}
+	return nil
+}
 
 func (s *Store) ensureTitleGenerationPolicyCollection() error {
 	if _, err := s.App.FindCollectionByNameOrId(TitleGenerationPolicyCollection); err == nil {
@@ -250,11 +249,11 @@ func (s *Store) ensureTitleGenerationPolicyCollection() error {
 	}
 	c := core.NewBaseCollection(TitleGenerationPolicyCollection)
 	adminOnly := "@request.auth.id != '' && @collection.users.id = @request.auth.id && @collection.users.role = 'admin'"
-	c.ListRule = types.Pointer(adminOnly)
-	c.ViewRule = types.Pointer(adminOnly)
-	c.CreateRule = types.Pointer(adminOnly)
-	c.UpdateRule = types.Pointer(adminOnly)
-	c.DeleteRule = types.Pointer(adminOnly)
+	c.ListRule = new(adminOnly)
+	c.ViewRule = new(adminOnly)
+	c.CreateRule = new(adminOnly)
+	c.UpdateRule = new(adminOnly)
+	c.DeleteRule = new(adminOnly)
 	c.Fields.Add(&core.TextField{Name: "mode", Required: true, Max: 20})
 	c.Fields.Add(&core.TextField{Name: "model_id", Max: 200})
 	addSystemDateFields(c)
