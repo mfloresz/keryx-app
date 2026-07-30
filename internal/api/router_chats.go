@@ -492,23 +492,30 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send start event with the persisted message ids so the client can
-	// reconcile its optimistic ids with the stored ones deterministically.
-	writeSSEEvent(w, "start", map[string]string{
-		"userMessageId":      userMessageID,
-		"assistantMessageId": assistantMessageID,
-	})
-	flusher.Flush()
-
 	// Accumulate partial output locally so an error or client disconnect can
 	// still persist whatever was generated so far.
-	var partialText, partialReasoning strings.Builder
+	var (
+		partialText, partialReasoning strings.Builder
+		streamStarted                 bool
+	)
 
 	streamResult, err := provider.ChatStream(r.Context(), ai.ChatRequest{
 		Model:    resolvedModel,
 		Messages: req.Messages,
 		System:   systemPrompt,
 	}, func(chunk ai.StreamChunk) {
+		// Send the start event only when the first chunk actually arrives
+		// from the provider, so the frontend doesn't create an empty
+		// assistant message before the model starts generating.
+		if !streamStarted {
+			writeSSEEvent(w, "start", map[string]string{
+				"userMessageId":      userMessageID,
+				"assistantMessageId": assistantMessageID,
+			})
+			flusher.Flush()
+			streamStarted = true
+		}
+
 		switch chunk.Kind {
 		case ai.StreamChunkReasoning:
 			partialReasoning.WriteString(chunk.Text)
