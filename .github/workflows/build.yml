@@ -69,7 +69,14 @@ jobs:
         working-directory: frontend
         run: |
           npm install
+          npm audit --audit-level=high
           npm run build
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Go vulnerability check
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Setup Android NDK
         if: matrix.goos == 'android' && matrix.goarch == 'arm'
