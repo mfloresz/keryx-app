@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -32,7 +33,7 @@ func (s *Server) handleSaveChat(w http.ResponseWriter, r *http.Request) {
 
 	saved, err := s.Store.SaveChat(&chat, userID)
 	if err != nil {
-		errorResponse(w, "Failed to save chat: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "Failed to save chat", err)
 		return
 	}
 	jsonResponse(w, saved, http.StatusOK)
@@ -434,7 +435,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		}
 		resolved, err := s.resolveAttachments(userID, m)
 		if err != nil {
-			errorResponse(w, "Failed to load attachments: "+err.Error(), http.StatusBadRequest)
+			errorResponse(w, "Failed to load attachments", http.StatusBadRequest)
 			return
 		}
 		filtered = append(filtered, resolved)
@@ -465,6 +466,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	provider, resolvedModel, err := s.getProviderForModel(req.Model)
 	if err != nil {
+		// getProviderForModel errors are operator-facing configuration issues
+		// (e.g. missing API key), so they're safe and useful to surface.
 		errorResponse(w, "Failed to get provider: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -530,7 +533,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		if strings.TrimSpace(fullText) != "" || fullReasoning != "" {
 			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning)
 		}
-		writeSSEEvent(w, "error", map[string]string{"error": err.Error()})
+		slog.Error("chat stream failed", "error", err, "chat", chatID, "user", userID, "model", req.Model)
+		writeSSEEvent(w, "error", map[string]string{"error": "The model provider returned an error. Please try again."})
 		flusher.Flush()
 		return
 	}

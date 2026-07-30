@@ -5,3 +5,6 @@ node_modules
 *.test
 *.out
 .DS_Store
+.env
+.env.*
+!.env.example

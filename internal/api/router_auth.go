@@ -61,6 +61,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, result, http.StatusOK)
 }
 
+// handleSetupStatus reports whether the instance has no users yet, i.e. the
+// first-run setup screen should be shown. Public but rate-limited like
+// login; it only reveals a boolean an attacker could infer anyway.
+func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	count, err := s.Store.CountUsers()
+	if err != nil {
+		internalError(w, r, "Failed to check setup status", err)
+		return
+	}
+	jsonResponse(w, map[string]bool{"needsSetup": count == 0}, http.StatusOK)
+}
+
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 	if err := readJSONBody(r, &req); err != nil {
@@ -79,6 +91,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	// Registration is invite-only. Only the very first user (bootstrap admin)
 	// may register without an invitation; after that, use /api/invitations/accept.
+	// The mutex closes the race where two concurrent first registrations both
+	// observe an empty users table and both become admin.
+	s.bootstrapMu.Lock()
+	defer s.bootstrapMu.Unlock()
+
 	userCount, err := s.Store.CountUsers()
 	if err != nil {
 		errorResponse(w, "Failed to check users", http.StatusInternalServerError)
@@ -102,7 +119,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.Store.CreateUser(req.Email, req.Password, req.Name)
 	if err != nil {
-		errorResponse(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "Failed to create user", err)
 		return
 	}
 
@@ -385,7 +402,7 @@ func (s *Server) handleInvitationAccept(w http.ResponseWriter, r *http.Request) 
 
 	result, err := s.Store.CreateUser(invitation.Email, req.Password, "")
 	if err != nil {
-		errorResponse(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "Failed to create user", err)
 		return
 	}
 

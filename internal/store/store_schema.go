@@ -221,32 +221,6 @@ func (s *Store) seedModels() error {
 	return nil
 }
 
-func (s *Store) seedInitialAdmin() error {
-	count, err := s.CountUsers()
-	if err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
-
-	users, err := s.App.FindCollectionByNameOrId(UsersCollection)
-	if err != nil {
-		return err
-	}
-	record := core.NewRecord(users)
-	record.SetEmail("admin@keryx.app")
-	record.SetPassword("admin123")
-	record.SetVerified(true)
-	record.Set("name", "Admin")
-	record.Set("role", RoleAdmin)
-	record.Set("theme", "system")
-	if err := s.App.Save(record); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (s *Store) ensureProviderKeysCollection() error {
 	if _, err := s.App.FindCollectionByNameOrId(ProviderKeysCollection); err == nil {
 		return nil

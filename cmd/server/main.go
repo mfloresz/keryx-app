@@ -51,6 +51,7 @@ func main() {
 	handler := server.Handler()
 
 	slog.Info("keryx-server listening", "addr", cfg.Addr, "dataDir", cfg.DataDir)
+	slog.Warn("serving plain HTTP; terminate TLS at a reverse proxy (Caddy, nginx, cloud LB) before exposing this server", "addr", cfg.Addr)
 	if err := http.ListenAndServe(cfg.Addr, handler); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)

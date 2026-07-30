@@ -57,6 +57,17 @@ export const apiAuthAdapter: AuthAdapter = {
     return null;
   },
 
+  async getSetupStatus() {
+    try {
+      const response = await fetch("/api/auth/setup-status");
+      if (!response.ok) return false;
+      const payload = await response.json().catch(() => null);
+      return payload?.needsSetup === true;
+    } catch {
+      return false;
+    }
+  },
+
   async login(email, password) {
     const response = await fetch("/api/auth/login", {
       method: "POST",
@@ -70,6 +81,31 @@ export const apiAuthAdapter: AuthAdapter = {
         typeof payload?.message === "string"
           ? payload.message
           : "Unable to sign in";
+      throw new Error(message);
+    }
+
+    const session = userFromPayload(payload.user);
+
+    const verifiedSession = await fetchAppSession();
+    const finalSession = verifiedSession ?? session;
+    cachedSession = finalSession;
+    cachedSessionAt = Date.now();
+    return finalSession;
+  },
+
+  async register(email, password, name) {
+    const response = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password, name: name ?? "" }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload) {
+      const message =
+        typeof payload?.message === "string"
+          ? payload.message
+          : "Unable to create account";
       throw new Error(message);
     }
 

@@ -6,9 +6,9 @@ import (
 )
 
 // authCookieName holds the session token. HttpOnly so JS can't read it,
-// SameSite=Lax so cross-site POSTs (CSRF) don't carry it. The Bearer
-// Authorization header remains supported as a fallback for non-browser
-// clients.
+// SameSite=Strict so the cookie is never sent cross-site (CSRF protection).
+// The Bearer Authorization header remains supported as a fallback for
+// non-browser clients.
 const authCookieName = "keryx_session"
 
 // authCookieMaxAge mirrors PocketBase's default auth token lifetime (~7 days).
@@ -25,7 +25,7 @@ func setAuthCookie(w http.ResponseWriter, r *http.Request, token string) {
 		MaxAge:   authCookieMaxAge,
 		HttpOnly: true,
 		Secure:   isSecureRequest(r),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 
@@ -38,7 +38,7 @@ func clearAuthCookie(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   isSecureRequest(r),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	})
 }
 
