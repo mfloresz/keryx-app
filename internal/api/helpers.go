@@ -42,8 +42,8 @@ func internalError(w http.ResponseWriter, r *http.Request, message string, err e
 
 func getBearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer ") {
-		return strings.TrimPrefix(auth, "Bearer ")
+	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
+		return after
 	}
 	// Fall back to the HttpOnly session cookie (set by login/register).
 	if c, err := r.Cookie(authCookieName); err == nil {

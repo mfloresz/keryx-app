@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"strings"
 	"time"
@@ -726,9 +727,7 @@ func (s *Server) resolveAttachments(userID string, m ai.ChatMessage) (ai.ChatMes
 // once.
 func writeSSEEvent(w http.ResponseWriter, event string, extra map[string]string) {
 	payload := map[string]string{"type": event}
-	for k, v := range extra {
-		payload[k] = v
-	}
+	maps.Copy(payload, extra)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return
