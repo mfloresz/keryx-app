@@ -5,30 +5,28 @@ import { getAuthAdapter } from "@/services/runtime";
 const ALLOWED_MODELS_CACHE_TTL_MS = 60_000;
 
 let allowedModelsCache: {
-  token: string | null;
+  userId: string | null;
   models: ChatModel[];
   cachedAt: number;
 } | null = null;
-let allowedModelsRequest: { token: string; promise: Promise<ChatModel[]> } | null = null;
+let allowedModelsRequest: { userId: string; promise: Promise<ChatModel[]> } | null = null;
 
 async function fetchAllowedModels(): Promise<ChatModel[]> {
   const auth = await getAuthAdapter();
   const session = await auth.getSession();
-  const token = session?.accessToken ?? null;
-  if (!token) return [];
+  const userId = session?.user?.id ?? null;
+  if (!userId) return [];
 
   const now = Date.now();
-  if (allowedModelsCache?.token === token && now - allowedModelsCache.cachedAt < ALLOWED_MODELS_CACHE_TTL_MS) {
+  if (allowedModelsCache?.userId === userId && now - allowedModelsCache.cachedAt < ALLOWED_MODELS_CACHE_TTL_MS) {
     return [...allowedModelsCache.models];
   }
-  if (allowedModelsRequest?.token === token) {
+  if (allowedModelsRequest?.userId === userId) {
     return allowedModelsRequest.promise;
   }
 
   const promise = (async () => {
-    const response = await fetch("/api/models/allowed", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await fetch("/api/models/allowed");
     if (!response.ok) return [];
 
     const payload = (await response.json()) as Array<{
@@ -46,10 +44,10 @@ async function fetchAllowedModels(): Promise<ChatModel[]> {
     }));
   })();
 
-  allowedModelsRequest = { token, promise };
+  allowedModelsRequest = { userId, promise };
   try {
     const models = await promise;
-    allowedModelsCache = { token, models, cachedAt: Date.now() };
+    allowedModelsCache = { userId, models, cachedAt: Date.now() };
     return [...models];
   } finally {
     if (allowedModelsRequest?.promise === promise) allowedModelsRequest = null;

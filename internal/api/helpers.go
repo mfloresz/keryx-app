@@ -29,10 +29,14 @@ func readJSONBody(r *http.Request, v any) error {
 
 func getBearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, "Bearer ") {
-		return ""
+	if strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimPrefix(auth, "Bearer ")
 	}
-	return strings.TrimPrefix(auth, "Bearer ")
+	// Fall back to the HttpOnly session cookie (set by login/register).
+	if c, err := r.Cookie(authCookieName); err == nil {
+		return c.Value
+	}
+	return ""
 }
 
 // getUser extracts authenticated user ID from request context.

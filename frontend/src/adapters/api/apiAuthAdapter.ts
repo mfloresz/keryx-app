@@ -1,45 +1,34 @@
 import type { AuthAdapter } from "@/domain/auth/ports";
 import type { AuthSession } from "@/domain/auth/types";
 
-const ACCESS_TOKEN_KEY = "keryx-access-token";
 const SESSION_CACHE_TTL_MS = 30_000;
 
 let cachedSession: AuthSession | null = null;
-let cachedSessionToken: string | null = null;
 let cachedSessionAt = 0;
 
-function getLocalStorage(): Storage | null {
-  return typeof localStorage === "undefined" ? null : localStorage;
-}
-
 function clearStoredSession(): void {
-  const storage = getLocalStorage();
-  storage?.removeItem(ACCESS_TOKEN_KEY);
   cachedSession = null;
-  cachedSessionToken = null;
   cachedSessionAt = 0;
 }
 
-function readStoredToken(): string | null {
-  return getLocalStorage()?.getItem(ACCESS_TOKEN_KEY) ?? null;
-}
-
-async function fetchAppSession(accessToken: string): Promise<AuthSession | null> {
+// The session lives in an HttpOnly cookie (keryx_session) set by the server
+// on login/register. Fetch defaults to credentials: "same-origin", so the
+// browser attaches it automatically to our same-origin API calls and no JS
+// can read the token.
+async function fetchAppSession(): Promise<AuthSession | null> {
   try {
-    const response = await fetch("/api/auth/me", {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    const response = await fetch("/api/auth/me");
     if (!response.ok) return null;
     const payload = await response.json();
-    return userFromPayload(payload, accessToken);
+    return userFromPayload(payload);
   } catch {
     return null;
   }
 }
 
-function userFromPayload(payload: any, accessToken?: string): AuthSession {
+function userFromPayload(payload: any): AuthSession {
   return {
-    accessToken,
+    accessToken: null,
     user: {
       id: String(payload.id ?? payload.user?.id ?? ""),
       email: typeof payload.email === "string" ? payload.email : (payload.user?.email ?? null),
@@ -52,18 +41,14 @@ function userFromPayload(payload: any, accessToken?: string): AuthSession {
 
 export const apiAuthAdapter: AuthAdapter = {
   async getSession() {
-    const token = readStoredToken();
-    if (!token) return null;
-
     const now = Date.now();
-    if (cachedSessionToken === token && now - cachedSessionAt < SESSION_CACHE_TTL_MS) {
+    if (cachedSession && now - cachedSessionAt < SESSION_CACHE_TTL_MS) {
       return cachedSession;
     }
 
-    const session = await fetchAppSession(token);
+    const session = await fetchAppSession();
     if (session) {
       cachedSession = session;
-      cachedSessionToken = token;
       cachedSessionAt = Date.now();
       return session;
     }
@@ -80,7 +65,7 @@ export const apiAuthAdapter: AuthAdapter = {
     });
 
     const payload = await response.json().catch(() => null);
-    if (!response.ok || !payload?.token) {
+    if (!response.ok || !payload) {
       const message =
         typeof payload?.message === "string"
           ? payload.message
@@ -88,36 +73,30 @@ export const apiAuthAdapter: AuthAdapter = {
       throw new Error(message);
     }
 
-    const storage = getLocalStorage();
-    storage?.setItem(ACCESS_TOKEN_KEY, payload.token);
+    const session = userFromPayload(payload.user);
 
-    const session = userFromPayload(payload.user, payload.token);
-
-    const verifiedSession = await fetchAppSession(payload.token);
+    const verifiedSession = await fetchAppSession();
     const finalSession = verifiedSession ?? session;
     cachedSession = finalSession;
-    cachedSessionToken = payload.token;
     cachedSessionAt = Date.now();
     return finalSession;
   },
 
   async logout() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // Best effort: clear local state even if the request fails.
+    }
     clearStoredSession();
   },
 
   async getAuthorizationHeaders() {
-    const token = readStoredToken();
-    const headers: Record<string, string> = {};
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-    return headers;
+    // Authentication is cookie-based; no Authorization header needed.
+    return {};
   },
 
   async updateProfile(data) {
-    const token = readStoredToken();
-    if (!token) throw new Error("Not authenticated");
-
     const formData = new FormData();
     if (data.name !== undefined) {
       formData.append("name", data.name);
@@ -131,7 +110,6 @@ export const apiAuthAdapter: AuthAdapter = {
 
     const response = await fetch("/api/auth/profile", {
       method: "PATCH",
-      headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
 
@@ -141,23 +119,16 @@ export const apiAuthAdapter: AuthAdapter = {
     }
 
     const payload = await response.json();
-    const session = userFromPayload(payload, token);
+    const session = userFromPayload(payload);
     cachedSession = session;
-    cachedSessionToken = token;
     cachedSessionAt = Date.now();
     return session;
   },
 
   async changePassword(currentPassword, newPassword) {
-    const token = readStoredToken();
-    if (!token) throw new Error("Not authenticated");
-
     const response = await fetch("/api/auth/password", {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ currentPassword, newPassword }),
     });
 

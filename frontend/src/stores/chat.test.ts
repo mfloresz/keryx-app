@@ -10,6 +10,7 @@ describe("chat store", () => {
 
   it("fetchChats carga y transforma los chats desde /api/chats", async () => {
     const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
       json: async () => [
         {
           id: "1",
@@ -26,7 +27,12 @@ describe("chat store", () => {
     const store = useChatStore();
     await store.fetchChats();
 
-    expect(mockFetch).toHaveBeenCalledWith("/api/chats");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/chats",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "content-type": "application/json" }),
+      }),
+    );
     expect(store.chats).toHaveLength(1);
     expect(store.chats[0]).toEqual({
       id: "1",
@@ -93,7 +99,10 @@ describe("chat store", () => {
   });
 
   it("deleteAllChats limpia el estado tras llamar al API", async () => {
-    const mockFetch = vi.fn().mockResolvedValueOnce({ ok: true });
+    const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({}),
+    });
     globalThis.fetch = mockFetch;
 
     const store = useChatStore();
@@ -102,7 +111,10 @@ describe("chat store", () => {
     ];
     await store.deleteAllChats();
 
-    expect(mockFetch).toHaveBeenCalledWith("/api/chats", { method: "DELETE" });
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/chats",
+      expect.objectContaining({ method: "DELETE" }),
+    );
     expect(store.chats).toHaveLength(0);
   });
 });

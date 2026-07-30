@@ -28,13 +28,26 @@ type Server struct {
 	// handlers (stream persist, votes, message edits) can't clobber each
 	// other's changes.
 	chatLocks sync.Map
+
+	// invitationMu serializes invitation acceptance so two concurrent requests
+	// can't consume the same invitation (check-then-use race).
+	invitationMu sync.Mutex
+
+	// Rate limiters for public/sensitive endpoints. Behind a tunnel the real
+	// client IP comes from proxy headers (see clientIP).
+	loginLimiter      *rateLimiter
+	invitationLimiter *rateLimiter
+	streamLimiter     *rateLimiter
 }
 
 func New(st *store.Store, cfg *config.Config) *Server {
 	return &Server{
-		Store:       st,
-		Cfg:         cfg,
-		AIProviders: make(map[string]ai.Provider),
+		Store:             st,
+		Cfg:               cfg,
+		AIProviders:       make(map[string]ai.Provider),
+		loginLimiter:      newRateLimiter(5),  // 5 login attempts/min per IP
+		invitationLimiter: newRateLimiter(10), // 10 invitation ops/min per IP
+		streamLimiter:     newRateLimiter(10), // 10 stream starts/min per user
 	}
 }
 
@@ -55,16 +68,17 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	// Public auth routes
-	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	mux.HandleFunc("POST /api/auth/register", s.handleRegister)
+	mux.HandleFunc("POST /api/auth/login", s.withRateLimit(s.loginLimiter, clientIP, s.handleLogin))
+	mux.HandleFunc("POST /api/auth/register", s.withRateLimit(s.invitationLimiter, clientIP, s.handleRegister))
 	mux.HandleFunc("GET /api/auth/me", s.withAuth(s.handleAuthMe))
+	mux.HandleFunc("POST /api/auth/logout", s.handleLogout)
 	mux.HandleFunc("PATCH /api/auth/profile", s.withAuth(s.handleUpdateProfile))
 	mux.HandleFunc("POST /api/auth/password", s.withAuth(s.handleChangePassword))
 	mux.HandleFunc("GET /api/auth/avatar/{id}", s.handleGetAvatar)
 
 	// Invitation routes (some public, some admin)
-	mux.HandleFunc("POST /api/invitations/validate", s.handleInvitationValidate)
-	mux.HandleFunc("POST /api/invitations/accept", s.handleInvitationAccept)
+	mux.HandleFunc("POST /api/invitations/validate", s.withRateLimit(s.invitationLimiter, clientIP, s.handleInvitationValidate))
+	mux.HandleFunc("POST /api/invitations/accept", s.withRateLimit(s.invitationLimiter, clientIP, s.handleInvitationAccept))
 
 	// Protected chat routes
 	mux.HandleFunc("GET /api/chats", s.withAuth(s.handleListChats))
@@ -81,7 +95,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/chats/{id}/branches", s.withAuth(s.handleSwitchBranch))
 	mux.HandleFunc("GET /api/chats/{id}/votes", s.withAuth(s.handleGetVotes))
 	mux.HandleFunc("POST /api/chats/{id}/votes", s.withAuth(s.handleSaveVote))
-	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.handleChatStream))
+	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.withRateLimit(s.streamLimiter, userKey, s.handleChatStream)))
 	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
 
@@ -165,6 +179,14 @@ func userIDFromContext(r *http.Request) (string, bool) {
 func userRoleFromContext(r *http.Request) (string, bool) {
 	role, ok := r.Context().Value(contextKeyUserRole).(string)
 	return role, ok
+}
+
+// userKey keys rate limiters by authenticated user ID, falling back to IP.
+func userKey(r *http.Request) string {
+	if id, ok := userIDFromContext(r); ok && id != "" {
+		return "user:" + id
+	}
+	return "ip:" + clientIP(r)
 }
 
 // getProviderForModel returns the appropriate AI provider and upstream model

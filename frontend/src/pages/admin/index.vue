@@ -352,8 +352,22 @@ async function handleCreateInvitation(): Promise<void> {
 async function handleCopyInvitationUrl(): Promise<void> {
   if (!createdInvitationUrl.value) return;
 
+  const text = createdInvitationUrl.value;
   try {
-    await navigator.clipboard.writeText(createdInvitationUrl.value);
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      // Fallback for non-secure contexts where the Clipboard API is unavailable
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (!copied) throw new Error("copy command failed");
+    }
     toast(t("message.copied"), "success");
   } catch {
     toast(t("admin.invitations.copyError"));

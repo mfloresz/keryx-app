@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getAuthAdapter } from "@/services/runtime";
+import { useAuthStore } from "@/stores/auth";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const auth = await getAuthAdapter();
+const authStore = useAuthStore();
 
 const token = computed(() => String(route.params.token || ""));
 const invitation = ref<null | {
@@ -166,7 +168,8 @@ async function handleAccept() {
     }
 
     if (invitation.value?.email) {
-      await auth.login(invitation.value.email, password.value);
+      const session = await auth.login(invitation.value.email, password.value);
+      authStore.setSession(session);
     }
     success.value = t("auth.invite.success");
     await router.push("/");
