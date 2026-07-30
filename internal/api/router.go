@@ -212,10 +212,6 @@ func userIDFromContext(r *http.Request) (string, bool) {
 	return id, ok
 }
 
-func userRoleFromContext(r *http.Request) (string, bool) {
-	role, ok := r.Context().Value(contextKeyUserRole).(string)
-	return role, ok
-}
 
 // userKey keys rate limiters by authenticated user ID, falling back to IP.
 func userKey(r *http.Request) string {
