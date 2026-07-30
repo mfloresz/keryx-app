@@ -141,9 +141,12 @@
     "contextCache": "Cache",
     "inputPlaceholder": "What would you like to know?",
     "search": "Search",
-    "searchModels": "Search models...",
-    "noModels": "No models found.",
-    "models": "Models",
+    "presetFast": "Fast",
+    "presetReflect": "Reflect",
+    "presetExtended": "Extended Thinking",
+    "presetFastDesc": "Get quick answers",
+    "presetReflectDesc": "For daily tasks",
+    "presetExtendedDesc": "For complete tasks",
     "failedCreate": "Failed to create chat. Please check your API key in Settings.",
     "failedRename": "Failed to rename chat",
     "failedDelete": "Failed to delete chat",
@@ -297,6 +300,15 @@
 	      "saving": "Saving…",
 	      "saveSuccess": "Title generation policy saved",
 	      "saveError": "Unable to save title generation policy"
+	    },
+	    "modelPresets": {
+	      "title": "Model Presets",
+	      "description": "Set which real model is used for each user-facing mode.",
+	      "modelPlaceholder": "Select a model…",
+	      "saveButton": "Save",
+	      "saving": "Saving…",
+	      "saveSuccess": "Model presets saved",
+	      "saveError": "Unable to save model presets"
 	    }
 	  },
   "auth": {

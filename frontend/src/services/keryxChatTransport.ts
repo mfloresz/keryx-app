@@ -53,7 +53,8 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
 
     const body = (options.body as Record<string, unknown>) ?? {};
     const model = body.model as string | undefined;
-    if (!model) {
+    const preset = body.preset as string | undefined;
+    if (!model && !preset) {
       throw new Error('No model selected');
     }
 
@@ -108,6 +109,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
       headers: mergedHeaders,
       body: JSON.stringify({
         model,
+        preset,
         messages,
         system: (body.system as string) ?? '',
         webSearch: Boolean(body.webSearch),

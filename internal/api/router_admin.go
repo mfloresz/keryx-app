@@ -360,3 +360,58 @@ func (s *Server) handleAdminSetTitleGenerationPolicy(w http.ResponseWriter, r *h
 
 	jsonResponse(w, policy, http.StatusOK)
 }
+
+type adminModelPresetResponse struct {
+	PresetID string `json:"presetId"`
+	ModelID  string `json:"modelId"`
+	Label    string `json:"label"`
+}
+
+func (s *Server) handleAdminListModelPresets(w http.ResponseWriter, r *http.Request) {
+	presets, err := s.Store.GetModelPresets()
+	if err != nil {
+		errorResponse(w, "Failed to get model presets", http.StatusInternalServerError)
+		return
+	}
+
+	out := make([]adminModelPresetResponse, 0, len(presets))
+	for _, p := range presets {
+		out = append(out, adminModelPresetResponse{
+			PresetID: p.PresetID,
+			ModelID:  p.ModelID,
+			Label:    p.Label,
+		})
+	}
+
+	catalog := store.GetCatalogModels()
+
+	jsonResponse(w, map[string]any{
+		"presets": out,
+		"catalog": catalog,
+	}, http.StatusOK)
+}
+
+func (s *Server) handleAdminUpdateModelPreset(w http.ResponseWriter, r *http.Request) {
+	presetID := r.PathValue("preset")
+
+	var req struct {
+		ModelID string `json:"modelId"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.ModelID == "" {
+		errorResponse(w, "Model ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.Store.SetModelPreset(presetID, req.ModelID); err != nil {
+		errorResponse(w, "Failed to update model preset", http.StatusInternalServerError)
+		return
+	}
+	auditLog(r, "model_preset.update", presetID, "modelId", req.ModelID)
+
+	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
+}

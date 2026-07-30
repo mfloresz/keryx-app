@@ -1,24 +1,69 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useAuthStore } from '@/stores/auth'
-import { useModels } from '@/composables/useModels'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
 import { getChatRepository } from '@/services/runtime'
 import { randomUUID } from '@/shared/uuid'
 import ChatInput from '@/components/chat/ChatInput.vue'
+import type { ModelPreset } from '@/components/chat/ChatInput.vue'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const router = useRouter()
 const { t } = useI18n()
 const chatStore = useChatStore()
-const { model } = useModels()
 const { toast } = useToast()
+
+const selectedPreset = ref('fast')
+const presets = ref<ModelPreset[]>([])
+
+function buildFallbackPresets() {
+  return [
+    {
+      preset: 'fast',
+      label: t('chat.presetFast'),
+      description: t('chat.presetFastDesc'),
+      supportsImages: true,
+      supportsSearch: false,
+    },
+    {
+      preset: 'reflect',
+      label: t('chat.presetReflect'),
+      description: t('chat.presetReflectDesc'),
+      supportsImages: false,
+      supportsSearch: false,
+    },
+    {
+      preset: 'extended_context',
+      label: t('chat.presetExtended'),
+      description: t('chat.presetExtendedDesc'),
+      supportsImages: false,
+      supportsSearch: false,
+    },
+  ] satisfies ModelPreset[]
+}
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/models/presets')
+    if (res.ok) {
+      presets.value = await res.json()
+      if (!presets.value.length) {
+        presets.value = buildFallbackPresets()
+      }
+      return
+    }
+  } catch {
+    // fall through to fallback
+  }
+
+  presets.value = buildFallbackPresets()
+})
 const chatRepository = await getChatRepository()
 
 const isSubmitting = ref(false)
@@ -70,7 +115,10 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
       createdAt: baseChat.createdAt,
     })
 
-    router.push(`/chat/${chatId}`)
+    router.push({
+      path: `/chat/${chatId}`,
+      query: { preset: selectedPreset.value },
+    })
   } catch (error: any) {
     if (import.meta.env.DEV) console.error('Failed to create chat:', error)
     toast(getUserFacingChatError(error?.message, t))
@@ -93,9 +141,10 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
 
         <ChatInput
           :status="isSubmitting ? 'submitted' : 'ready'"
-          :model="model"
+          :preset="selectedPreset"
+          :presets="presets"
           @submit="handleSubmit"
-          @update:model="model = $event"
+          @update:preset="selectedPreset = $event"
         />
       </div>
     </div>

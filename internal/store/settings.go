@@ -16,6 +16,7 @@ const (
 	AttachmentsCollection            = "attachments"
 	ProviderKeysCollection           = "provider_keys"
 	TitleGenerationPolicyCollection  = "title_generation_policy"
+		ModelPresetsCollection            = "model_presets"
 )
 
 // User roles
@@ -133,6 +134,13 @@ type AttachmentRecord struct {
 	Size      int64  `json:"size"`
 	File      string `json:"file"`
 	CreatedAt string `json:"createdAt"`
+}
+
+// ModelPreset defines which model is used for a user-facing preset mode (fast, reflect, extended_context).
+type ModelPreset struct {
+	PresetID string `json:"presetId"`
+	ModelID  string `json:"modelId"`
+	Label    string `json:"label"`
 }
 
 // Model catalog definitions

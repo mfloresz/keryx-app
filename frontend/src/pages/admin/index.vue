@@ -76,6 +76,12 @@ interface TitleGenerationPolicy {
   modelId: string;
 }
 
+interface AdminModelPreset {
+  presetId: string;
+  modelId: string;
+  label: string;
+}
+
 const { t } = useI18n();
 const { toast } = useToast();
 const auth = await getAuthAdapter();
@@ -113,6 +119,10 @@ const titleGenPolicy = ref<TitleGenerationPolicy>({ mode: "chat_model", modelId:
 const originalTitleGenPolicy = ref<TitleGenerationPolicy>({ mode: "chat_model", modelId: "" });
 const isSavingTitleGen = ref(false);
 
+// Model preset state
+const modelPresets = ref<AdminModelPreset[]>([]);
+const isSavingModelPresets = ref(false);
+
 const adminCount = computed(
   () => users.value.filter((user) => user.role === "admin").length,
 );
@@ -144,19 +154,21 @@ async function loadData(): Promise<void> {
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
-	    const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse, titleGenResponse] = await Promise.all([
+	    const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse, titleGenResponse, modelPresetsResponse] = await Promise.all([
 	      apiFetch("/api/admin/users", { signal: controller.signal }),
 	      apiFetch("/api/admin/invitations", { signal: controller.signal }),
 	      apiFetch("/api/admin/models", { signal: controller.signal }),
 	      apiFetch("/api/admin/provider-keys", { signal: controller.signal }),
 	      apiFetch("/api/admin/title-generation-policy", { signal: controller.signal }),
+	      apiFetch("/api/admin/model-presets", { signal: controller.signal }),
 	    ]);
-
+		
 	    await assertOk(usersResponse, t("admin.shared.loadError"));
 	    await assertOk(invitationsResponse, t("admin.shared.loadError"));
 	    await assertOk(modelsResponse, t("admin.shared.loadError"));
 	    await assertOk(providerKeysResponse, t("admin.shared.loadError"));
 	    await assertOk(titleGenResponse, t("admin.shared.loadError"));
+	    await assertOk(modelPresetsResponse, t("admin.shared.loadError"));
 
 	    users.value = (await readPayload<AdminUser[]>(usersResponse)) ?? [];
 	    invitations.value =
@@ -170,6 +182,15 @@ async function loadData(): Promise<void> {
 	      titleGenPolicy.value = { ...titleGenData.policy };
 	      originalTitleGenPolicy.value = { ...titleGenData.policy };
 	      catalog.value = titleGenData.catalog ?? [];
+	    }
+
+	    const modelPresetsData = await readPayload<{ presets: AdminModelPreset[]; catalog: CatalogModel[] }>(modelPresetsResponse);
+	    if (modelPresetsData) {
+	      modelPresets.value = modelPresetsData.presets.map(p => ({ ...p }));
+	      // Merge catalog if title gen didn't already populate it
+	      if (modelPresetsData.catalog && catalog.value.length === 0) {
+	        catalog.value = modelPresetsData.catalog;
+	      }
 	    }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -283,6 +304,35 @@ async function handleSaveTitleGenPolicy(): Promise<void> {
     toast(error instanceof Error ? error.message : t("admin.titleGeneration.saveError"));
   } finally {
     isSavingTitleGen.value = false;
+  }
+}
+
+// ---- Model preset handlers ----
+
+function handleModelPresetChange(presetId: string, modelId: string) {
+  const idx = modelPresets.value.findIndex(p => p.presetId === presetId);
+  if (idx !== -1 && modelPresets.value[idx]) {
+    (modelPresets.value[idx] as AdminModelPreset).modelId = modelId;
+  }
+}
+
+async function handleSaveModelPresets(): Promise<void> {
+  if (isSavingModelPresets.value) return;
+
+  isSavingModelPresets.value = true;
+  try {
+    for (const preset of modelPresets.value) {
+      const response = await apiFetch(`/api/admin/model-presets/${encodeURIComponent(preset.presetId)}`, {
+        method: "PUT",
+        body: JSON.stringify({ modelId: preset.modelId }),
+      });
+      await assertOk(response, t("admin.modelPresets.saveError"));
+    }
+    toast(t("admin.modelPresets.saveSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.modelPresets.saveError"));
+  } finally {
+    isSavingModelPresets.value = false;
   }
 }
 
@@ -783,10 +833,52 @@ onMounted(() => {
             </Table>
           </div>
         </CardContent>
-      </Card>
-    </div>
+	      </Card>
 
-    <Dialog v-model:open="isInviteDialogOpen">
+	      <Separator />
+
+	      <Card>
+	        <CardHeader>
+	          <CardTitle>{{ t('admin.modelPresets.title') }}</CardTitle>
+	          <p class="text-sm text-muted-foreground">
+	            {{ t('admin.modelPresets.description') }}
+	          </p>
+	        </CardHeader>
+	        <CardContent class="space-y-4">
+	          <div v-for="preset in modelPresets" :key="preset.presetId" class="flex items-center gap-4">
+	            <Label class="w-40 shrink-0 text-sm font-medium">{{ preset.label }}</Label>
+	            <Select
+	              :model-value="preset.modelId"
+	              @update:model-value="(event: any) => handleModelPresetChange(preset.presetId, String(event))"
+	            >
+	              <SelectTrigger class="w-full">
+	                <SelectValue :placeholder="t('admin.modelPresets.modelPlaceholder')" />
+	              </SelectTrigger>
+	              <SelectContent>
+	                <SelectItem
+	                  v-for="m in catalog"
+	                  :key="m.id"
+	                  :value="m.id"
+	                >
+	                  {{ m.displayName }}
+	                  <span class="text-muted-foreground">&middot; {{ m.provider }}</span>
+	                </SelectItem>
+	              </SelectContent>
+	            </Select>
+	          </div>
+	          <div class="flex justify-end">
+	            <Button
+	              :disabled="isSavingModelPresets"
+	              @click="handleSaveModelPresets"
+	            >
+	              {{ isSavingModelPresets ? t('admin.modelPresets.saving') : t('admin.modelPresets.saveButton') }}
+	            </Button>
+	          </div>
+	        </CardContent>
+	      </Card>
+	    </div>
+	
+	    <Dialog v-model:open="isInviteDialogOpen">
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{{ t('admin.invitations.createTitle') }}</DialogTitle>

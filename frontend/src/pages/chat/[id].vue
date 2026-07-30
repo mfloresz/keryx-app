@@ -6,9 +6,7 @@ import { Chat } from '@ai-sdk/vue'
 import type { UIMessage, ChatStatus } from 'ai'
 import { useChatStore } from '@/stores/chat'
 import type { ChatRecord } from '@/domain/chat/types'
-import { useModels } from '@/composables/useModels'
 import { useToast } from '@/composables/useToast'
-import { getModelContextWindow } from '@/shared/utils/models'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
 import { getChatRepository } from '@/services/runtime'
@@ -16,6 +14,7 @@ import { KeryxChatTransport } from '@/services/keryxChatTransport'
 import { getChatStreamApi, getChatTransportHeaders } from '@/services/chatTransport'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
+import type { ModelPreset } from '@/components/chat/ChatInput.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -33,7 +32,6 @@ import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types
 const route = useRoute()
 const { t, locale } = useI18n()
 const chatStore = useChatStore()
-const { model, models } = useModels()
 const { toast } = useToast()
 const chatRepository = await getChatRepository()
 
@@ -56,18 +54,47 @@ const chatTitle = computed(() => {
   return storeChat?.label || chatData.value?.title || 'Untitled'
 })
 
+// Presets state
+const selectedPreset = ref(
+  typeof route.query.preset === 'string' && route.query.preset
+    ? route.query.preset
+    : 'fast',
+)
+const presets = ref<ModelPreset[]>([])
+
+function buildFallbackPresets(): ModelPreset[] {
+  return [
+    {
+      preset: 'fast',
+      label: t('chat.presetFast'),
+      description: t('chat.presetFastDesc'),
+      supportsImages: true,
+      supportsSearch: false,
+    },
+    {
+      preset: 'reflect',
+      label: t('chat.presetReflect'),
+      description: t('chat.presetReflectDesc'),
+      supportsImages: false,
+      supportsSearch: false,
+    },
+    {
+      preset: 'extended_context',
+      label: t('chat.presetExtended'),
+      description: t('chat.presetExtendedDesc'),
+      supportsImages: false,
+      supportsSearch: false,
+    },
+  ]
+}
+
 const contextUsage = computed(() => chatData.value?.lastUsage)
-const currentModelId = computed(() => model.value)
-const maxContextTokens = computed(() => getModelContextWindow(models.value, currentModelId.value) ?? 0)
 const usedTokens = computed(() => {
   const usage = contextUsage.value
   if (!usage) return 0
   return usage.totalTokens ?? ((usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) + (usage.reasoningTokens ?? 0))
 })
 const formattedContextUsage = computed(() => {
-  if (maxContextTokens.value > 0) {
-    return `${compactNumberFormatter.format(usedTokens.value)} / ${compactNumberFormatter.format(maxContextTokens.value)}`
-  }
   if (usedTokens.value <= 0) return t('chat.context')
   return compactNumberFormatter.format(usedTokens.value)
 })
@@ -88,7 +115,7 @@ function formatTokenCount(value: number): string {
 
 function buildSearchRequestBody(webSearch: boolean) {
   return {
-    model: model.value,
+    preset: selectedPreset.value,
     webSearch,
     language: locale.value,
   }
@@ -355,7 +382,24 @@ async function handleVote(message: UIMessage, isUpvoted: boolean) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // Fetch presets with capabilities
+  try {
+    const res = await fetch('/api/models/presets')
+    if (res.ok) {
+      presets.value = await res.json()
+      if (!presets.value.length) {
+        presets.value = buildFallbackPresets()
+      }
+    } else {
+      presets.value = buildFallbackPresets()
+    }
+  } catch {
+    presets.value = buildFallbackPresets()
+  }
+})
+
+onMounted(async () => {
   if (chatData.value?.messages?.length === 1 && chatData.value.messages[0]?.role === 'user') {
     chat.regenerate({ body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
   }
@@ -397,7 +441,7 @@ onMounted(() => {
     <!-- Chat header -->
     <div class="border-b px-4 py-3 flex items-center justify-between gap-3 min-w-0">
       <h2 class="font-semibold truncate">{{ chatTitle }}</h2>
-      <Context :used-tokens="usedTokens" :max-tokens="maxContextTokens" :usage="contextUsage" :model-id="currentModelId">
+      <Context :used-tokens="usedTokens" :max-tokens="0" :usage="contextUsage">
         <ContextTrigger>
           <Button type="button" variant="ghost" class="h-auto gap-2 px-2 py-1 text-xs text-muted-foreground">
             <span class="font-medium">{{ formattedContextUsage }}</span>
@@ -409,9 +453,8 @@ onMounted(() => {
             <div class="space-y-1">
               <div class="flex items-center justify-between gap-3 text-xs">
                 <span class="text-muted-foreground">{{ $t('chat.contextUsed') }}</span>
-                <span class="font-mono">{{ formatTokenCount(usedTokens) }}<template v-if="maxContextTokens > 0"> / {{ formatTokenCount(maxContextTokens) }}</template></span>
+                <span class="font-mono">{{ formatTokenCount(usedTokens) }}</span>
               </div>
-              <p v-if="currentModelId" class="text-[11px] text-muted-foreground break-all">{{ currentModelId }}</p>
             </div>
           </ContextContentHeader>
           <ContextContentBody>
@@ -436,7 +479,7 @@ onMounted(() => {
       @branch-change="handleBranchChange" @edit="handleEdit" @regenerate="handleRegenerate" @vote="handleVote" />
 
     <!-- Input -->
-    <ChatInput :status="chat.status" :model="model" :web-search="chatData?.webSearch"
-      @submit="handleSubmit" @update:model="model = $event" @stop="handleStop" />
+    <ChatInput :status="chat.status" :preset="selectedPreset" :presets="presets" :web-search="chatData?.webSearch"
+      @submit="handleSubmit" @update:preset="selectedPreset = $event" @stop="handleStop" />
   </div>
 </template>

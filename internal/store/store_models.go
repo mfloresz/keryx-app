@@ -186,3 +186,53 @@ func (s *Store) AssertModelAllowed(userID, modelID string) error {
 	}
 	return ErrForbidden
 }
+
+func (s *Store) GetModelPresets() ([]ModelPreset, error) {
+	records, err := s.App.FindRecordsByFilter(
+		ModelPresetsCollection,
+		"",
+		"preset_id",
+		10, 0,
+	)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ModelPreset, 0, len(records))
+	for _, r := range records {
+		out = append(out, ModelPreset{
+			PresetID: r.GetString("preset_id"),
+			ModelID:  r.GetString("model_id"),
+			Label:    r.GetString("label"),
+		})
+	}
+	return out, nil
+}
+
+func (s *Store) GetModelPreset(presetID string) (ModelPreset, error) {
+	record, err := s.App.FindFirstRecordByFilter(
+		ModelPresetsCollection,
+		"preset_id = {:pid}",
+		dbx.Params{"pid": presetID},
+	)
+	if err != nil {
+		return ModelPreset{}, ErrNotFound
+	}
+	return ModelPreset{
+		PresetID: record.GetString("preset_id"),
+		ModelID:  record.GetString("model_id"),
+		Label:    record.GetString("label"),
+	}, nil
+}
+
+func (s *Store) SetModelPreset(presetID, modelID string) error {
+	record, err := s.App.FindFirstRecordByFilter(
+		ModelPresetsCollection,
+		"preset_id = {:pid}",
+		dbx.Params{"pid": presetID},
+	)
+	if err != nil {
+		return ErrNotFound
+	}
+	record.Set("model_id", modelID)
+	return s.App.Save(record)
+}

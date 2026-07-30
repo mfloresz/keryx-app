@@ -40,5 +40,12 @@ const forwardedProps = useForwardProps(delegatedProps)
     <SelectItemText>
       <slot />
     </SelectItemText>
+
+    <span
+      v-if="$slots.description"
+      class="mt-0.5 block pl-0 text-xs text-muted-foreground"
+    >
+      <slot name="description" />
+    </span>
   </SelectItem>
 </template>
