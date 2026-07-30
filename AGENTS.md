@@ -14,8 +14,21 @@ When asked "create release vX.Y.Z", the agent should:
 2. **Review changes** — Run `git log --oneline vPREV..HEAD` and `git diff --stat vPREV..HEAD` to understand what changed.
 3. **Stage & commit** — `git add -A` then `git commit -m "chore: prepare release vX.Y.Z"`.
 4. **Tag** — `git tag -a vX.Y.Z -m "Release vX.Y.Z"` (annotated tag only, never lightweight).
-5. **Push** — `git push origin main --tags`.
-6. **Generate changelog** — Write the changelog for the GitHub Release. See `## Changelog` below.
+5. **Validate locally** — Before pushing, run the same checks the CI workflow uses to catch issues early:
+
+   ```bash
+   cd frontend && npm install
+   npm audit --audit-level=high
+   npm run build
+   cd ..
+   go vet ./...
+   go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+   ```
+
+   Fix any failures before proceeding. If `npm audit` reports high-severity issues, run `npm audit fix` in the `frontend/` directory and re-run the checks; commit the resulting `package-lock.json` changes.
+
+6. **Push** — `git push origin main --tags`.
+7. **Generate changelog** — Write the changelog for the GitHub Release. See `## Changelog` below.
 
 ## Changelog
 
