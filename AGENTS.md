@@ -14,18 +14,54 @@ When asked "create release vX.Y.Z", the agent should:
 2. **Review changes** — Run `git log --oneline vPREV..HEAD` and `git diff --stat vPREV..HEAD` to understand what changed.
 3. **Stage & commit** — `git add -A` then `git commit -m "chore: prepare release vX.Y.Z"`.
 4. **Tag** — `git tag -a vX.Y.Z -m "Release vX.Y.Z"` (annotated tag only, never lightweight).
-5. **Validate locally** — Before pushing, run the same checks the CI workflow uses to catch issues early:
+5. **Validate locally** — Run the same checks the CI workflow uses, in order, to catch issues before pushing.
 
+   #### 5a. Frontend
    ```bash
-   cd frontend && npm install
+   cd frontend
+   npm install
    npm audit --audit-level=high
    npm run build
    cd ..
+   ```
+
+   #### 5b. Go — vet & vulnerability scan
+   ```bash
    go vet ./...
    go run golang.org/x/vuln/cmd/govulncheck@latest ./...
    ```
 
-   Fix any failures before proceeding. If `npm audit` reports high-severity issues, run `npm audit fix` in the `frontend/` directory and re-run the checks; commit the resulting `package-lock.json` changes.
+   #### 5c. Go — modernize with `go fix` (Go 1.26)
+   Go 1.26 applies automatic code modernizations (loop variable semantics, slice-to-array conversions, etc.). These are safe, idiomatic transformations that the Go team maintains.
+
+   First, **preview** what would change without modifying files:
+   ```bash
+   go fix -diff ./...
+   ```
+
+   If the output is empty, no modernizations apply — skip step 5d.
+   If the output shows changes, review them briefly and proceed with step 5d to apply them.
+
+   #### 5d. Apply `go fix` changes (if any)
+   ```bash
+   go fix ./...
+   ```
+   Then re-run vet and govulncheck to confirm nothing broke:
+   ```bash
+   go vet ./...
+   go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+   ```
+
+   If `go fix` produced changes, stage and amend the release commit:
+   ```bash
+   git add -A
+   git commit -m "chore: apply go fix modernizations"
+   ```
+
+   #### 5e. Fix guidance
+   - If `npm audit` reports high-severity issues, run `npm audit fix` in the `frontend/` directory and re-run the checks. Commit the resulting `package-lock.json` changes.
+   - If `govulncheck` reports a vulnerability, upgrade the affected module with `go get module@version` and re-run the checks.
+   - Fix all failures before proceeding to step 6. If a fix requires a new commit, commit with a descriptive message and re-tag (delete & recreate).
 
 6. **Push** — `git push origin main --tags`.
 7. **Generate changelog** — Write the changelog for the GitHub Release. See `## Changelog` below.
@@ -43,6 +79,6 @@ Do not create empty sections. Keep entries concise and user-focused. Group relat
 
 Every item must correspond to an actual code change — do not invent release notes.
 
-When generating the changelog, run `git log --oneline vPREV..HEAD` and `git diff vPREV..HEAD --stat` against the previous tag. Reference the previous tag URL at the bottom (e.g. `https://github.com/mfloresz/yara/releases/tag/vPREV`).
+When generating the changelog, run `git log --oneline vPREV..HEAD` and `git diff vPREV..HEAD --stat` against the previous tag. Reference the previous tag URL at the bottom (e.g. `https://github.com/mfloresz/keryx-app/releases/tag/vPREV`).
 
 **The changelog must always be written in English**, even if the user gave instructions in another language. The GitHub Release is public and English is the project's canonical language for release notes.
