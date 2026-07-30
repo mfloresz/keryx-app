@@ -69,10 +69,3 @@ func TestModelCatalogCoversSeeds(t *testing.T) {
 		}
 	}
 }
-
-func TestDefaultProvider(t *testing.T) {
-	dp := DefaultProvider()
-	if dp.ID != "venice" {
-		t.Errorf("DefaultProvider = %q, want %q", dp.ID, "venice")
-	}
-}

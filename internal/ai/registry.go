@@ -143,13 +143,6 @@ func ModelCatalog() []ModelInfo {
 	return out
 }
 
-// DefaultProvider returns the first provider (Venice).
-func DefaultProvider() ProviderInfo {
-	if len(knownProviders) == 0 {
-		return ProviderInfo{}
-	}
-	return knownProviders[0]
-}
 
 // ResolveModel maps a public model ID to its provider and upstream model ID.
 //

@@ -6,8 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"keryx-server/internal/store"
 )
 
 func jsonResponse(w http.ResponseWriter, data any, status int) {
@@ -50,21 +48,4 @@ func getBearerToken(r *http.Request) string {
 		return c.Value
 	}
 	return ""
-}
-
-// getUser extracts authenticated user ID from request context.
-// The PocketBase middleware populates this context.
-func getUser(r *http.Request) (string, string, error) {
-	// PocketBase's auth middleware sets the auth record in the context
-	// This is handled by the router's RequireAuth() binding
-	// We extract it via the request context after PocketBase middleware processes it
-	userID := r.Context().Value("authRecordID")
-	if userID == nil {
-		return "", "", store.ErrForbidden
-	}
-	id, ok := userID.(string)
-	if !ok || id == "" {
-		return "", "", store.ErrForbidden
-	}
-	return id, "", nil
 }

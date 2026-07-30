@@ -44,14 +44,6 @@ func (s *Store) SaveAttachment(chatID, ownerID, filename, mediaType string, data
 	return attachmentInfoFromRecord(record), nil
 }
 
-// GetAttachment returns the metadata of an attachment owned by the user.
-func (s *Store) GetAttachment(attachmentID, ownerID string) (*AttachmentInfo, error) {
-	record, err := s.findOwnedAttachment(attachmentID, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	return attachmentInfoFromRecord(record), nil
-}
 
 // GetAttachmentData returns the metadata and raw bytes of an attachment
 // owned by the user.

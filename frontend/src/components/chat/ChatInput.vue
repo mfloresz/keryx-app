@@ -43,7 +43,7 @@ import {
 import { useModels } from '@/composables/useModels'
 import { useSearchSettings } from '@/composables/useSearchSettings'
 import { GlobeIcon } from 'lucide-vue-next'
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 
 const DOCUMENT_ACCEPT = '.pdf,.txt,.md,.doc,.docx,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.cpp,.go,.rs'
@@ -64,61 +64,9 @@ const selectorOpen = ref(false)
 const useWebSearch = ref(props.webSearch ?? false)
 const unsupportedImageDialogOpen = ref(false)
 
-// Layout switching: single-line keeps buttons/textarea on one row;
-// multiline (or attachments present) stacks textarea over a toolbar row.
-const rootRef = ref<HTMLElement | null>(null)
-const attachmentsRef = ref<HTMLElement | null>(null)
-const isMultiline = ref(false)
-const hasAttachments = ref(false)
-const stacked = computed(() => isMultiline.value || hasAttachments.value)
-
-let resizeObserver: ResizeObserver | undefined
-let mutationObserver: MutationObserver | undefined
-let removeTextareaInputListener: (() => void) | undefined
-
-onMounted(() => {
-  const textarea = rootRef.value?.querySelector('textarea')
-  if (textarea) {
-    const updateMultiline = () => {
-      requestAnimationFrame(() => {
-        const styles = getComputedStyle(textarea)
-        const paddingY = parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom)
-        const lineHeight = parseFloat(styles.lineHeight) || 20
-        const lines = Math.round((textarea.scrollHeight - paddingY) / lineHeight)
-
-        // Keep the stacked layout once wrapping has started. Letting it switch
-        // back immediately would change the textarea width and recreate the
-        // wrapping condition, causing a layout feedback loop.
-        if (lines > 1)
-          isMultiline.value = true
-        else if (textarea.value === '')
-          isMultiline.value = false
-      })
-    }
-
-    textarea.addEventListener('input', updateMultiline)
-    removeTextareaInputListener = () => textarea.removeEventListener('input', updateMultiline)
-    resizeObserver = new ResizeObserver(updateMultiline)
-    resizeObserver.observe(textarea)
-    updateMultiline()
-  }
-
-  if (attachmentsRef.value) {
-    const target = attachmentsRef.value
-    const check = () => {
-      hasAttachments.value = target.childElementCount > 0
-    }
-    mutationObserver = new MutationObserver(check)
-    mutationObserver.observe(target, { childList: true, subtree: true })
-    check()
-  }
-})
-
-onUnmounted(() => {
-  resizeObserver?.disconnect()
-  removeTextareaInputListener?.()
-  mutationObserver?.disconnect()
-})
+// Layout is always stacked (textarea above, toolbar below) for stability.
+// No ResizeObserver, no layout toggling — eliminates the mobile flicker
+// caused by placeholder text wrapping on narrow viewports.
 
 watch(() => props.webSearch, (value) => {
   if (value !== undefined) {
@@ -185,7 +133,7 @@ function handleStop() {
 </script>
 
 <template>
-  <div ref="rootRef" class="bg-background px-4 pb-4 pt-0">
+  <div class="bg-background px-4 pb-4 pt-0">
     <PromptInput
       class="max-w-3xl mx-auto"
       multiple
@@ -196,29 +144,20 @@ function handleStop() {
       @error="handleAttachmentError"
     >
       <!-- Attachments row (wrapper stays empty when no files) -->
-      <div
-        ref="attachmentsRef"
-        class="order-first w-full"
-        :class="stacked && 'px-3 pt-3'"
-      >
+      <div class="order-first w-full px-3 pt-3">
         <PromptInputAttachmentsDisplay />
       </div>
 
-      <!-- Textarea: inline with the toolbar on a single line,
-           full-width row when stacked -->
+      <!-- Textarea: always a full-width row stacked above the toolbar.
+           Stable layout — no toggling based on content height. -->
       <PromptInputTextarea
         :placeholder="$t('chat.inputPlaceholder')"
         class="resize-none"
-        :container-class="[
-          stacked ? 'order-1 w-full flex-none pt-3 px-3' : 'order-2 min-w-0 flex-1 min-h-0 self-center'
-        ]"
+        container-class="order-1 w-full flex-none"
       />
 
       <!-- Left tools -->
-      <div
-        class="flex items-center gap-2 ms-2"
-        :class="[stacked ? 'order-2 my-1.5' : 'order-1']"
-      >
+      <div class="order-2 my-1.5 flex items-center gap-2 ms-2">
         <PromptInputActionMenu>
           <PromptInputActionMenuTrigger />
           <PromptInputActionMenuContent>
@@ -237,10 +176,7 @@ function handleStop() {
       </div>
 
       <!-- Right tools -->
-      <div
-        class="ms-auto flex items-center gap-2 me-2"
-        :class="[stacked ? 'order-3 my-1.5' : 'order-3']"
-      >
+      <div class="order-3 my-1.5 ms-auto flex items-center gap-2 me-2">
           <ModelSelector v-model:open="selectorOpen">
             <ModelSelectorTrigger as-child>
               <button
