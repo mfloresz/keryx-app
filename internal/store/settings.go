@@ -44,7 +44,9 @@ type User struct {
 }
 
 type AuthResult struct {
-	Token string `json:"token"`
+	// Token travels only in the HttpOnly session cookie, never in JSON
+	// bodies, so page scripts can't read it.
+	Token string `json:"-"`
 	User  User   `json:"user"`
 }
 

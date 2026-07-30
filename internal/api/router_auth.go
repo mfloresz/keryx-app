@@ -4,11 +4,26 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 
 	"keryx-server/internal/store"
 )
+
+// invitationExpired reports whether an invitation is past its expiry. Empty
+// or unparseable expiry values are treated as non-expiring (sentinel dates
+// like 9999-12-31 parse fine and simply never expire).
+func invitationExpired(inv *store.InvitationRecord) bool {
+	if inv == nil || inv.ExpiresAt == "" {
+		return false
+	}
+	sx, err := time.Parse(time.RFC3339, inv.ExpiresAt)
+	if err != nil {
+		return false
+	}
+	return time.Now().After(sx)
+}
 
 type loginRequest struct {
 	Email    string `json:"email"`
@@ -42,6 +57,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	setAuthCookie(w, r, result.Token)
 	jsonResponse(w, result, http.StatusOK)
 }
 
@@ -58,6 +74,18 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	if req.Email == "" || req.Password == "" {
 		errorResponse(w, "Email and password are required", http.StatusBadRequest)
+		return
+	}
+
+	// Registration is invite-only. Only the very first user (bootstrap admin)
+	// may register without an invitation; after that, use /api/invitations/accept.
+	userCount, err := s.Store.CountUsers()
+	if err != nil {
+		errorResponse(w, "Failed to check users", http.StatusInternalServerError)
+		return
+	}
+	if userCount > 0 {
+		errorResponse(w, "Registration requires an invitation link", http.StatusForbidden)
 		return
 	}
 
@@ -78,20 +106,25 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// First registered user becomes admin automatically
-	userCount, err := s.Store.CountUsers()
-	if err == nil && userCount == 1 {
-		if err := s.Store.UpdateUserRole(result.User.ID, store.RoleAdmin); err == nil {
-			result.User.Role = store.RoleAdmin
-			// Refresh token to include updated role
-			fresh, err := s.Store.RefreshAuth(result.Token)
-			if err == nil {
-				result = fresh
-			}
+	// This user is the first one (bootstrap admin).
+	if err := s.Store.UpdateUserRole(result.User.ID, store.RoleAdmin); err == nil {
+		result.User.Role = store.RoleAdmin
+		// Refresh token to include updated role
+		fresh, err := s.Store.RefreshAuth(result.Token)
+		if err == nil {
+			result = fresh
 		}
 	}
 
+	setAuthCookie(w, r, result.Token)
 	jsonResponse(w, result, http.StatusCreated)
+}
+
+// handleLogout clears the session cookie. The token itself remains valid
+// until its natural expiry; the cookie is what the browser holds.
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	clearAuthCookie(w, r)
+	jsonResponse(w, map[string]bool{"ok": true}, http.StatusOK)
 }
 
 func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
@@ -286,7 +319,7 @@ func (s *Server) handleInvitationValidate(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if invitation.UsedAt != nil {
+	if invitation.UsedAt != nil || invitationExpired(invitation) {
 		jsonResponse(w, map[string]bool{"valid": false}, http.StatusOK)
 		return
 	}
@@ -323,6 +356,11 @@ func (s *Server) handleInvitationAccept(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Serialize the check-then-use sequence so the same invitation can't be
+	// consumed by two concurrent requests.
+	s.invitationMu.Lock()
+	defer s.invitationMu.Unlock()
+
 	tokenHash := sha256Hex(req.Token)
 	invitation, err := s.Store.GetInvitationByTokenHash(tokenHash)
 	if err != nil {
@@ -332,6 +370,11 @@ func (s *Server) handleInvitationAccept(w http.ResponseWriter, r *http.Request) 
 
 	if invitation.UsedAt != nil {
 		errorResponse(w, "Invitation has already been used", http.StatusBadRequest)
+		return
+	}
+
+	if invitationExpired(invitation) {
+		errorResponse(w, "Invitation is invalid or expired", http.StatusBadRequest)
 		return
 	}
 
@@ -346,18 +389,21 @@ func (s *Server) handleInvitationAccept(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Set the role chosen at invitation time (defaults to member).
+	if invitation.Role != "" {
+		_ = s.Store.UpdateUserRole(result.User.ID, invitation.Role)
+	}
+
 	// Set initial model access if configured
 	if len(invitation.InitialModelAccess) > 0 {
 		_ = s.Store.SetUserModelAccess(result.User.ID, invitation.InitialModelAccess)
 	}
 
-	// Mark invitation as used
-	_ = s.Store.MarkInvitationUsed(invitation.ID, strings.Replace(invitation.CreatedAt, "Z", "", 1))
+	// Mark invitation as used (with the actual time, not the creation date).
+	_ = s.Store.MarkInvitationUsed(invitation.ID, time.Now().UTC().Format("2006-01-02 15:04:05.000Z"))
 
 	jsonResponse(w, map[string]any{
 		"success": true,
 		"email":   invitation.Email,
 	}, http.StatusOK)
 }
-
-

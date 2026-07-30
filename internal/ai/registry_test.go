@@ -58,8 +58,8 @@ func TestProviderByID(t *testing.T) {
 
 func TestModelCatalogCoversSeeds(t *testing.T) {
 	catalog := ModelCatalog()
-	if len(catalog) != 14 {
-		t.Fatalf("catalog len = %d, want 14", len(catalog))
+	if len(catalog) != 18 {
+		t.Fatalf("catalog len = %d, want 18", len(catalog))
 	}
 	for _, m := range catalog {
 		if info, ok := ProviderByID(m.Provider); !ok {
