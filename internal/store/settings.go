@@ -17,6 +17,7 @@ const (
 	ProviderKeysCollection           = "provider_keys"
 	TitleGenerationPolicyCollection  = "title_generation_policy"
 		ModelPresetsCollection            = "model_presets"
+			WebSearchConfigCollection         = "web_search_config"
 )
 
 // User roles
@@ -141,6 +142,12 @@ type ModelPreset struct {
 	PresetID string `json:"presetId"`
 	ModelID  string `json:"modelId"`
 	Label    string `json:"label"`
+}
+
+// WebSearchConfig holds the Brave Search API key and enabled flag.
+type WebSearchConfig struct {
+	APIKey  string `json:"apiKey,omitempty"`
+	Enabled bool   `json:"enabled"`
 }
 
 // Model catalog definitions

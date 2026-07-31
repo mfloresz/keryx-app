@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -100,6 +101,17 @@ func isTextMedia(mediaType string) bool {
 	return false
 }
 
+// ToolDefinition defines a tool/function that the model can call.
+type ToolDefinition struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// InputSchema is the JSON Schema for the tool's parameters.
+	InputSchema string `json:"inputSchema"`
+}
+
+// ToolExecFunc executes a tool with the given name and JSON input, returning the result text.
+type ToolExecFunc func(ctx context.Context, toolName string, input json.RawMessage) (string, error)
+
 // ChatRequest is the input for a chat completion.
 type ChatRequest struct {
 	Model     string        `json:"model"`
@@ -107,6 +119,12 @@ type ChatRequest struct {
 	System    string        `json:"system,omitempty"`
 	MaxTokens int           `json:"maxTokens,omitempty"`
 	Timeout   time.Duration `json:"timeout,omitempty"`
+	// Tools is an optional list of tool definitions for function calling.
+	Tools []ToolDefinition `json:"tools,omitempty"`
+	// ToolExec is the function that executes a tool by name when the model calls it.
+	// If nil, tools are defined to the model but execution falls back to the
+	// provider's default behaviour (e.g. OpenRouter server-side tools).
+	ToolExec ToolExecFunc `json:"-"`
 }
 
 // ProviderOptions are passed to goai on every Chat/ChatStream call.

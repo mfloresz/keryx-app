@@ -21,6 +21,19 @@ const { toast } = useToast()
 
 const selectedPreset = ref('fast')
 const presets = ref<ModelPreset[]>([])
+const webSearchGloballyEnabled = ref(false)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/web-search/config')
+    if (res.ok) {
+      const data = await res.json()
+      webSearchGloballyEnabled.value = data.enabled === true
+    }
+  } catch {
+    // silently ignore — search toggle won't appear
+  }
+})
 
 function buildFallbackPresets() {
   return [
@@ -143,6 +156,7 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
           :status="isSubmitting ? 'submitted' : 'ready'"
           :preset="selectedPreset"
           :presets="presets"
+          :webSearchGloballyEnabled="webSearchGloballyEnabled"
           @submit="handleSubmit"
           @update:preset="selectedPreset = $event"
         />

@@ -469,6 +469,21 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the Brave API key for web search. The feature only activates when
+	// the admin both configured a key and enabled it; otherwise we silently
+	// degrade to a normal chat (the tool and its prompt section are skipped).
+	webSearchActive := false
+	var braveAPIKey string
+	if req.WebSearch {
+		wc, err := s.Store.GetWebSearchConfig()
+		if err == nil && wc != nil && wc.Enabled && wc.APIKey != "" {
+			braveAPIKey = wc.APIKey
+			webSearchActive = true
+		} else {
+			slog.Warn("Web search requested but not active (disabled or missing API key)", "chat", chatID, "user", userID)
+		}
+	}
+
 	// Persist the new user message and the web-search flag BEFORE streaming,
 	// so the user's input is durable even if the stream fails or the client
 	// disconnects mid-response. Upsert by message id keeps edit/regenerate
@@ -488,8 +503,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	if systemPrompt == "" {
 		systemPrompt = s.Cfg.BaseSystemPrompt
 	}
-	if req.WebSearch {
-		systemPrompt += webSearchPrompt
+	if webSearchActive {
+		systemPrompt += s.buildSearchSystemPrompt()
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -510,10 +525,39 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		streamStarted                 bool
 	)
 
+	// Build tool definitions for web search
+	var tools []ai.ToolDefinition
+	var toolExec ai.ToolExecFunc
+	if webSearchActive {
+		tools = buildSearchToolDefinition()
+		toolExec = func(ctx context.Context, toolName string, input json.RawMessage) (string, error) {
+			if toolName == "web_search" {
+				var params struct {
+					Query string `json:"query"`
+				}
+				if err := json.Unmarshal(input, &params); err != nil {
+					return "", fmt.Errorf("invalid web_search params: %w", err)
+				}
+				result, err := callBraveSearch(braveAPIKey, params.Query, 10)
+				if err != nil {
+					// Degrade gracefully: hand the failure to the model as tool
+					// output instead of failing the whole stream (which would
+					// also kill title generation after the error).
+					slog.Warn("Brave search tool call failed", "error", err, "chat", chatID, "user", userID)
+					return "Web search is temporarily unavailable. Continue answering from your own knowledge and mention that the live search failed.", nil
+				}
+				return result.Results, nil
+			}
+			return "", fmt.Errorf("unknown tool: %s", toolName)
+		}
+	}
+
 	streamResult, err := provider.ChatStream(r.Context(), ai.ChatRequest{
 		Model:    resolvedModel,
 		Messages: req.Messages,
 		System:   systemPrompt,
+		Tools:    tools,
+		ToolExec: toolExec,
 	}, func(chunk ai.StreamChunk) {
 		// Send the start event only when the first chunk actually arrives
 		// from the provider, so the frontend doesn't create an empty
@@ -752,14 +796,6 @@ func writeSSEEvent(w http.ResponseWriter, event string, extra map[string]string)
 	}
 	fmt.Fprintf(w, "data: %s\n\n", data)
 }
-
-const webSearchPrompt = `
-
----
-
-VII. Web Research
-
-Web research is enabled for this conversation. Do not claim that you lack internet access or browsing/search capability when research tools are available. Use the available web research tool whenever the user asks for current, time-sensitive, or externally verifiable information, and cite the sources you use by referencing their URLs.`
 
 func generateID() string {
 	return fmt.Sprintf("msg_%d", time.Now().UnixNano())

@@ -62,6 +62,7 @@ const props = defineProps<{
   preset: string
   presets: ModelPreset[]
   webSearch?: boolean
+  webSearchGloballyEnabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -81,10 +82,6 @@ watch(() => props.webSearch, (value) => {
 
 const selectedPresetData = computed(() =>
   props.presets.find(p => p.preset === props.preset)
-)
-
-const modelSupportsSearch = computed(() =>
-  selectedPresetData.value?.supportsSearch ?? false
 )
 
 const modelSupportsImages = computed(() =>
@@ -172,7 +169,7 @@ function handleStop() {
         </PromptInputActionMenu>
 
         <PromptInputButton
-          v-if="modelSupportsSearch"
+          v-if="props.webSearchGloballyEnabled"
           :variant="useWebSearch ? 'default' : 'ghost'"
           @click="useWebSearch = !useWebSearch"
         >

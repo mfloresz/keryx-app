@@ -50,6 +50,9 @@ func (s *Store) EnsureSchema() error {
 	if err := s.ensureTitleGenerationPolicyCollection(); err != nil {
 		return fmt.Errorf("ensure title generation policy: %w", err)
 	}
+	if err := s.ensureWebSearchConfigCollection(); err != nil {
+		return fmt.Errorf("ensure web search config: %w", err)
+	}
 	if err := s.ensureModelPresetsCollection(); err != nil {
 		return fmt.Errorf("ensure model presets: %w", err)
 	}

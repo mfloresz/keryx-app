@@ -123,6 +123,20 @@ const isSavingTitleGen = ref(false);
 const modelPresets = ref<AdminModelPreset[]>([]);
 const isSavingModelPresets = ref(false);
 
+// Web Search config state
+interface WebSearchConfig {
+  enabled: boolean;
+  configured: boolean;
+}
+
+const webSearchConfig = ref<WebSearchConfig>({ enabled: false, configured: false });
+const webSearchApiKey = ref("");
+const originalWebSearchConfig = ref<WebSearchConfig>({ enabled: false, configured: false });
+const isSavingWebSearch = ref(false);
+const webSearchHasChanges = computed(() => {
+  return webSearchConfig.value.enabled !== originalWebSearchConfig.value.enabled || webSearchApiKey.value.trim() !== "";
+});
+
 const adminCount = computed(
   () => users.value.filter((user) => user.role === "admin").length,
 );
@@ -154,21 +168,23 @@ async function loadData(): Promise<void> {
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
-	    const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse, titleGenResponse, modelPresetsResponse] = await Promise.all([
+	const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse, titleGenResponse, modelPresetsResponse, webSearchResponse] = await Promise.all([
 	      apiFetch("/api/admin/users", { signal: controller.signal }),
 	      apiFetch("/api/admin/invitations", { signal: controller.signal }),
 	      apiFetch("/api/admin/models", { signal: controller.signal }),
 	      apiFetch("/api/admin/provider-keys", { signal: controller.signal }),
 	      apiFetch("/api/admin/title-generation-policy", { signal: controller.signal }),
 	      apiFetch("/api/admin/model-presets", { signal: controller.signal }),
+	      apiFetch("/api/admin/web-search-config", { signal: controller.signal }),
 	    ]);
-		
+			
 	    await assertOk(usersResponse, t("admin.shared.loadError"));
 	    await assertOk(invitationsResponse, t("admin.shared.loadError"));
 	    await assertOk(modelsResponse, t("admin.shared.loadError"));
 	    await assertOk(providerKeysResponse, t("admin.shared.loadError"));
 	    await assertOk(titleGenResponse, t("admin.shared.loadError"));
 	    await assertOk(modelPresetsResponse, t("admin.shared.loadError"));
+	    await assertOk(webSearchResponse, t("admin.shared.loadError"));
 
 	    users.value = (await readPayload<AdminUser[]>(usersResponse)) ?? [];
 	    invitations.value =
@@ -184,13 +200,19 @@ async function loadData(): Promise<void> {
 	      catalog.value = titleGenData.catalog ?? [];
 	    }
 
-	    const modelPresetsData = await readPayload<{ presets: AdminModelPreset[]; catalog: CatalogModel[] }>(modelPresetsResponse);
+	const modelPresetsData = await readPayload<{ presets: AdminModelPreset[]; catalog: CatalogModel[] }>(modelPresetsResponse);
 	    if (modelPresetsData) {
 	      modelPresets.value = modelPresetsData.presets.map(p => ({ ...p }));
 	      // Merge catalog if title gen didn't already populate it
 	      if (modelPresetsData.catalog && catalog.value.length === 0) {
 	        catalog.value = modelPresetsData.catalog;
 	      }
+	    }
+
+	    const webSearchData = await readPayload<WebSearchConfig>(webSearchResponse);
+	    if (webSearchData) {
+	      webSearchConfig.value = { enabled: webSearchData.enabled, configured: webSearchData.configured };
+	      originalWebSearchConfig.value = { enabled: webSearchData.enabled, configured: webSearchData.configured };
 	    }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
@@ -333,6 +355,40 @@ async function handleSaveModelPresets(): Promise<void> {
     toast(error instanceof Error ? error.message : t("admin.modelPresets.saveError"));
   } finally {
     isSavingModelPresets.value = false;
+  }
+}
+
+// ---- Web Search config handlers ----
+
+async function handleSaveWebSearch(): Promise<void> {
+  if (isSavingWebSearch.value) return;
+
+  isSavingWebSearch.value = true;
+  try {
+    const response = await apiFetch("/api/admin/web-search-config", {
+      method: "PUT",
+      body: JSON.stringify({
+        apiKey: webSearchApiKey.value,
+        enabled: webSearchConfig.value.enabled,
+      }),
+    });
+    await assertOk(response, t("admin.webSearch.saveError"));
+    originalWebSearchConfig.value = { ...webSearchConfig.value };
+    webSearchApiKey.value = "";
+    // Reload to get updated configured status
+    const refreshedResponse = await apiFetch("/api/admin/web-search-config");
+    if (refreshedResponse.ok) {
+      const refreshedData = await readPayload<WebSearchConfig>(refreshedResponse);
+      if (refreshedData) {
+        webSearchConfig.value = { ...webSearchConfig.value, configured: refreshedData.configured };
+        originalWebSearchConfig.value = { ...originalWebSearchConfig.value, configured: refreshedData.configured };
+      }
+    }
+    toast(t("admin.webSearch.saveSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.webSearch.saveError"));
+  } finally {
+    isSavingWebSearch.value = false;
   }
 }
 
@@ -876,8 +932,66 @@ onMounted(() => {
 	          </div>
 	        </CardContent>
 	      </Card>
+
+	      <Separator />
+
+	      <!-- Web Search Config (Brave) -->
+	      <Card>
+	        <CardHeader>
+	          <CardTitle>{{ t('admin.webSearch.title') }}</CardTitle>
+	          <p class="text-sm text-muted-foreground">
+	            {{ t('admin.webSearch.description') }}
+	          </p>
+	        </CardHeader>
+	        <CardContent class="space-y-4">
+	          <div class="flex items-center justify-between">
+	            <div class="flex items-center gap-2">
+	              <span
+	                class="inline-block size-2 rounded-full"
+	                :class="webSearchConfig.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
+	              />
+	              <span class="text-sm">
+	                {{ webSearchConfig.configured ? t('admin.webSearch.configured') : t('admin.webSearch.notConfigured') }}
+	              </span>
+	              <span class="text-muted-foreground">·</span>
+	              <span class="text-sm">
+	                {{ webSearchConfig.enabled ? t('admin.webSearch.enabled') : t('admin.webSearch.disabled') }}
+	              </span>
+	            </div>
+	          </div>
+
+	          <div class="space-y-2">
+	            <Label for="brave-api-key">{{ t('admin.webSearch.apiKeyLabel') }}</Label>
+	            <Input
+	              id="brave-api-key"
+	              v-model="webSearchApiKey"
+	              type="password"
+	              :placeholder="t('admin.webSearch.apiKeyPlaceholder')"
+	              autocomplete="off"
+	            />
+	          </div>
+
+	          <label class="flex items-center gap-3 text-sm">
+	            <input
+	              type="checkbox"
+	              class="size-4 accent-primary"
+	              v-model="webSearchConfig.enabled"
+	            >
+	            <span>{{ t('admin.webSearch.enabledLabel') }}</span>
+	          </label>
+
+	          <div class="flex justify-end">
+	            <Button
+	              :disabled="isSavingWebSearch || !webSearchHasChanges"
+	              @click="handleSaveWebSearch"
+	            >
+	              {{ isSavingWebSearch ? t('admin.webSearch.saving') : t('admin.webSearch.saveButton') }}
+	            </Button>
+	          </div>
+	        </CardContent>
+	      </Card>
 	    </div>
-	
+		
 	    <Dialog v-model:open="isInviteDialogOpen">
       <DialogContent>
         <DialogHeader>

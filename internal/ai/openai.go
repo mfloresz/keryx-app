@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"strings"
@@ -82,6 +83,37 @@ func (p *OpenAIProvider) goaiOpts(req ChatRequest) []goai.Option {
 		o = append(o, goai.WithMaxOutputTokens(req.MaxTokens))
 	}
 
+	// Provider-specific options
+	opts := p.mergedOptions()
+	if len(opts) > 0 {
+		o = append(o, goai.WithProviderOptions(opts))
+	}
+
+	// Tools (function calling)
+	if len(req.Tools) > 0 && req.ToolExec != nil {
+		tools := make([]goai.Tool, 0, len(req.Tools))
+		for _, t := range req.Tools {
+			toolDef := goai.Tool{
+				Name:        t.Name,
+				Description: t.Description,
+			}
+			if t.InputSchema != "" {
+				toolDef.InputSchema = json.RawMessage(t.InputSchema)
+			}
+			// Wrap the execute function to pass through the tool name.
+			toolName := t.Name
+			toolDef.Execute = func(ctx context.Context, input json.RawMessage) (string, error) {
+				return req.ToolExec(ctx, toolName, input)
+			}
+			tools = append(tools, toolDef)
+		}
+		o = append(o, goai.WithTools(tools...), goai.WithMaxSteps(5))
+	}
+
+	return o
+}
+
+func (p *OpenAIProvider) requestTimeout(req ChatRequest) time.Duration {
 	timeout := p.Timeout
 	if req.Timeout > 0 {
 		timeout = req.Timeout
@@ -89,15 +121,7 @@ func (p *OpenAIProvider) goaiOpts(req ChatRequest) []goai.Option {
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
-	o = append(o, goai.WithTimeout(timeout))
-
-	// Provider-specific options
-	opts := p.mergedOptions()
-	if len(opts) > 0 {
-		o = append(o, goai.WithProviderOptions(opts))
-	}
-
-	return o
+	return timeout
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (string, error) {
@@ -105,6 +129,15 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (string, err
 	if err != nil {
 		return "", err
 	}
+
+	// Caller-owned timeout: do NOT use goai.WithTimeout. goai's internal
+	// timeout context is canceled before the chunk channel closes at the end
+	// of tool-loop streams, producing a spurious "context canceled" error
+	// after an otherwise successful response (see streamWithToolLoop /
+	// TextStream.consume in goai 0.9.2). Wrapping the context outside goai
+	// and canceling after full consumption avoids that race entirely.
+	ctx, cancel := context.WithTimeout(ctx, p.requestTimeout(req))
+	defer cancel()
 
 	// Override model from request if provided
 	if req.Model != "" {
@@ -129,6 +162,12 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	if err != nil {
 		return result, err
 	}
+
+	// Caller-owned timeout (see Chat for why goai.WithTimeout is avoided).
+	// cancel runs only after the stream is fully drained and Err() checked,
+	// so it can never win the race against the final buffered chunks.
+	ctx, cancel := context.WithTimeout(ctx, p.requestTimeout(req))
+	defer cancel()
 
 	// Override model from request if provided
 	if req.Model != "" {
