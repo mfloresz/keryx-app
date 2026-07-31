@@ -58,6 +58,7 @@ var knownProviders = []ProviderInfo{
 			{ID: "venice/xiaomi-mimo-v2-5", UpstreamID: "xiaomi-mimo-v2-5", Provider: "venice", DisplayName: "Xiaomi Mimo V2.5", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/mistral-small-2603", UpstreamID: "mistral-small-2603", Provider: "venice", DisplayName: "Mistral Small 2603", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/openai-gpt-oss-120b", UpstreamID: "openai-gpt-oss-120b", Provider: "venice", DisplayName: "OpenAI GPT OSS 120B", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/deepseek-v4-flash-0731", UpstreamID: "DeepSeek V4 Flash 0731", Provider: "venice", DisplayName: "DeepSeek V4 Flash 0731", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
@@ -102,7 +103,7 @@ var knownProviders = []ProviderInfo{
 			{ID: "chutes/gemma-4-31B-turbo-TEE", UpstreamID: "google/gemma-4-31B-turbo-TEE", Provider: "chutes", DisplayName: "Google Gemma 4 31B Turbo TEE", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "chutes/nemotron-3-nano-omni-30B-TEE", UpstreamID: "Nemotron-3-Nano-Omni-30B-TEE", Provider: "chutes", DisplayName: "Nemotron 3 Nano Omni 30B TEE", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "chutes/mistral-nemo-instruct-2407-TEE", UpstreamID: "unsloth/Mistral-Nemo-Instruct-2407-TEE", Provider: "chutes", DisplayName: "Mistral Nemo Instruct 2407 TEE", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-							{ID: "chutes/Qwen/Qwen3.6-27B-TEE", UpstreamID: "Qwen/Qwen3.6-27B-TEE", Provider: "chutes", DisplayName: "Qwen 3.6 27B TEE", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "chutes/Qwen/Qwen3.6-27B-TEE", UpstreamID: "Qwen/Qwen3.6-27B-TEE", Provider: "chutes", DisplayName: "Qwen 3.6 27B TEE", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
