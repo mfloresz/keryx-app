@@ -48,16 +48,16 @@ var knownProviders = []ProviderInfo{
 			},
 		},
 		Models: []ModelInfo{
-			{ID: "venice/e2ee-deepseek-v4-flash", UpstreamID: "e2ee-deepseek-v4-flash", Provider: "venice", DisplayName: "DeepSeek V4 Flash (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/mistral-small-3-2-24b-instruct", UpstreamID: "mistral-small-3-2-24b-instruct", Provider: "venice", DisplayName: "Mistral Small 3.2 24B", SupportsImages: true, SupportsSearch: false, MaxContext: 128000, MaxOutput: 0},
-			{ID: "venice/google-gemma-4-31b-it:disable_thinking=true", UpstreamID: "google-gemma-4-31b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 31B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/e2ee-gpt-oss-20b-p", UpstreamID: "e2ee-gpt-oss-20b-p", Provider: "venice", DisplayName: "GPT OSS 20B (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/aion-labs-aion-3-0-mini", UpstreamID: "aion-labs-aion-3-0-mini", Provider: "venice", DisplayName: "Aion 3.0 Mini", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/e2ee-gemma-4-26b-a4b-uncensored-p", UpstreamID: "e2ee-gemma-4-26b-a4b-uncensored-p", Provider: "venice", DisplayName: "Gemma 4 26B A4B Uncensored (E2EE)", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/google-gemma-4-26b-a4b-it:disable_thinking=true", UpstreamID: "google-gemma-4-26b-a4b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 26B A4B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/xiaomi-mimo-v2-5", UpstreamID: "xiaomi-mimo-v2-5", Provider: "venice", DisplayName: "Xiaomi Mimo V2.5", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/mistral-small-2603", UpstreamID: "mistral-small-2603", Provider: "venice", DisplayName: "Mistral Small 2603", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "venice/openai-gpt-oss-120b", UpstreamID: "openai-gpt-oss-120b", Provider: "venice", DisplayName: "OpenAI GPT OSS 120B", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/e2ee-deepseek-v4-flash", UpstreamID: "e2ee-deepseek-v4-flash", Provider: "venice", DisplayName: "DeepSeek V4 Flash (E2EE)", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/mistral-small-3-2-24b-instruct", UpstreamID: "mistral-small-3-2-24b-instruct", Provider: "venice", DisplayName: "Mistral Small 3.2 24B", SupportsImages: true, SupportsSearch: true, MaxContext: 128000, MaxOutput: 0},
+			{ID: "venice/google-gemma-4-31b-it:disable_thinking=true", UpstreamID: "google-gemma-4-31b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 31B IT", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/e2ee-gpt-oss-20b-p", UpstreamID: "e2ee-gpt-oss-20b-p", Provider: "venice", DisplayName: "GPT OSS 20B (E2EE)", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/aion-labs-aion-3-0-mini", UpstreamID: "aion-labs-aion-3-0-mini", Provider: "venice", DisplayName: "Aion 3.0 Mini", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/e2ee-gemma-4-26b-a4b-uncensored-p", UpstreamID: "e2ee-gemma-4-26b-a4b-uncensored-p", Provider: "venice", DisplayName: "Gemma 4 26B A4B Uncensored (E2EE)", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/google-gemma-4-26b-a4b-it:disable_thinking=true", UpstreamID: "google-gemma-4-26b-a4b-it:disable_thinking=true", Provider: "venice", DisplayName: "Google Gemma 4 26B A4B IT", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/xiaomi-mimo-v2-5", UpstreamID: "xiaomi-mimo-v2-5", Provider: "venice", DisplayName: "Xiaomi Mimo V2.5", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/mistral-small-2603", UpstreamID: "mistral-small-2603", Provider: "venice", DisplayName: "Mistral Small 2603", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/openai-gpt-oss-120b", UpstreamID: "openai-gpt-oss-120b", Provider: "venice", DisplayName: "OpenAI GPT OSS 120B", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
@@ -71,8 +71,8 @@ var knownProviders = []ProviderInfo{
 			"strictJsonSchema": true,
 		},
 		Models: []ModelInfo{
-			{ID: "opencode-go/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode-go", DisplayName: "Mimo V2.5", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "opencode-go/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode-go", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode-go", DisplayName: "Mimo V2.5", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode-go", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
@@ -86,7 +86,7 @@ var knownProviders = []ProviderInfo{
 			"strictJsonSchema": false,
 		},
 		Models: []ModelInfo{
-			{ID: "lmstudio/local-model", UpstreamID: "local-model", Provider: "lmstudio", DisplayName: "Local Model", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "lmstudio/local-model", UpstreamID: "local-model", Provider: "lmstudio", DisplayName: "Local Model", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
@@ -99,10 +99,10 @@ var knownProviders = []ProviderInfo{
 			"useResponsesAPI":  false,
 		},
 		Models: []ModelInfo{
-			{ID: "chutes/gemma-4-31B-turbo-TEE", UpstreamID: "google/gemma-4-31B-turbo-TEE", Provider: "chutes", DisplayName: "Google Gemma 4 31B Turbo TEE", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "chutes/nemotron-3-nano-omni-30B-TEE", UpstreamID: "Nemotron-3-Nano-Omni-30B-TEE", Provider: "chutes", DisplayName: "Nemotron 3 Nano Omni 30B TEE", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "chutes/mistral-nemo-instruct-2407-TEE", UpstreamID: "unsloth/Mistral-Nemo-Instruct-2407-TEE", Provider: "chutes", DisplayName: "Mistral Nemo Instruct 2407 TEE", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-							{ID: "chutes/Qwen/Qwen3.6-27B-TEE", UpstreamID: "Qwen/Qwen3.6-27B-TEE", Provider: "chutes", DisplayName: "Qwen 3.6 27B TEE", SupportsImages: false, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "chutes/gemma-4-31B-turbo-TEE", UpstreamID: "google/gemma-4-31B-turbo-TEE", Provider: "chutes", DisplayName: "Google Gemma 4 31B Turbo TEE", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "chutes/nemotron-3-nano-omni-30B-TEE", UpstreamID: "Nemotron-3-Nano-Omni-30B-TEE", Provider: "chutes", DisplayName: "Nemotron 3 Nano Omni 30B TEE", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "chutes/mistral-nemo-instruct-2407-TEE", UpstreamID: "unsloth/Mistral-Nemo-Instruct-2407-TEE", Provider: "chutes", DisplayName: "Mistral Nemo Instruct 2407 TEE", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+							{ID: "chutes/Qwen/Qwen3.6-27B-TEE", UpstreamID: "Qwen/Qwen3.6-27B-TEE", Provider: "chutes", DisplayName: "Qwen 3.6 27B TEE", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
@@ -112,8 +112,8 @@ var knownProviders = []ProviderInfo{
 		OpenAICompat: false,
 		DefaultModel: "gemma-4-31b-it",
 		Models: []ModelInfo{
-			{ID: "google/gemma-4-26b-a4b-it", UpstreamID: "gemma-4-26b-a4b-it", Provider: "google", DisplayName: "Gemma 4 26B A4B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
-			{ID: "google/gemma-4-31b-it", UpstreamID: "gemma-4-31b-it", Provider: "google", DisplayName: "Gemma 4 31B IT", SupportsImages: true, SupportsSearch: false, MaxContext: 0, MaxOutput: 0},
+			{ID: "google/gemma-4-26b-a4b-it", UpstreamID: "gemma-4-26b-a4b-it", Provider: "google", DisplayName: "Gemma 4 26B A4B IT", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "google/gemma-4-31b-it", UpstreamID: "gemma-4-31b-it", Provider: "google", DisplayName: "Gemma 4 31B IT", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 }

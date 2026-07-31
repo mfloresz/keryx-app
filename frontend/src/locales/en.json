@@ -309,9 +309,24 @@
 	      "saving": "Saving…",
 	      "saveSuccess": "Model presets saved",
 	      "saveError": "Unable to save model presets"
-	    }
-	  },
-  "auth": {
+			    },
+			    "webSearch": {
+			      "title": "Web Search (Brave)",
+			      "description": "Configure the Brave Search API key and enable the web search feature for users.",
+			      "apiKeyLabel": "Brave Search API Key",
+			      "apiKeyPlaceholder": "Enter Brave API key…",
+			      "enabledLabel": "Enable web search",
+			      "saveButton": "Save",
+			      "saving": "Saving…",
+			      "saveSuccess": "Web search configuration saved",
+			      "saveError": "Unable to save web search configuration",
+			      "configured": "Configured",
+			      "notConfigured": "Not configured",
+			      "enabled": "Enabled",
+			      "disabled": "Disabled"
+			    }
+			  },
+		  "auth": {
     "login": {
       "welcome": "Welcome back",
       "subtitle": "Sign in to your {appName} account.",

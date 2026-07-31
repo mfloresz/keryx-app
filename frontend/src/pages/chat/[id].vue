@@ -61,6 +61,7 @@ const selectedPreset = ref(
     : 'fast',
 )
 const presets = ref<ModelPreset[]>([])
+const webSearchGloballyEnabled = ref(false)
 
 function buildFallbackPresets(): ModelPreset[] {
   return [
@@ -383,6 +384,16 @@ async function handleVote(message: UIMessage, isUpvoted: boolean) {
 }
 
 onMounted(async () => {
+  // Fetch web search global config
+  try {
+    const res = await fetch('/api/web-search/config')
+    if (res.ok) {
+      const data = await res.json()
+      webSearchGloballyEnabled.value = data.enabled === true
+    }
+  } catch {
+    // silently ignore — search toggle won't appear
+  }
   // Fetch presets with capabilities
   try {
     const res = await fetch('/api/models/presets')
@@ -480,6 +491,7 @@ onMounted(async () => {
 
     <!-- Input -->
     <ChatInput :status="chat.status" :preset="selectedPreset" :presets="presets" :web-search="chatData?.webSearch"
+      :webSearchGloballyEnabled="webSearchGloballyEnabled"
       @submit="handleSubmit" @update:preset="selectedPreset = $event" @stop="handleStop" />
   </div>
 </template>

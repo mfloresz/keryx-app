@@ -263,6 +263,26 @@ func (s *Store) ensureTitleGenerationPolicyCollection() error {
 	return nil
 }
 
+func (s *Store) ensureWebSearchConfigCollection() error {
+	if _, err := s.App.FindCollectionByNameOrId(WebSearchConfigCollection); err == nil {
+		return nil
+	}
+	c := core.NewBaseCollection(WebSearchConfigCollection)
+	adminOnly := "@request.auth.id != '' && @collection.users.id = @request.auth.id && @collection.users.role = 'admin'"
+	c.ListRule = new(adminOnly)
+	c.ViewRule = new(adminOnly)
+	c.CreateRule = new(adminOnly)
+	c.UpdateRule = new(adminOnly)
+	c.DeleteRule = new(adminOnly)
+	c.Fields.Add(&core.TextField{Name: "api_key_encrypted"})
+	c.Fields.Add(&core.BoolField{Name: "enabled"})
+	addSystemDateFields(c)
+	if err := s.App.Save(c); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *Store) ensureModelPresetsCollection() error {
 	if _, err := s.App.FindCollectionByNameOrId(ModelPresetsCollection); err == nil {
 		return nil

@@ -131,11 +131,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/admin/title-generation-policy", s.adminRoute(s.handleAdminGetTitleGenerationPolicy))
 	mux.HandleFunc("PUT /api/admin/title-generation-policy", s.adminRoute(s.handleAdminSetTitleGenerationPolicy))
 
+	// Admin web search config routes
+	mux.HandleFunc("GET /api/admin/web-search-config", s.adminRoute(s.handleAdminGetWebSearchConfig))
+	mux.HandleFunc("PUT /api/admin/web-search-config", s.adminRoute(s.handleAdminSetWebSearchConfig))
+
 	// Admin model preset routes
 	mux.HandleFunc("GET /api/admin/model-presets", s.adminRoute(s.handleAdminListModelPresets))
 	mux.HandleFunc("PUT /api/admin/model-presets/{preset}", s.adminRoute(s.handleAdminUpdateModelPreset))
 
-	// SPA static files
+	// Public web search config endpoint (no auth required — exposes only a
+	// boolean feature flag, and chat pages fetch it without auth headers)
+	mux.HandleFunc("GET /api/web-search/config", s.handleWebSearchConfig)
+
 	// SPA static files (catch-all)
 	mux.HandleFunc("/", StaticHandler(s.Cfg.StaticDir))
 
@@ -219,7 +226,6 @@ func userIDFromContext(r *http.Request) (string, bool) {
 	id, ok := r.Context().Value(contextKeyUserID).(string)
 	return id, ok
 }
-
 
 // userKey keys rate limiters by authenticated user ID, falling back to IP.
 func userKey(r *http.Request) string {
