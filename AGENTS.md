@@ -3,7 +3,7 @@
 - Tags must use the `v` prefix (e.g. `v0.1.0`, `v1.2.3`) to trigger the CI release workflow in `.github/workflows/build.yml`.
 - The workflow pattern is `v*` — tags like `0.1.0` (without `v`) will **not** trigger the build/release pipeline.
 - The workflow builds binaries for linux-amd64, linux-arm64, linux-armv7, android-arm64, and android-armv7, then creates a GitHub Release with all artifacts attached.
-- The version number must already have been updated before creating the tag.
+- The version number must already have been updated before creating the tag (bump `var Version` in `cmd/server/main.go` as part of step 3).
 - Use annotated tags only: `git tag -a vX.Y.Z -m "Release vX.Y.Z"`. Never create lightweight tags.
 
 ### Release workflow (ask the agent)
@@ -12,7 +12,7 @@ When asked "create release vX.Y.Z", the agent should:
 
 1. **Determine version** — Run `git tag -l 'v*' --sort=-v:refname | head -1` to find the current version. Use the version provided by the user (e.g. `v0.2.0`).
 2. **Review changes** — Run `git log --oneline vPREV..HEAD` and `git diff --stat vPREV..HEAD` to understand what changed.
-3. **Stage & commit** — `git add -A` then `git commit -m "chore: prepare release vX.Y.Z"`.
+3. **Stage & commit** — Bump `var Version` in `cmd/server/main.go` to the release version (e.g. `"0.4.0"`) — without this it silently stays stale, since CI overrides it via ldflags at build time. Then `git add -A` and `git commit -m "chore: prepare release vX.Y.Z"`.
 4. **Tag** — `git tag -a vX.Y.Z -m "Release vX.Y.Z"` (annotated tag only, never lightweight).
 5. **Validate locally** — Run the same checks the CI workflow uses, in order, to catch issues before pushing.
 
