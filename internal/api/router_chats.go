@@ -407,6 +407,9 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		WebSearch    bool             `json:"webSearch"`
 		SearchEngine string           `json:"searchEngine"`
 		Language     string           `json:"language"`
+		Username     string           `json:"username"`
+		Datetime     string           `json:"datetime"`
+		Timezone     string           `json:"timezone"`
 		// UserMessage is the full client-side UI message object for the new
 		// user message (id, role, createdAt, parts). The backend persists it
 		// verbatim before streaming so it survives failed/aborted streams.
@@ -506,6 +509,12 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	if webSearchActive {
 		systemPrompt += s.buildSearchSystemPrompt()
 	}
+
+	// Inject the dynamic user context (preferred name, current datetime,
+	// response language) into the system prompt. Values come from the chat
+	// request; the backend falls back to the stored profile / server time
+	// when the client sends none.
+	systemPrompt = s.applyUserContext(systemPrompt, req.Username, req.Datetime, req.Language, req.Timezone, userID)
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -647,7 +656,9 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			}
 
 			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			title, err := titleProvider.GenerateTitle(titleCtx, s.Cfg.TitleGenerationSystemPrompt, firstUserMsg, lang)
+			titlePrompt := s.Cfg.TitleGenerationSystemPrompt
+			titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
+			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, firstUserMsg, lang)
 			cancel()
 			if err == nil && title != "" {
 				chat.Title = title
@@ -665,6 +676,62 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	writeSSEEvent(w, "finish", nil)
 	flusher.Flush()
+}
+
+// applyUserContext replaces the {username}, {datetime} and {language}
+// placeholders in the system prompt with values from the chat request.
+// Falls back to the stored user profile / server time when the client
+// sends empty values, so the prompt stays valid for any client.
+func (s *Server) applyUserContext(prompt, username, datetime, language, timezone, userID string) string {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		if u, err := s.Store.GetUserByID(userID); err == nil {
+			username = strings.TrimSpace(u.Name)
+			if username == "" {
+				username = strings.TrimSpace(u.Email)
+			}
+		}
+		if username == "" {
+			username = "User"
+		}
+	}
+
+	// Resolve the user's timezone (IANA name, e.g. "America/Mexico_City")
+	// provided by the browser; fall back to UTC when invalid or absent.
+	loc := time.UTC
+	if timezone = strings.TrimSpace(timezone); timezone != "" {
+		if l, err := time.LoadLocation(timezone); err == nil {
+			loc = l
+		}
+	}
+
+	// Prefer the client-sent instant (UTC ISO 8601), localized to the
+	// user's timezone; fall back to the server clock.
+	datetime = strings.TrimSpace(datetime)
+	if t, err := time.Parse(time.RFC3339, datetime); err == nil {
+		datetime = t.In(loc).Format("2006-01-02 15:04:05") + " " + loc.String()
+	} else {
+		datetime = time.Now().In(loc).Format("2006-01-02 15:04:05") + " " + loc.String()
+	}
+
+	langName := languageName(language)
+
+	prompt = strings.ReplaceAll(prompt, "{username}", username)
+	prompt = strings.ReplaceAll(prompt, "{datetime}", datetime)
+	prompt = strings.ReplaceAll(prompt, "{language}", langName)
+	return prompt
+}
+
+// languageName maps a language code to a human-readable name for use in
+// prompts. Unknown codes pass through unchanged; empty defaults to English.
+func languageName(lang string) string {
+	switch lang {
+	case "", "en":
+		return "English"
+	case "es":
+		return "Spanish"
+	}
+	return lang
 }
 
 // persistUserMessage upserts the client-provided user message into the chat

@@ -228,7 +228,7 @@ func (s *Server) buildSearchSystemPrompt() string {
 
 ---
 
-VII. Web Research
+### Web Research
 
 You have access to the "web_search" tool. Use it to search the web for current, up-to-date information whenever the user asks about recent events, real-time data, or any topic that may require recent knowledge. When you receive search results, synthesize them and cite sources by URL. Do not claim that you lack internet access or browsing capability — the tool is available for you to use.`
 }

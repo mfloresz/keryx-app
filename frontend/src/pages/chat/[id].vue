@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { Chat } from '@ai-sdk/vue'
 import type { UIMessage, ChatStatus } from 'ai'
 import { useChatStore } from '@/stores/chat'
+import { useAuthStore } from '@/stores/auth'
 import type { ChatRecord } from '@/domain/chat/types'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
@@ -32,6 +33,7 @@ import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types
 const route = useRoute()
 const { t, locale } = useI18n()
 const chatStore = useChatStore()
+const authStore = useAuthStore()
 const { toast } = useToast()
 const chatRepository = await getChatRepository()
 
@@ -119,6 +121,10 @@ function buildSearchRequestBody(webSearch: boolean) {
     preset: selectedPreset.value,
     webSearch,
     language: locale.value,
+    // Dynamic user context the backend injects into its system prompt.
+    username: authStore.userName || authStore.userEmail || '',
+    datetime: new Date().toISOString(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
   }
 }
 
