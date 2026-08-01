@@ -30,7 +30,7 @@ func TestBaseSystemPromptHasComarkCapabilities(t *testing.T) {
 		}
 	}
 
-	for// sanity: prompt still has placeholders for the renderer
+	// sanity: prompt still has placeholders for the renderer
 	for _, s := range []string{"{username}", "{datetime}", "{language}"} {
 		if !strings.Contains(p, s) {
 			t.Errorf("missing placeholder %q", s)
