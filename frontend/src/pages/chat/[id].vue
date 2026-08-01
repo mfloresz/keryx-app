@@ -421,7 +421,7 @@ onMounted(async () => {
     </Dialog>
 
     <!-- Chat header -->
-    <div class="border-b px-4 py-3">
+    <div class="hidden lg:block border-b px-4 py-3">
       <h2 class="font-semibold truncate">{{ chatTitle }}</h2>
     </div>
 
