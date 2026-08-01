@@ -201,7 +201,7 @@ function changeBranch(direction: -1 | 1) {
     <MessageAvatar
       :name="props.message.role === 'user' ? $t('message.user') : $t('message.ai')"
       :fallback-icon="props.message.role === 'user' ? User : Bot"
-      class="shrink-0"
+      class="hidden shrink-0 md:flex"
     />
 
     <div class="flex-1 min-w-0">

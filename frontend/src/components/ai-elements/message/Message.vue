@@ -15,7 +15,7 @@ const props = defineProps<Props>()
   <div
     :class="
       cn(
-        'group flex w-full max-w-[80%] gap-2',
+        'group flex w-full max-w-full gap-2 md:max-w-[80%]',
         props.from === 'user' ? 'is-user ml-auto flex-row-reverse' : 'is-assistant',
         props.class,
       )
