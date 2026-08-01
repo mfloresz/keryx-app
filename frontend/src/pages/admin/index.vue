@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -587,15 +586,16 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-0 flex-1 overflow-y-auto overflow-hidden" aria-live="polite">
-    <div class="space-y-6 p-6">
-      <div>
-        <h1 class="text-2xl font-semibold">{{ t('admin.dashboard.title') }}</h1>
+  <div class="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+    <div class="mx-auto w-full max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+      <div class="space-y-1 border-b border-border pb-6">
+        <h1 class="text-3xl font-semibold tracking-tight">{{ t('admin.dashboard.title') }}</h1>
         <p class="text-sm text-muted-foreground">
           {{ t('admin.dashboard.description') }}
         </p>
       </div>
 
+      <!-- A. Access & user management -->
       <Card>
         <CardHeader class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div class="space-y-1">
@@ -610,7 +610,7 @@ onMounted(() => {
         </CardHeader>
         <CardContent class="space-y-6">
           <div class="rounded-md border">
-            <Table>
+            <Table class="min-w-[560px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>{{ t('admin.users.emailColumn') }}</TableHead>
@@ -661,7 +661,7 @@ onMounted(() => {
           </div>
 
           <div class="rounded-md border">
-            <Table>
+            <Table class="min-w-[640px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>{{ t('admin.invitations.emailColumn') }}</TableHead>
@@ -701,157 +701,257 @@ onMounted(() => {
         </CardContent>
       </Card>
 
-      <Separator />
+      <!-- B. Integrations -->
+      <div class="grid items-start gap-6 xl:grid-cols-2">
+        <!-- Provider API Keys -->
+        <Card>
+          <CardHeader>
+            <CardTitle>{{ t('admin.providerKeys.title') }}</CardTitle>
+            <p class="text-sm text-muted-foreground">
+              {{ t('admin.providerKeys.description') }}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div class="rounded-md border">
+              <Table class="min-w-[520px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{{ t('admin.providerKeys.providerColumn') }}</TableHead>
+                    <TableHead>{{ t('admin.providerKeys.statusColumn') }}</TableHead>
+                    <TableHead class="w-[200px]">{{ t('admin.providerKeys.actionsColumn') }}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableEmpty v-if="!isLoading && providerKeys.length === 0" :colspan="3">
+                    {{ t('admin.providerKeys.noKeys') }}
+                  </TableEmpty>
+                  <TableRow v-for="entry in providerKeys" :key="entry.provider">
+                    <TableCell class="font-medium break-words">{{ entry.label }}</TableCell>
+                    <TableCell>
+                      <div class="flex items-center gap-2">
+                        <span
+                          class="inline-block size-2 rounded-full"
+                          :class="entry.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
+                        />
+                        <span class="break-words">
+                          {{ entry.configured ? t('admin.providerKeys.statusConfigured') : t('admin.providerKeys.statusNotConfigured') }}
+                        </span>
+                      </div>
+                      <p
+                        v-if="entry.configured && entry.updatedAt"
+                        class="mt-1 text-xs text-muted-foreground"
+                      >
+                        {{ t('admin.providerKeys.updatedAt') }}: {{ formatDateTime(entry.updatedAt) }}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <div class="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          @click="openProviderKeyDialog(entry)"
+                        >
+                          {{ entry.configured ? t('app.save') : t('admin.providerKeys.saveButton') }}
+                        </Button>
+                        <Button
+                          v-if="entry.configured"
+                          variant="outline"
+                          size="sm"
+                          :disabled="isDeletingProviderKey"
+                          @click="handleDeleteProviderKey(entry)"
+                        >
+                          {{ t('admin.providerKeys.deleteButton') }}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
 
-      <!-- Provider API Keys -->
+        <!-- Web Search Config (Brave) -->
+        <Card>
+          <CardHeader>
+            <CardTitle>{{ t('admin.webSearch.title') }}</CardTitle>
+            <p class="text-sm text-muted-foreground">
+              {{ t('admin.webSearch.description') }}
+            </p>
+          </CardHeader>
+          <CardContent class="space-y-5">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span
+                class="inline-block size-2 rounded-full"
+                :class="webSearchConfig.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
+              />
+              <span class="text-sm">
+                {{ webSearchConfig.configured ? t('admin.webSearch.configured') : t('admin.webSearch.notConfigured') }}
+              </span>
+              <span class="text-muted-foreground">·</span>
+              <span class="text-sm">
+                {{ webSearchConfig.enabled ? t('admin.webSearch.enabled') : t('admin.webSearch.disabled') }}
+              </span>
+            </div>
+
+            <div class="space-y-2">
+              <Label for="brave-api-key">{{ t('admin.webSearch.apiKeyLabel') }}</Label>
+              <Input
+                id="brave-api-key"
+                v-model="webSearchApiKey"
+                type="password"
+                :placeholder="t('admin.webSearch.apiKeyPlaceholder')"
+                autocomplete="off"
+              />
+            </div>
+
+            <label class="flex items-center gap-3 text-sm">
+              <input
+                type="checkbox"
+                class="size-4 accent-primary"
+                v-model="webSearchConfig.enabled"
+              >
+              <span>{{ t('admin.webSearch.enabledLabel') }}</span>
+            </label>
+
+            <div class="flex justify-end">
+              <Button
+                :disabled="isSavingWebSearch || !webSearchHasChanges"
+                @click="handleSaveWebSearch"
+              >
+                {{ isSavingWebSearch ? t('admin.webSearch.saving') : t('admin.webSearch.saveButton') }}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <!-- C. Model configuration -->
+      <div class="grid items-start gap-6 xl:grid-cols-2">
+        <!-- Title Generation Policy -->
+        <Card>
+          <CardHeader>
+            <CardTitle>{{ t('admin.titleGeneration.title') }}</CardTitle>
+            <p class="text-sm text-muted-foreground">
+              {{ t('admin.titleGeneration.description') }}
+            </p>
+          </CardHeader>
+          <CardContent class="space-y-5">
+            <div class="space-y-3">
+              <label class="flex items-center gap-3 text-sm">
+                <input
+                  type="radio"
+                  name="titleGenMode"
+                  value="chat_model"
+                  class="size-4 accent-primary"
+                  :checked="titleGenPolicy.mode === 'chat_model'"
+                  @change="titleGenPolicy.mode = 'chat_model'"
+                />
+                <span>{{ t('admin.titleGeneration.modeChatModel') }}</span>
+              </label>
+              <label class="flex items-center gap-3 text-sm">
+                <input
+                  type="radio"
+                  name="titleGenMode"
+                  value="custom"
+                  class="size-4 accent-primary"
+                  :checked="titleGenPolicy.mode === 'custom'"
+                  @change="titleGenPolicy.mode = 'custom'"
+                />
+                <span>{{ t('admin.titleGeneration.modeCustom') }}</span>
+              </label>
+            </div>
+
+            <div v-if="titleGenPolicy.mode === 'custom'" class="space-y-2">
+              <Label for="titleGenModel">{{ t('admin.titleGeneration.modelLabel') }}</Label>
+              <Select
+                :model-value="titleGenPolicy.modelId"
+                @update:model-value="($event) => handleTitleGenModelChange($event)"
+              >
+                <SelectTrigger id="titleGenModel" class="w-full">
+                  <SelectValue :placeholder="t('admin.titleGeneration.modelPlaceholder')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="model in catalog"
+                    :key="model.id"
+                    :value="model.id"
+                  >
+                    {{ model.displayName }}
+                    <span class="text-muted-foreground">&middot; {{ model.provider }}</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div class="flex justify-end">
+              <Button
+                :disabled="isSavingTitleGen || !titleGenHasChanges"
+                @click="handleSaveTitleGenPolicy"
+              >
+                {{ isSavingTitleGen ? t('admin.titleGeneration.saving') : t('admin.titleGeneration.saveButton') }}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Model Presets -->
+        <Card>
+          <CardHeader>
+            <CardTitle>{{ t('admin.modelPresets.title') }}</CardTitle>
+            <p class="text-sm text-muted-foreground">
+              {{ t('admin.modelPresets.description') }}
+            </p>
+          </CardHeader>
+          <CardContent class="space-y-5">
+            <div
+              v-for="preset in modelPresets"
+              :key="preset.presetId"
+              class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4"
+            >
+              <Label class="text-sm font-medium sm:w-40 sm:shrink-0">{{ preset.label }}</Label>
+              <Select
+                :model-value="preset.modelId"
+                @update:model-value="(event: any) => handleModelPresetChange(preset.presetId, String(event))"
+              >
+                <SelectTrigger class="w-full sm:flex-1">
+                  <SelectValue :placeholder="t('admin.modelPresets.modelPlaceholder')" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="m in catalog"
+                    :key="m.id"
+                    :value="m.id"
+                  >
+                    {{ m.displayName }}
+                    <span class="text-muted-foreground">&middot; {{ m.provider }}</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div class="flex justify-end">
+              <Button
+                :disabled="isSavingModelPresets"
+                @click="handleSaveModelPresets"
+              >
+                {{ isSavingModelPresets ? t('admin.modelPresets.saving') : t('admin.modelPresets.saveButton') }}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <!-- D. Available models -->
       <Card>
         <CardHeader>
-          <CardTitle>{{ t('admin.providerKeys.title') }}</CardTitle>
-          <p class="text-sm text-muted-foreground">
-            {{ t('admin.providerKeys.description') }}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div class="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{{ t('admin.providerKeys.providerColumn') }}</TableHead>
-                  <TableHead>{{ t('admin.providerKeys.statusColumn') }}</TableHead>
-                  <TableHead class="w-[200px]">{{ t('admin.providerKeys.actionsColumn') }}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableEmpty v-if="!isLoading && providerKeys.length === 0" :colspan="3">
-                  {{ t('admin.providerKeys.noKeys') }}
-                </TableEmpty>
-                <TableRow v-for="entry in providerKeys" :key="entry.provider">
-                  <TableCell class="font-medium break-words">{{ entry.label }}</TableCell>
-                  <TableCell>
-                    <div class="flex items-center gap-2">
-                      <span
-                        class="inline-block size-2 rounded-full"
-                        :class="entry.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
-                      />
-                      <span class="break-words">
-                        {{ entry.configured ? t('admin.providerKeys.statusConfigured') : t('admin.providerKeys.statusNotConfigured') }}
-                      </span>
-                    </div>
-                    <p
-                      v-if="entry.configured && entry.updatedAt"
-                      class="mt-1 text-xs text-muted-foreground"
-                    >
-                      {{ t('admin.providerKeys.updatedAt') }}: {{ formatDateTime(entry.updatedAt) }}
-                    </p>
-                  </TableCell>
-                  <TableCell>
-                    <div class="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        @click="openProviderKeyDialog(entry)"
-                      >
-                        {{ entry.configured ? t('app.save') : t('admin.providerKeys.saveButton') }}
-                      </Button>
-                      <Button
-                        v-if="entry.configured"
-                        variant="outline"
-                        size="sm"
-                        :disabled="isDeletingProviderKey"
-                        @click="handleDeleteProviderKey(entry)"
-                      >
-                        {{ t('admin.providerKeys.deleteButton') }}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-	      <Separator />
-
-	      <!-- Title Generation Policy -->
-	      <Card>
-	        <CardHeader>
-	          <CardTitle>{{ t('admin.titleGeneration.title') }}</CardTitle>
-	          <p class="text-sm text-muted-foreground">
-	            {{ t('admin.titleGeneration.description') }}
-	          </p>
-	        </CardHeader>
-	        <CardContent class="space-y-4">
-	          <div class="space-y-3">
-	            <label class="flex items-center gap-3 text-sm">
-	              <input
-	                type="radio"
-	                name="titleGenMode"
-	                value="chat_model"
-	                class="size-4 accent-primary"
-	                :checked="titleGenPolicy.mode === 'chat_model'"
-	                @change="titleGenPolicy.mode = 'chat_model'"
-	              />
-	              <span>{{ t('admin.titleGeneration.modeChatModel') }}</span>
-	            </label>
-	            <label class="flex items-center gap-3 text-sm">
-	              <input
-	                type="radio"
-	                name="titleGenMode"
-	                value="custom"
-	                class="size-4 accent-primary"
-	                :checked="titleGenPolicy.mode === 'custom'"
-	                @change="titleGenPolicy.mode = 'custom'"
-	              />
-	              <span>{{ t('admin.titleGeneration.modeCustom') }}</span>
-	            </label>
-	          </div>
-
-	          <div v-if="titleGenPolicy.mode === 'custom'" class="space-y-2">
-	            <Label for="titleGenModel">{{ t('admin.titleGeneration.modelLabel') }}</Label>
-	            <Select
-	              :model-value="titleGenPolicy.modelId"
-	@update:model-value="($event) => handleTitleGenModelChange($event)"
-	            >
-	              <SelectTrigger id="titleGenModel" class="w-full">
-	                <SelectValue :placeholder="t('admin.titleGeneration.modelPlaceholder')" />
-	              </SelectTrigger>
-	              <SelectContent>
-	                <SelectItem
-	                  v-for="model in catalog"
-	                  :key="model.id"
-	                  :value="model.id"
-	                >
-	                  {{ model.displayName }}
-	                  <span class="text-muted-foreground">&middot; {{ model.provider }}</span>
-	                </SelectItem>
-	              </SelectContent>
-	            </Select>
-	          </div>
-
-	          <div class="flex justify-end">
-	            <Button
-	              :disabled="isSavingTitleGen || !titleGenHasChanges"
-	              @click="handleSaveTitleGenPolicy"
-	            >
-	              {{ isSavingTitleGen ? t('admin.titleGeneration.saving') : t('admin.titleGeneration.saveButton') }}
-	            </Button>
-	          </div>
-	        </CardContent>
-	      </Card>
-
-	      <Separator />
-
-	      <Card>
-	        <CardHeader>
-	          <CardTitle>{{ t('admin.models.title') }}</CardTitle>
+          <CardTitle>{{ t('admin.models.title') }}</CardTitle>
           <p class="text-sm text-muted-foreground">
             {{ t('admin.models.description') }}
           </p>
         </CardHeader>
         <CardContent>
           <div class="rounded-md border">
-            <Table>
+            <Table class="min-w-[420px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>{{ t('admin.models.modelColumn') }}</TableHead>
@@ -889,107 +989,7 @@ onMounted(() => {
             </Table>
           </div>
         </CardContent>
-	      </Card>
-
-	      <Separator />
-
-	      <Card>
-	        <CardHeader>
-	          <CardTitle>{{ t('admin.modelPresets.title') }}</CardTitle>
-	          <p class="text-sm text-muted-foreground">
-	            {{ t('admin.modelPresets.description') }}
-	          </p>
-	        </CardHeader>
-	        <CardContent class="space-y-4">
-	          <div v-for="preset in modelPresets" :key="preset.presetId" class="flex items-center gap-4">
-	            <Label class="w-40 shrink-0 text-sm font-medium">{{ preset.label }}</Label>
-	            <Select
-	              :model-value="preset.modelId"
-	              @update:model-value="(event: any) => handleModelPresetChange(preset.presetId, String(event))"
-	            >
-	              <SelectTrigger class="w-full">
-	                <SelectValue :placeholder="t('admin.modelPresets.modelPlaceholder')" />
-	              </SelectTrigger>
-	              <SelectContent>
-	                <SelectItem
-	                  v-for="m in catalog"
-	                  :key="m.id"
-	                  :value="m.id"
-	                >
-	                  {{ m.displayName }}
-	                  <span class="text-muted-foreground">&middot; {{ m.provider }}</span>
-	                </SelectItem>
-	              </SelectContent>
-	            </Select>
-	          </div>
-	          <div class="flex justify-end">
-	            <Button
-	              :disabled="isSavingModelPresets"
-	              @click="handleSaveModelPresets"
-	            >
-	              {{ isSavingModelPresets ? t('admin.modelPresets.saving') : t('admin.modelPresets.saveButton') }}
-	            </Button>
-	          </div>
-	        </CardContent>
-	      </Card>
-
-	      <Separator />
-
-	      <!-- Web Search Config (Brave) -->
-	      <Card>
-	        <CardHeader>
-	          <CardTitle>{{ t('admin.webSearch.title') }}</CardTitle>
-	          <p class="text-sm text-muted-foreground">
-	            {{ t('admin.webSearch.description') }}
-	          </p>
-	        </CardHeader>
-	        <CardContent class="space-y-4">
-	          <div class="flex items-center justify-between">
-	            <div class="flex items-center gap-2">
-	              <span
-	                class="inline-block size-2 rounded-full"
-	                :class="webSearchConfig.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
-	              />
-	              <span class="text-sm">
-	                {{ webSearchConfig.configured ? t('admin.webSearch.configured') : t('admin.webSearch.notConfigured') }}
-	              </span>
-	              <span class="text-muted-foreground">·</span>
-	              <span class="text-sm">
-	                {{ webSearchConfig.enabled ? t('admin.webSearch.enabled') : t('admin.webSearch.disabled') }}
-	              </span>
-	            </div>
-	          </div>
-
-	          <div class="space-y-2">
-	            <Label for="brave-api-key">{{ t('admin.webSearch.apiKeyLabel') }}</Label>
-	            <Input
-	              id="brave-api-key"
-	              v-model="webSearchApiKey"
-	              type="password"
-	              :placeholder="t('admin.webSearch.apiKeyPlaceholder')"
-	              autocomplete="off"
-	            />
-	          </div>
-
-	          <label class="flex items-center gap-3 text-sm">
-	            <input
-	              type="checkbox"
-	              class="size-4 accent-primary"
-	              v-model="webSearchConfig.enabled"
-	            >
-	            <span>{{ t('admin.webSearch.enabledLabel') }}</span>
-	          </label>
-
-	          <div class="flex justify-end">
-	            <Button
-	              :disabled="isSavingWebSearch || !webSearchHasChanges"
-	              @click="handleSaveWebSearch"
-	            >
-	              {{ isSavingWebSearch ? t('admin.webSearch.saving') : t('admin.webSearch.saveButton') }}
-	            </Button>
-	          </div>
-	        </CardContent>
-	      </Card>
+      </Card>
 	    </div>
 		
 	    <Dialog v-model:open="isInviteDialogOpen">
