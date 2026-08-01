@@ -250,4 +250,250 @@
         margin-top: 0;
         margin-bottom: 0;
     }
+
+    .markdown-content h1,
+    .markdown-content h2,
+    .markdown-content h3,
+    .markdown-content h4,
+    .markdown-content h5,
+    .markdown-content h6 {
+        font-weight: 600;
+        line-height: 1.25;
+        margin-top: 1.2em;
+        margin-bottom: 0.6em;
+        letter-spacing: var(--tracking-tight);
+    }
+
+    .markdown-content h1 {
+        font-size: 1.5em;
+    }
+    .markdown-content h2 {
+        font-size: 1.3em;
+    }
+    .markdown-content h3 {
+        font-size: 1.15em;
+    }
+    .markdown-content h4 {
+        font-size: 1em;
+    }
+    .markdown-content h5,
+    .markdown-content h6 {
+        font-size: 0.9em;
+    }
+
+    .markdown-content p {
+        margin-top: 0.6em;
+        margin-bottom: 0.6em;
+    }
+
+    .markdown-content a {
+        color: var(--primary);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+
+    .markdown-content hr {
+        border-color: var(--border);
+        margin-top: 1.5em;
+        margin-bottom: 1.5em;
+    }
+
+    .markdown-content :not(pre) > code {
+        background: var(--muted);
+        border-radius: var(--radius-sm);
+        padding: 0.15em 0.35em;
+        font-size: 0.875em;
+    }
+
+    .markdown-content pre {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 0.75rem 1rem;
+        overflow-x: auto;
+        margin-top: 0.6em;
+        margin-bottom: 0.6em;
+        font-size: 0.875rem;
+        line-height: 1.6;
+    }
+
+    .dark .markdown-content pre {
+        background-color: var(--shiki-dark-bg, var(--card));
+        color: var(--shiki-dark, var(--foreground));
+    }
+
+    .dark .markdown-content pre,
+    .dark .markdown-content pre code,
+    .dark .markdown-content pre code span {
+        color: var(--shiki-dark) !important;
+        background-color: transparent !important;
+    }
+    .dark .markdown-content pre {
+        background-color: var(--shiki-dark-bg, var(--card)) !important;
+    }
+
+    .markdown-content pre code {
+        background: transparent;
+        border-radius: 0;
+        padding: 0;
+        font-size: inherit;
+        color: inherit;
+    }
+
+    .markdown-content blockquote {
+        border-left: 3px solid var(--border);
+        padding-left: 1rem;
+        margin-top: 0.6em;
+        margin-bottom: 0.6em;
+        color: var(--muted-foreground);
+    }
+
+    .markdown-content blockquote p {
+        margin-top: 0.3em;
+        margin-bottom: 0.3em;
+    }
+
+    .markdown-content blockquote[as] {
+        border-left-width: 4px;
+    }
+    .markdown-content blockquote[as='note'],
+    .markdown-content blockquote[as='tip'] {
+        border-left-color: var(--primary);
+    }
+    .markdown-content blockquote[as='important'] {
+        border-left-color: var(--chart-2);
+    }
+    .markdown-content blockquote[as='warning'] {
+        border-left-color: var(--chart-4);
+    }
+    .markdown-content blockquote[as='caution'] {
+        border-left-color: var(--destructive);
+    }
+
+    .markdown-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0.6em;
+        margin-bottom: 0.6em;
+        font-size: 0.875rem;
+    }
+
+    .markdown-content th,
+    .markdown-content td {
+        border: 1px solid var(--border);
+        padding: 0.4rem 0.75rem;
+        text-align: left;
+    }
+
+    .markdown-content th {
+        background: var(--muted);
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .markdown-content tr {
+        border-bottom: 1px solid var(--border);
+    }
+
+    .markdown-content img {
+        max-width: 100%;
+        border-radius: var(--radius-md);
+    }
+
+    /* GitHub-style alerts: label from > [!WARNING] blockquotes */
+    .markdown-content blockquote[as]::before {
+        content: attr(as);
+        display: block;
+        font-weight: 600;
+        font-size: 0.9em;
+        letter-spacing: var(--tracking-tight);
+        text-transform: capitalize;
+        color: var(--foreground);
+        margin-bottom: 0.35em;
+    }
+
+    /* ::alert{...} component renders its own title — no pseudo label */
+    .markdown-content blockquote[as].markdown-alert::before {
+        content: none;
+    }
+    .markdown-content .markdown-alert-title {
+        margin: 0 0 0.35em;
+        font-weight: 600;
+        font-size: 0.9em;
+        letter-spacing: var(--tracking-tight);
+        color: var(--foreground);
+    }
+
+    .markdown-content blockquote[as='info'] {
+        border-left-color: var(--primary);
+    }
+    .markdown-content blockquote[as='note']::before,
+    .markdown-content blockquote[as='tip']::before,
+    .markdown-content blockquote[as='info']::before,
+    .markdown-content .markdown-alert[as='note'] .markdown-alert-title,
+    .markdown-content .markdown-alert[as='tip'] .markdown-alert-title,
+    .markdown-content .markdown-alert[as='info'] .markdown-alert-title {
+        color: var(--primary);
+    }
+    .markdown-content blockquote[as='important']::before,
+    .markdown-content .markdown-alert[as='important'] .markdown-alert-title {
+        color: var(--chart-2);
+    }
+    .markdown-content blockquote[as='warning']::before,
+    .markdown-content .markdown-alert[as='warning'] .markdown-alert-title {
+        color: var(--chart-4);
+    }
+    .markdown-content blockquote[as='caution']::before,
+    .markdown-content .markdown-alert[as='caution'] .markdown-alert-title {
+        color: var(--destructive);
+    }
+
+    /* Task lists */
+    .markdown-content ul.contains-task-list,
+    .markdown-content ul.contains-task-list ul {
+        list-style: none;
+        padding-left: 0.25rem;
+    }
+    .markdown-content .task-list-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .markdown-content .task-list-item .task-list-item-checkbox {
+        margin-top: 0.35em;
+        accent-color: var(--primary);
+    }
+
+    /* Footnotes */
+    .markdown-content .footnote-ref a {
+        color: var(--primary);
+        font-weight: 500;
+    }
+    .markdown-content section.footnotes {
+        margin-top: 1.5em;
+        font-size: 0.875em;
+        color: var(--muted-foreground);
+    }
+    .markdown-content section.footnotes hr {
+        margin: 0 0 0.75em;
+    }
+    .markdown-content section.footnotes h2 {
+        font-size: 1em;
+        margin-top: 0;
+    }
+    .markdown-content .footnote-backref {
+        color: var(--muted-foreground);
+        text-decoration: none;
+    }
+
+    /* Math (KaTeX) */
+    .markdown-content .math.block,
+    .markdown-content .katex-display {
+        overflow-x: auto;
+        overflow-y: hidden;
+        margin: 0.6em 0;
+    }
+    .markdown-content .math-error {
+        color: var(--destructive);
+    }
 }
