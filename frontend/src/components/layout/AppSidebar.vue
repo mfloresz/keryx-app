@@ -77,6 +77,17 @@ import {
 } from 'lucide-vue-next'
 import { useTheme, type Theme } from '@/composables/useTheme'
 
+// Mobile drawer mode (v-model from AppLayout). When true, the sidebar
+// renders expanded inside the drawer and the desktop collapsed state is
+// ignored — collapsing is meaningless inside an off-canvas drawer.
+const props = defineProps<{
+  mobileOpen?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:mobileOpen', value: boolean): void
+}>()
+
 const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
@@ -85,8 +96,16 @@ const authStore = useAuthStore()
 const { toast } = useToast()
 const chatRepositoryPromise = getChatRepository()
 
-// Sidebar collapse state
+// Sidebar collapse state (desktop only)
 const collapsed = ref(false)
+
+const isDrawer = computed(() => props.mobileOpen === true)
+
+// Close the mobile drawer after any in-sidebar navigation. No-op on desktop
+// (mobileOpen is always false there).
+function closeMobile() {
+  if (props.mobileOpen) emit('update:mobileOpen', false)
+}
 
 // Settings modal
 const settingsOpen = ref(false)
@@ -198,6 +217,7 @@ function isFavoritesRoute() {
 }
 
 async function handleLogout() {
+  closeMobile()
   await authStore.logout()
   chatStore.chats = []
   router.push('/login')
@@ -218,20 +238,22 @@ function onKeyDown(e: KeyboardEvent) {
 <template>
   <TooltipProvider>
     <aside
+      id="app-sidebar"
+      tabindex="-1"
       :class="[
-        'flex flex-col border-r border-border bg-sidebar text-sidebar-foreground transition-[width] duration-300',
-        collapsed ? 'w-16' : 'w-72'
+        'flex h-full flex-col border-r border-border bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-sidebar-foreground transition-[width] duration-300',
+        collapsed && !isDrawer ? 'w-16' : 'w-72'
       ]"
     >
       <!-- Header -->
       <div class="flex items-center gap-2 p-3">
-        <template v-if="!collapsed">
-          <RouterLink to="/" class="flex items-center gap-2 flex-1">
+        <template v-if="!collapsed || isDrawer">
+          <RouterLink to="/" class="flex items-center gap-2 flex-1" @click="closeMobile">
             <img src="/logo.webp" alt="Keryx" class="h-8 w-8 object-contain" />
             <span class="font-bold text-sidebar-foreground">{{ $t('app.name') }}</span>
           </RouterLink>
 
-          <Tooltip>
+          <Tooltip v-if="!isDrawer">
             <TooltipTrigger as-child>
               <Button
                 variant="ghost"
@@ -268,13 +290,13 @@ function onKeyDown(e: KeyboardEvent) {
 
       <!-- New Chat & Search -->
       <div class="px-3 pb-2 space-y-1">
-        <Tooltip v-if="collapsed">
+        <Tooltip v-if="collapsed && !isDrawer">
           <TooltipTrigger as-child>
             <Button
               variant="outline"
               class="w-full justify-center"
               size="sm"
-              @click="router.push('/')"
+              @click="router.push('/'); closeMobile()"
             >
               <Plus class="h-4 w-4" />
             </Button>
@@ -288,13 +310,13 @@ function onKeyDown(e: KeyboardEvent) {
           variant="outline"
           class="w-full justify-start gap-2"
           size="sm"
-          @click="router.push('/')"
+          @click="router.push('/'); closeMobile()"
         >
           <Plus class="h-4 w-4" />
           {{ $t('sidebar.newChat') }}
         </Button>
 
-        <Tooltip v-if="collapsed">
+        <Tooltip v-if="collapsed && !isDrawer">
           <TooltipTrigger as-child>
             <Button
               variant="ghost"
@@ -323,13 +345,13 @@ function onKeyDown(e: KeyboardEvent) {
           </kbd>
         </Button>
 
-        <Tooltip v-if="collapsed">
+        <Tooltip v-if="collapsed && !isDrawer">
           <TooltipTrigger as-child>
             <Button
               :variant="isFavoritesRoute() ? 'secondary' : 'ghost'"
               class="w-full justify-center"
               size="sm"
-              @click="router.push('/favorites')"
+              @click="router.push('/favorites'); closeMobile()"
             >
               <Star class="h-4 w-4" />
             </Button>
@@ -343,7 +365,7 @@ function onKeyDown(e: KeyboardEvent) {
           :variant="isFavoritesRoute() ? 'secondary' : 'ghost'"
           class="w-full justify-start gap-2"
           size="sm"
-          @click="router.push('/favorites')"
+          @click="router.push('/favorites'); closeMobile()"
         >
           <Star class="h-4 w-4" />
           {{ $t('sidebar.favorites') }}
@@ -353,7 +375,7 @@ function onKeyDown(e: KeyboardEvent) {
       <Separator />
 
       <!-- Chat History -->
-      <div v-if="!collapsed" class="flex-1 min-h-0 overflow-hidden">
+      <div v-if="!collapsed || isDrawer" class="flex-1 min-h-0 overflow-hidden">
         <ScrollArea class="h-full px-3 py-2">
           <div v-if="chatStore.isLoading && !chatStore.chats.length" class="text-sm text-muted-foreground text-center py-4">
             {{ $t('app.loading') }}
@@ -377,6 +399,7 @@ function onKeyDown(e: KeyboardEvent) {
                       ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   ]"
+                  @click="closeMobile"
                 >
                   <span class="truncate flex-1">
                     {{ item.label }}
@@ -453,7 +476,7 @@ function onKeyDown(e: KeyboardEvent) {
                       ? 'bg-sidebar-primary text-sidebar-primary-foreground'
                       : 'text-sidebar-foreground'
                   ]"
-                  @click="router.push(chat.to); recentChatsOpen = false"
+                  @click="router.push(chat.to); recentChatsOpen = false; closeMobile()"
                 >
                   {{ chat.label }}
                 </button>
@@ -472,7 +495,7 @@ function onKeyDown(e: KeyboardEvent) {
             <button
               :class="[
                 'group flex w-full items-center gap-2.5 rounded-md text-left transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
-                collapsed ? 'justify-center p-1.5' : 'p-2'
+                collapsed && !isDrawer ? 'justify-center p-1.5' : 'p-2'
               ]"
               :aria-label="$t('sidebar.userMenu')"
             >
@@ -484,13 +507,13 @@ function onKeyDown(e: KeyboardEvent) {
                   {{ userInitial }}
                 </template>
               </span>
-              <span v-if="!collapsed" class="min-w-0 flex-1 leading-tight">
+              <span v-if="!collapsed || isDrawer" class="min-w-0 flex-1 leading-tight">
                 <span class="block truncate text-sm font-medium">{{ userDisplayName }}</span>
                 <span class="block truncate text-xs text-muted-foreground">{{ userEmail }}</span>
               </span>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent :side="collapsed ? 'right' : 'top'" align="start" class="w-64">
+          <DropdownMenuContent :side="collapsed && !isDrawer ? 'right' : 'top'" align="start" class="w-64">
             <!-- User header -->
             <DropdownMenuLabel class="flex items-center gap-2.5 font-normal">
               <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground overflow-hidden">
@@ -512,7 +535,7 @@ function onKeyDown(e: KeyboardEvent) {
               <Settings class="mr-2 h-4 w-4" />
               {{ $t('sidebar.settings') }}
             </DropdownMenuItem>
-            <DropdownMenuItem v-if="ENABLE_AUTH && isAdmin" @click="router.push('/admin')">
+            <DropdownMenuItem v-if="ENABLE_AUTH && isAdmin" @click="router.push('/admin'); closeMobile()">
               <Shield class="mr-2 h-4 w-4" />
               Admin
             </DropdownMenuItem>
@@ -557,7 +580,7 @@ function onKeyDown(e: KeyboardEvent) {
       <CommandList>
         <CommandEmpty>{{ $t('command.noResults') }}</CommandEmpty>
         <CommandGroup :heading="$t('command.actions')">
-          <CommandItem value="new-chat" @select="router.push('/'); searchOpen = false">
+          <CommandItem value="new-chat" @select="router.push('/'); searchOpen = false; closeMobile()">
             <Plus class="mr-2 h-4 w-4" />
             {{ $t('command.newChat') }}
           </CommandItem>
@@ -567,7 +590,7 @@ function onKeyDown(e: KeyboardEvent) {
             v-for="item in group.items"
             :key="item.id"
             :value="item.label"
-            @select="router.push(item.to); searchOpen = false"
+            @select="router.push(item.to); searchOpen = false; closeMobile()"
           >
             <MessageCircle class="mr-2 h-4 w-4" />
             {{ item.label }}

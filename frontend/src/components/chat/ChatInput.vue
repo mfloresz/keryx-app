@@ -136,7 +136,7 @@ function handleStop() {
 </script>
 
 <template>
-  <div class="bg-background px-4 pb-4 pt-0">
+  <div class="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-0">
     <PromptInput
       class="max-w-3xl mx-auto"
       multiple
@@ -179,13 +179,13 @@ function handleStop() {
       </div>
 
       <!-- Right tools -->
-      <div class="order-3 my-1.5 ms-auto flex items-center gap-2 me-2">
+      <div class="order-3 my-1.5 ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2 me-2">
           <!-- Preset selector -->
           <Select
             :model-value="props.preset"
             @update:model-value="value => handlePresetSelect(String(value))"
           >
-            <SelectTrigger class="h-8 px-3 text-xs">
+            <SelectTrigger class="h-8 min-w-0 max-w-full px-3 text-xs">
               <SelectValue :placeholder="activePresetTitle" />
             </SelectTrigger>
             <SelectContent>
