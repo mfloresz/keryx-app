@@ -1,108 +1,285 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-07-01T00:00:00.000Z",
+  "generatedAt": "2026-07-31T00:00:00.000Z",
   "title": "Design System: Keryx",
   "extensions": {
     "colorMeta": {
       "primary": {
         "role": "primary",
-        "displayName": "Ámbar Terroso",
-        "canonical": "oklch(0.6649 0.0912 81.5426)",
+        "displayName": "Azul Tinta",
+        "canonical": "oklch(0.485 0.175 259)",
         "tonalRamp": [
-          "oklch(0.25 0.09 82)",
-          "oklch(0.35 0.09 82)",
-          "oklch(0.45 0.09 82)",
-          "oklch(0.55 0.09 82)",
-          "oklch(0.6649 0.0912 81.5426)",
-          "oklch(0.75 0.10 82)",
-          "oklch(0.82 0.08 82)",
-          "oklch(0.90 0.05 82)"
+          "oklch(0.18 0.175 259)",
+          "oklch(0.25 0.175 259)",
+          "oklch(0.32 0.175 259)",
+          "oklch(0.40 0.175 259)",
+          "oklch(0.485 0.175 259)",
+          "oklch(0.60 0.16 259)",
+          "oklch(0.72 0.145 259)",
+          "oklch(0.85 0.10 259)"
+        ]
+      },
+      "primary-foreground": {
+        "role": "neutral",
+        "displayName": "Casi Blanco",
+        "canonical": "oklch(0.985 0.005 88)",
+        "tonalRamp": [
+          "oklch(0.85 0.005 88)",
+          "oklch(0.90 0.005 88)",
+          "oklch(0.94 0.005 88)",
+          "oklch(0.97 0.005 88)",
+          "oklch(0.985 0.005 88)"
         ]
       },
       "secondary": {
         "role": "secondary",
-        "displayName": "Salvia Muted",
-        "canonical": "oklch(0.7004 0.0391 152.5285)",
+        "displayName": "Superficie Cálida",
+        "canonical": "oklch(0.915 0.018 88)",
         "tonalRamp": [
-          "oklch(0.25 0.04 153)",
-          "oklch(0.35 0.04 153)",
-          "oklch(0.45 0.04 153)",
-          "oklch(0.55 0.04 153)",
-          "oklch(0.65 0.04 153)",
-          "oklch(0.7004 0.0391 152.5285)",
-          "oklch(0.80 0.03 153)",
-          "oklch(0.90 0.02 153)"
+          "oklch(0.20 0.018 88)",
+          "oklch(0.35 0.018 88)",
+          "oklch(0.50 0.018 88)",
+          "oklch(0.65 0.018 88)",
+          "oklch(0.75 0.018 88)",
+          "oklch(0.85 0.018 88)",
+          "oklch(0.915 0.018 88)",
+          "oklch(0.97 0.01 88)"
+        ]
+      },
+      "accent": {
+        "role": "tertiary",
+        "displayName": "Cielo Tenue",
+        "canonical": "oklch(0.90 0.045 250)",
+        "tonalRamp": [
+          "oklch(0.18 0.045 250)",
+          "oklch(0.30 0.045 250)",
+          "oklch(0.42 0.045 250)",
+          "oklch(0.55 0.045 250)",
+          "oklch(0.68 0.045 250)",
+          "oklch(0.80 0.045 250)",
+          "oklch(0.90 0.045 250)",
+          "oklch(0.97 0.02 250)"
         ]
       },
       "background": {
         "role": "neutral",
-        "displayName": "Página Cálida",
-        "canonical": "oklch(0.982 0.0041 91.4458)",
+        "displayName": "Papel Cálido",
+        "canonical": "oklch(0.965 0.012 88)",
         "tonalRamp": [
-          "oklch(0.233 0.0093 159.2819)",
-          "oklch(0.3105 0.0163 156.152)",
-          "oklch(0.4997 0.0155 159.505)",
-          "oklch(0.7091 0.0099 150.629)",
-          "oklch(0.8793 0.0197 90.557)",
-          "oklch(0.9099 0.0195 90.5511)",
-          "oklch(0.9492 0.0152 90.2369)",
-          "oklch(0.982 0.0041 91.4458)"
+          "oklch(0.20 0.012 88)",
+          "oklch(0.35 0.012 88)",
+          "oklch(0.50 0.012 88)",
+          "oklch(0.65 0.012 88)",
+          "oklch(0.80 0.012 88)",
+          "oklch(0.90 0.012 88)",
+          "oklch(0.965 0.012 88)",
+          "oklch(0.99 0.005 88)"
         ]
       },
       "foreground": {
         "role": "neutral",
-        "displayName": "Tinta Verde",
-        "canonical": "oklch(0.3139 0.0109 156.542)",
+        "displayName": "Tinta Azul",
+        "canonical": "oklch(0.205 0.025 258)",
         "tonalRamp": [
-          "oklch(0.15 0.01 157)",
-          "oklch(0.25 0.01 157)",
-          "oklch(0.3139 0.0109 156.542)",
-          "oklch(0.45 0.01 157)",
-          "oklch(0.60 0.01 157)",
-          "oklch(0.75 0.01 157)",
-          "oklch(0.85 0.01 157)",
-          "oklch(0.95 0.005 91)"
+          "oklch(0.10 0.025 258)",
+          "oklch(0.205 0.025 258)",
+          "oklch(0.30 0.025 258)",
+          "oklch(0.40 0.025 258)",
+          "oklch(0.50 0.025 258)",
+          "oklch(0.65 0.02 258)",
+          "oklch(0.80 0.015 258)",
+          "oklch(0.93 0.01 258)"
+        ]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Papel Blanco",
+        "canonical": "oklch(0.995 0.005 88)",
+        "tonalRamp": [
+          "oklch(0.19 0.024 258)",
+          "oklch(0.35 0.015 88)",
+          "oklch(0.50 0.012 88)",
+          "oklch(0.65 0.01 88)",
+          "oklch(0.78 0.008 88)",
+          "oklch(0.88 0.006 88)",
+          "oklch(0.95 0.005 88)",
+          "oklch(0.995 0.005 88)"
         ]
       },
       "muted": {
         "role": "neutral",
-        "displayName": "Muted Surface",
-        "canonical": "oklch(0.9099 0.0195 90.5511)",
+        "displayName": "Muted Cálido",
+        "canonical": "oklch(0.925 0.014 88)",
         "tonalRamp": [
-          "oklch(0.3105 0.0163 156.152)",
-          "oklch(0.40 0.02 156)",
-          "oklch(0.55 0.02 156)",
-          "oklch(0.70 0.02 156)",
-          "oklch(0.80 0.02 91)",
-          "oklch(0.87 0.02 91)",
-          "oklch(0.9099 0.0195 90.5511)",
-          "oklch(0.96 0.01 91)"
+          "oklch(0.20 0.014 88)",
+          "oklch(0.35 0.014 88)",
+          "oklch(0.50 0.014 88)",
+          "oklch(0.65 0.014 88)",
+          "oklch(0.78 0.014 88)",
+          "oklch(0.87 0.014 88)",
+          "oklch(0.925 0.014 88)",
+          "oklch(0.97 0.01 88)"
+        ]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Muted Text",
+        "canonical": "oklch(0.405 0.025 258)",
+        "tonalRamp": [
+          "oklch(0.20 0.025 258)",
+          "oklch(0.30 0.025 258)",
+          "oklch(0.405 0.025 258)",
+          "oklch(0.50 0.02 258)",
+          "oklch(0.62 0.02 258)",
+          "oklch(0.75 0.015 258)",
+          "oklch(0.87 0.01 258)",
+          "oklch(0.95 0.005 258)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Borde Cálido",
+        "canonical": "oklch(0.865 0.018 88)",
+        "tonalRamp": [
+          "oklch(0.20 0.018 88)",
+          "oklch(0.35 0.018 88)",
+          "oklch(0.50 0.018 88)",
+          "oklch(0.65 0.018 88)",
+          "oklch(0.78 0.018 88)",
+          "oklch(0.865 0.018 88)",
+          "oklch(0.93 0.012 88)",
+          "oklch(0.98 0.006 88)"
+        ]
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "Borde Input",
+        "canonical": "oklch(0.94 0.012 88)",
+        "tonalRamp": [
+          "oklch(0.20 0.012 88)",
+          "oklch(0.35 0.012 88)",
+          "oklch(0.50 0.012 88)",
+          "oklch(0.65 0.012 88)",
+          "oklch(0.80 0.012 88)",
+          "oklch(0.88 0.012 88)",
+          "oklch(0.94 0.012 88)",
+          "oklch(0.98 0.006 88)"
+        ]
+      },
+      "ring": {
+        "role": "primary",
+        "displayName": "Ring Azul",
+        "canonical": "oklch(0.60 0.16 259)",
+        "tonalRamp": [
+          "oklch(0.20 0.16 259)",
+          "oklch(0.32 0.16 259)",
+          "oklch(0.44 0.16 259)",
+          "oklch(0.60 0.16 259)",
+          "oklch(0.72 0.145 259)",
+          "oklch(0.82 0.10 259)",
+          "oklch(0.90 0.06 259)",
+          "oklch(0.96 0.03 259)"
         ]
       },
       "destructive": {
         "role": "destructive",
-        "displayName": "Rojo Muted",
-        "canonical": "oklch(0.5133 0.1143 29.2251)",
+        "displayName": "Rojo Error",
+        "canonical": "oklch(0.55 0.19 25)",
         "tonalRamp": [
-          "oklch(0.25 0.11 29)",
-          "oklch(0.35 0.11 29)",
-          "oklch(0.45 0.11 29)",
-          "oklch(0.5133 0.1143 29.2251)",
-          "oklch(0.60 0.10 29)",
-          "oklch(0.70 0.08 29)",
-          "oklch(0.80 0.05 29)",
-          "oklch(0.90 0.03 29)"
+          "oklch(0.20 0.19 25)",
+          "oklch(0.32 0.19 25)",
+          "oklch(0.44 0.19 25)",
+          "oklch(0.55 0.19 25)",
+          "oklch(0.65 0.17 25)",
+          "oklch(0.75 0.13 25)",
+          "oklch(0.85 0.09 25)",
+          "oklch(0.93 0.05 25)"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Verde Éxito",
+        "canonical": "oklch(0.53 0.14 155)",
+        "tonalRamp": [
+          "oklch(0.20 0.14 155)",
+          "oklch(0.32 0.14 155)",
+          "oklch(0.44 0.14 155)",
+          "oklch(0.53 0.14 155)",
+          "oklch(0.63 0.13 155)",
+          "oklch(0.73 0.11 155)",
+          "oklch(0.84 0.07 155)",
+          "oklch(0.93 0.04 155)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "Sidebar Cálido",
+        "canonical": "oklch(0.945 0.018 88)",
+        "tonalRamp": [
+          "oklch(0.17 0.024 258)",
+          "oklch(0.30 0.018 88)",
+          "oklch(0.45 0.018 88)",
+          "oklch(0.60 0.018 88)",
+          "oklch(0.75 0.018 88)",
+          "oklch(0.88 0.018 88)",
+          "oklch(0.945 0.018 88)",
+          "oklch(0.98 0.008 88)"
+        ]
+      },
+      "sidebar-primary": {
+        "role": "primary",
+        "displayName": "Sidebar Activo (Azul Tinta)",
+        "canonical": "oklch(0.485 0.175 259)",
+        "tonalRamp": [
+          "oklch(0.18 0.175 259)",
+          "oklch(0.25 0.175 259)",
+          "oklch(0.32 0.175 259)",
+          "oklch(0.40 0.175 259)",
+          "oklch(0.485 0.175 259)",
+          "oklch(0.60 0.16 259)",
+          "oklch(0.72 0.145 259)",
+          "oklch(0.85 0.10 259)"
+        ]
+      },
+      "reasoning-foreground": {
+        "role": "tertiary",
+        "displayName": "Ámbar de Razón",
+        "canonical": "oklch(0.48 0.05 75)",
+        "tonalRamp": [
+          "oklch(0.20 0.05 75)",
+          "oklch(0.32 0.05 75)",
+          "oklch(0.48 0.05 75)",
+          "oklch(0.58 0.05 75)",
+          "oklch(0.68 0.04 75)",
+          "oklch(0.78 0.04 80)",
+          "oklch(0.88 0.03 80)",
+          "oklch(0.95 0.02 80)"
+        ]
+      },
+      "reasoning-border": {
+        "role": "tertiary",
+        "displayName": "Borde Ámbar",
+        "canonical": "oklch(0.80 0.04 85)",
+        "tonalRamp": [
+          "oklch(0.30 0.04 85)",
+          "oklch(0.45 0.04 85)",
+          "oklch(0.60 0.04 85)",
+          "oklch(0.70 0.04 85)",
+          "oklch(0.80 0.04 85)",
+          "oklch(0.87 0.03 85)",
+          "oklch(0.93 0.02 85)",
+          "oklch(0.97 0.01 85)"
         ]
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display — Spectral",
-        "purpose": "Hero headlines y títulos de bienvenida. Aparece una vez por vista."
+        "purpose": "Acentos display y preview del reasoning. El serif elegante de trazos finos."
       },
       "body": {
-        "displayName": "Body — Merriweather",
-        "purpose": "Texto de mensajes, descripciones, contenido legible principal."
+        "displayName": "Body — Merriweather Variable",
+        "purpose": "Fuente de app por defecto: mensajes, descripciones, contenido legible. El usuario puede cambiarla en ajustes."
       },
       "label": {
         "displayName": "Label — Merriweather Medium",
@@ -110,39 +287,58 @@
       },
       "mono": {
         "displayName": "Mono — Courier Prime",
-        "purpose": "Código, kbd, samp. Solo para contenido técnico."
+        "purpose": "Código, kbd, filenames. Solo contenido técnico."
+      },
+      "serif": {
+        "displayName": "Serif — Cormorant Garamond",
+        "purpose": "Alternativa display declarada en el token font-serif; aún no cargada en main.ts."
       }
     },
     "shadows": [
       {
-        "name": "ambient-green",
-        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08)",
-        "purpose": "Sombras funcionales en modo claro. Tinte verde intencional."
+        "name": "shadow-2xs",
+        "value": "0 1px 2px hsl(220 30% 15% / 0.04)",
+        "purpose": "Nivel más bajo de la escala en modo claro."
       },
       {
-        "name": "structural-black",
-        "value": "0px 10px 30px 0px hsl(0 0% 0% / 0.4)",
-        "purpose": "Sombras funcionales en modo oscuro."
+        "name": "shadow-xs",
+        "value": "0 2px 6px hsl(220 30% 15% / 0.06)",
+        "purpose": "Inputs, textareas y el composer."
       },
       {
-        "name": "input-xs",
-        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.04)",
-        "purpose": "Sombra mínima en inputs y textareas."
+        "name": "shadow-sm",
+        "value": "0 4px 12px hsl(220 30% 15% / 0.07), 0 1px 2px hsl(220 30% 15% / 0.04)",
+        "purpose": "Cards — elevación sutil que no compite con overlays."
       },
       {
-        "name": "card-sm",
-        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 1px 2px -1px hsl(140 6.25% 18.82% / 0.08)",
-        "purpose": "Elevación sutil en cards."
+        "name": "shadow",
+        "value": "0 8px 24px hsl(220 30% 15% / 0.08), 0 2px 4px hsl(220 30% 15% / 0.04)",
+        "purpose": "Elementos flotantes, botón de stop del composer."
       },
       {
-        "name": "overlay-md",
-        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 2px 4px -1px hsl(140 6.25% 18.82% / 0.08)",
-        "purpose": "Popovers, dropdowns, overlays."
+        "name": "shadow-md",
+        "value": "0 12px 32px hsl(220 30% 15% / 0.10), 0 3px 6px hsl(220 30% 15% / 0.05)",
+        "purpose": "Popovers y dropdowns."
       },
       {
-        "name": "overlay-lg",
-        "value": "0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 4px 6px -1px hsl(140 6.25% 18.82% / 0.08)",
+        "name": "shadow-lg",
+        "value": "0 20px 48px hsl(220 30% 15% / 0.12), 0 5px 10px hsl(220 30% 15% / 0.05)",
         "purpose": "Diálogos y modales."
+      },
+      {
+        "name": "shadow-xl",
+        "value": "0 28px 64px hsl(220 30% 15% / 0.14)",
+        "purpose": "Overlays grandes."
+      },
+      {
+        "name": "shadow-2xl",
+        "value": "0 36px 80px hsl(220 30% 15% / 0.18)",
+        "purpose": "Máxima elevación."
+      },
+      {
+        "name": "shadow-dark-base",
+        "value": "hsl(0 0% 0%)",
+        "purpose": "Base de sombras en modo oscuro — negro puro, alfas más altos (0.20–0.58)."
       }
     ],
     "motion": [
@@ -154,7 +350,7 @@
       {
         "name": "duration-fast",
         "value": "150ms",
-        "purpose": "Transiciones de opacidad y exit animations."
+        "purpose": "Transiciones de opacidad, hovers, exit animations."
       },
       {
         "name": "duration-normal",
@@ -164,7 +360,7 @@
       {
         "name": "duration-slow",
         "value": "300ms",
-        "purpose": "Sidebar collapse/expand."
+        "purpose": "Collapse/expand del sidebar (transition-[width])."
       }
     ],
     "breakpoints": [
@@ -179,95 +375,131 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Botón principal con ámbar terroso. Para acciones primarias: enviar mensaje, confirmar, crear.",
-      "html": "<button class=\"ds-btn-primary\">Enviar mensaje</button>",
-      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-foreground); padding: 8px 16px; border-radius: 14px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-primary:hover { opacity: 0.9; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 3px oklch(0.6649 0.0912 81.5426 / 0.5); }"
+      "description": "Botón principal con azul tinta. Para acciones primarias: enviar mensaje, confirmar, crear.",
+      "html": "<button class=\"ds-btn-primary\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 10-5 5 5 5\"/><path d=\"M20 4v7a4 4 0 0 1-4 4H4\"/></svg>Enviar mensaje</button>",
+      "css": ".ds-btn-primary { background: var(--primary); color: var(--primary-foreground); padding: 8px 16px; border-radius: 11.6px; height: 36px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 150ms; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-primary:hover { background: color-mix(in oklab, var(--primary) 90%, transparent); } .ds-btn-primary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }"
     },
     {
       "name": "Outline Button",
       "kind": "button",
       "refersTo": "button-outline",
-      "description": "Botón de borde para acciones secundarias. Modelo selector, cancelar, navegación.",
+      "description": "Botón de borde para acciones secundarias. Model selector, cancelar, navegación.",
       "html": "<button class=\"ds-btn-outline\">Cancelar</button>",
-      "css": ".ds-btn-outline { background: transparent; color: var(--foreground); padding: 8px 16px; border-radius: 14px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border); cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-outline:hover { background: var(--accent); color: var(--accent-foreground); } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 3px oklch(0.6649 0.0912 81.5426 / 0.5); }"
+      "css": ".ds-btn-outline { background: var(--background); color: var(--foreground); padding: 8px 16px; border-radius: 11.6px; height: 36px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: 1px solid var(--border); box-shadow: var(--shadow-xs); cursor: pointer; transition: all 150ms; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-outline:hover { background: var(--accent); color: var(--accent-foreground); } .ds-btn-outline:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Botón secundario sobre superficie cálida. Item de favoritos activo, badges con acción.",
+      "html": "<button class=\"ds-btn-secondary\">Favoritos</button>",
+      "css": ".ds-btn-secondary { background: var(--secondary); color: var(--secondary-foreground); padding: 8px 16px; border-radius: 11.6px; height: 36px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 150ms; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-secondary:hover { background: color-mix(in oklab, var(--secondary) 80%, transparent); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }"
     },
     {
       "name": "Ghost Button",
       "kind": "button",
       "refersTo": "button-ghost",
-      "description": "Botón fantasma para acciones de bajo peso. Acciones de mensaje, toggle, navegación sidebar.",
+      "description": "Botón fantasma para acciones de bajo peso. Acciones de mensaje, toggles, navegación sidebar.",
       "html": "<button class=\"ds-btn-ghost\">Copiar</button>",
-      "css": ".ds-btn-ghost { background: transparent; color: var(--foreground); padding: 8px 16px; border-radius: 14px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-ghost:hover { background: var(--accent); color: var(--accent-foreground); }"
+      "css": ".ds-btn-ghost { background: transparent; color: var(--foreground); padding: 8px 16px; border-radius: 11.6px; height: 36px; font-family: var(--app-font-family); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 150ms; display: inline-flex; align-items: center; justify-content: center; gap: 8px; } .ds-btn-ghost:hover { background: var(--accent); color: var(--accent-foreground); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }"
     },
     {
       "name": "Input",
       "kind": "input",
       "refersTo": "input",
-      "description": "Campo de texto para una línea. Búsqueda, configuración, nombres.",
+      "description": "Campo de texto de una línea. Búsqueda, configuración, nombres.",
       "html": "<input class=\"ds-input\" placeholder=\"Buscar chats...\" />",
-      "css": ".ds-input { background: transparent; color: var(--foreground); padding: 4px 12px; border-radius: 14px; border: 1px solid var(--border); font-family: var(--app-font-family); font-size: 0.875rem; height: 36px; width: 100%; box-shadow: 0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.04); transition: color 0.15s, box-shadow 0.15s; } .ds-input::placeholder { color: var(--muted-foreground); } .ds-input:focus { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px oklch(0.6649 0.0912 81.5426 / 0.5); }"
+      "css": ".ds-input { background: transparent; color: var(--foreground); padding: 4px 12px; border-radius: 11.6px; border: 1px solid var(--input); font-family: var(--app-font-family); font-size: 0.875rem; height: 36px; width: 100%; box-shadow: var(--shadow-xs); transition: color 150ms, box-shadow 150ms; } .ds-input::placeholder { color: var(--muted-foreground); } .ds-input:focus { outline: none; border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); }"
+    },
+    {
+      "name": "Composer",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "El composer de chat (InputGroup): textarea auto-creciente con botón de submit en azul tinta.",
+      "html": "<div class=\"ds-composer\"><textarea class=\"ds-composer-textarea\" placeholder=\"Escribe un mensaje...\"></textarea><button class=\"ds-composer-submit\" aria-label=\"Enviar\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m9 10-5 5 5 5\"/><path d=\"M20 4v7a4 4 0 0 1-4 4H4\"/></svg></button></div>",
+      "css": ".ds-composer { display: flex; align-items: flex-end; gap: 8px; background: var(--background); border: 1px solid var(--input); border-radius: 11.6px; box-shadow: var(--shadow-xs); padding: 8px 8px 8px 16px; transition: border-color 150ms, box-shadow 150ms; } .ds-composer:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent); } .ds-composer-textarea { flex: 1; border: none; background: transparent; resize: none; font-family: var(--app-font-family); font-size: 0.875rem; line-height: 1.6; color: var(--foreground); min-height: 48px; padding: 8px 0; outline: none; } .ds-composer-textarea::placeholder { color: var(--muted-foreground); } .ds-composer-submit { background: var(--primary); color: var(--primary-foreground); width: 32px; height: 32px; border: none; border-radius: 11.6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background 150ms; } .ds-composer-submit:hover { background: color-mix(in oklab, var(--primary) 90%, transparent); }"
     },
     {
       "name": "Card",
       "kind": "card",
       "refersTo": "card",
-      "description": "Superficie elevada para agrupar contenido. Configuración, paneles, contenido estructurado.",
+      "description": "Superficie de papel blanco para agrupar contenido. Configuración, paneles, contenido estructurado.",
       "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><h3 class=\"ds-card-title\">Configuración</h3><p class=\"ds-card-desc\">Opciones generales</p></div><div class=\"ds-card-content\">Contenido aquí</div></div>",
-      "css": ".ds-card { background: var(--card); color: var(--card-foreground); border-radius: 20px; border: 1px solid var(--border); padding: 24px; box-shadow: 0px 4px 20px 0px hsl(140 6.25% 18.82% / 0.08), 0px 1px 2px -1px hsl(140 6.25% 18.82% / 0.08); display: flex; flex-direction: column; gap: 24px; } .ds-card-header { display: grid; grid-template-rows: auto auto; gap: 6px; } .ds-card-title { font-weight: 600; font-size: 1rem; line-height: 1.3; } .ds-card-desc { color: var(--muted-foreground); font-size: 0.875rem; } .ds-card-content { padding: 0; }"
+      "css": ".ds-card { background: var(--card); color: var(--card-foreground); border-radius: 17.6px; border: 1px solid var(--border); padding: 24px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 24px; } .ds-card-header { display: grid; grid-template-rows: auto auto; gap: 6px; } .ds-card-title { font-weight: 600; font-size: 1rem; line-height: 1.4; font-family: var(--app-font-family); } .ds-card-desc { color: var(--muted-foreground); font-size: 0.875rem; font-family: var(--app-font-family); } .ds-card-content { padding: 0; font-family: var(--app-font-family); font-size: 0.875rem; line-height: 1.6; }"
     },
     {
       "name": "Badge",
       "kind": "chip",
       "refersTo": "badge",
-      "description": "Etiqueta pill para estados, modelos, categorías.",
+      "description": "Etiqueta píldora para estados, modelos, categorías.",
       "html": "<span class=\"ds-badge\">GPT-5.4 Nano</span>",
-      "css": ".ds-badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 500; background: var(--primary); color: var(--primary-foreground); border: 1px solid transparent; white-space: nowrap; }"
+      "css": ".ds-badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px; padding: 2px 8px; font-size: 0.75rem; font-weight: 500; background: var(--primary); color: var(--primary-foreground); border: 1px solid transparent; white-space: nowrap; font-family: var(--app-font-family); }"
     },
     {
       "name": "Sidebar Chat Item",
       "kind": "nav",
       "refersTo": "sidebar-item",
-      "description": "Item de chat en el sidebar. Activo: ámbar. Inactivo: transparente con hover accent.",
+      "description": "Item de chat en el sidebar. Activo: azul tinta. Inactivo: transparente con hover cielo tenue.",
       "html": "<div class=\"ds-sidebar-item\">Conversación sobre arquitectura</div>",
-      "css": ".ds-sidebar-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 14px; font-size: 0.875rem; color: var(--sidebar-foreground); cursor: pointer; transition: background-color 0.15s, color 0.15s; } .ds-sidebar-item:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } .ds-sidebar-item.active { background: var(--sidebar-primary); color: var(--sidebar-primary-foreground); }"
+      "css": ".ds-sidebar-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 11.6px; font-size: 0.875rem; font-family: var(--app-font-family); color: var(--sidebar-foreground); cursor: pointer; transition: background-color 150ms, color 150ms; } .ds-sidebar-item:hover { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); } .ds-sidebar-item.active { background: var(--sidebar-primary); color: var(--sidebar-primary-foreground); }"
+    },
+    {
+      "name": "User Message Bubble",
+      "kind": "custom",
+      "refersTo": "message-user",
+      "description": "Burbuja del mensaje de usuario en azul tinta, alineada a la derecha. El asistente no usa burbuja.",
+      "html": "<div class=\"ds-msg-user\">Explícame cómo funcionan las ramas en Keryx</div>",
+      "css": ".ds-msg-user { background: var(--primary); color: var(--primary-foreground); border-radius: 13.6px; padding: 12px 16px; font-family: var(--app-font-family); font-size: 0.875rem; line-height: 1.6; max-width: 80%; margin-left: auto; }"
+    },
+    {
+      "name": "Reasoning",
+      "kind": "custom",
+      "refersTo": "reasoning-foreground",
+      "description": "Bloque de pensamiento del modelo — la única nota cálida del sistema.",
+      "html": "<div class=\"ds-reasoning\"><button class=\"ds-reasoning-trigger\">Pensó durante 12 segundos</button><div class=\"ds-reasoning-content\">Analicé el contexto del chat y los archivos adjuntos antes de responder.</div></div>",
+      "css": ".ds-reasoning { font-family: var(--app-font-family); } .ds-reasoning-trigger { background: transparent; border: none; color: var(--reasoning-foreground); font-size: 0.875rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 4px 0; transition: color 150ms; } .ds-reasoning-trigger:hover { color: var(--foreground); } .ds-reasoning-content { margin-top: 8px; border-left: 2px solid var(--reasoning-border); padding-left: 16px; color: var(--reasoning-foreground); font-size: 0.875rem; line-height: 1.6; }"
     }
   ],
   "narrative": {
     "northStar": "El Escritorio Silencioso",
-    "overview": "Keryx es un escritorio de trabajo ordenado y silencioso — todo en su lugar, sin distracciones. La interfaz transmite calma y competencia: un espacio donde la conversación con la IA fluye sin fricción visual. La personalidad es inteligente, seria y confiable, como una herramienta bien construida que no necesita gritar para demostrar su valor.\n\nEl sistema rechaza activamente la estética genérica de herramientas de código (editores con sidebar de chat como accesorio) y los chats corporativos neutros (ChatGPT, Claude). Keryx tiene identidad propia: tipografía serif como declaración de seriedad, paleta cálida terrosa que no busca ser llamativa, espaciado generoso que respeta la lectura.",
+    "overview": "Keryx es un escritorio de trabajo ordenado y silencioso — todo en su lugar, sin distracciones. La interfaz transmite calma y competencia: un espacio donde la conversación con la IA fluye sin fricción visual. La personalidad es inteligente, seria y confiable, como una herramienta bien construida que no necesita gritar para demostrar su valor.\n\nEl sistema se apoya en un contraste de papel y tinta: superficies de papel cálido (matiz 88) contra tinta azul profunda (matiz 258). El ámbar cálido de la etapa anterior sobrevive en un solo lugar — el bloque de pensamiento del modelo (reasoning) — como una nota cálida deliberada dentro de un sistema frío por lo demás. La tipografía serif (Merriweather Variable por defecto, Spectral para acentos display) es la declaración de seriedad: Keryx no parece un chat corporativo.\n\nEl sistema rechaza activamente la estética genérica de herramientas de código (editores con sidebar de chat como accesorio) y los chats corporativos neutros (ChatGPT, Claude). Keryx tiene identidad propia: serif como voz, papel y tinta como paleta, y un radius compacto derivado de un único token.",
     "keyCharacteristics": [
-      "Serif-forward: Spectral y Merriweather definen la personalidad visual",
-      "Paleta terrosa: ámbar cálido como acento, verdes oliva como base",
-      "Superficies planas con sombras funcionales, no decorativas",
-      "Espaciado generoso que respira, nunca apretado",
-      "Animaciones únicamente funcionales — feedback de estado, orientación espacial"
+      "Papel cálido, tinta azul: neutros cálidos (hue 88) + texto con tinte azul (hue 258)",
+      "Serif-first: Merriweather Variable como fuente de app, Spectral para acentos display",
+      "Burbuja de usuario en azul tinta (bg-primary); el asistente escribe directo sobre la página",
+      "Ámbar reservado exclusivamente para el reasoning del modelo",
+      "Radius compacto derivado de --radius: 0.85rem (~14px base)",
+      "Superficies planas con sombras funcionales; en claro, sombras con tinte azul (hsl 220)"
     ],
     "rules": [
-      { "name": "The Earth-Tone Rule", "body": "Los colores neutros nunca son grises puros. Siempre tienen un tinte hacia la familia cromática de la paleta (verde-oliva en claro, verde-profundo en oscuro).", "section": "colors" },
-      { "name": "The Amber Restraint Rule", "body": "El ámbar primario aparece en ≤15% de cualquier pantalla. Su rareza es su punto — es la chispa que orienta la atención, no el color dominante.", "section": "colors" },
-      { "name": "The Serif Identity Rule", "body": "El serif no es decorativo; es la personalidad de Keryx. Nunca se reemplaza por sans-serif en display o body.", "section": "typography" },
-      { "name": "The Baseline Size Rule", "body": "El tamaño base es 0.875rem (14px), no 1rem. Herramienta de uso intensivo se beneficia de densidad moderada.", "section": "typography" },
-      { "name": "The Functional Elevation Rule", "body": "Las sombras no son decorativas. Si un elemento no cambia de nivel, no tiene sombra.", "section": "elevation" }
+      { "name": "The Paper & Ink Rule", "body": "Los neutros nunca son grises puros. Las superficies son papel cálido (matiz 88); el texto es tinta azul (matiz 258). Un gris neutro rompe el contraste de papel y tinta.", "section": "colors" },
+      { "name": "The Amber Exclusivity Rule", "body": "El ámbar cálido aparece únicamente en el reasoning del modelo. Si un elemento no es pensamiento, no es ámbar. Su rareza lo hace legible como 'esto es el modelo pensando'.", "section": "colors" },
+      { "name": "The Blue Restraint Rule", "body": "El azul tinta (primary) se concentra en acciones y en la burbuja de usuario — nunca en fondos de página ni en el texto de lectura. La página permanece en papel cálido.", "section": "colors" },
+      { "name": "The Serif First Rule", "body": "La voz por defecto de Keryx es serif (Merriweather Variable). Las alternativas sans (geist, manrope, open-sans, …) son elección explícita del usuario en ajustes, nunca la opción por defecto del sistema.", "section": "typography" },
+      { "name": "The Baseline Size Rule", "body": "El tamaño base es 0.875rem (14px), no 1rem. Una herramienta personal de uso intensivo se beneficia de densidad moderada. Nunca se sube a 16px para body text en desktop.", "section": "typography" },
+      { "name": "The Functional Elevation Rule", "body": "Las sombras no son decorativas. Si un elemento no cambia de nivel (no es un overlay, popover, input o card), no tiene sombra. Los cards usan borde + tono, no sombra, para definir sus límites.", "section": "elevation" },
+      { "name": "The Compact Radius Rule", "body": "Ninguna esquina se define con un radio hardcodeado; todo deriva de --radius (0.85rem). El tope de cards es xl (17.6px).", "section": "shapes" }
     ],
     "dos": [
-      "Do usar Spectral/Merriweather como familia tipográfica principal",
-      "Do mantener el ámbar primario como acento raro (≤15%)",
-      "Do usar sombras solo en overlays (diálogos, popovers, dropdowns)",
-      "Do aplicar transiciones de estado en inputs y buttons",
-      "Do usar text-muted-foreground para placeholders y timestamps",
-      "Do respetar la densidad base de 14px para body text",
-      "Do usar la sombra verde-tintada en modo claro"
+      "Do mantener el contraste papel cálido (superficies) + tinta azul (texto). Es la identidad cromática de Keryx.",
+      "Do usar el serif por defecto (Merriweather Variable) y Spectral para acentos display.",
+      "Do reservar el ámbar para el reasoning del modelo — es la única nota cálida.",
+      "Do usar la burbuja de usuario en azul tinta (bg-primary) y el asistente sin burbuja.",
+      "Do usar sombras solo donde hay cambio de nivel (inputs, cards, overlays). En claro, sombras con tinte azul (hsl(220 30% 15%)).",
+      "Do derivar todo radio de --radius (0.85rem). El tope de cards es xl (17.6px).",
+      "Do aplicar transition-[color,box-shadow] en inputs y transition-all en botones; ring de focus de 3px.",
+      "Do respetar la densidad base de 14px para body text — es una herramienta de uso intensivo, no un blog."
     ],
     "donts": [
-      "Don't usar sans-serif en display o body text",
-      "Don't usar grises puros para neutros — siempre tintar hacia verde-oliva",
-      "Don't poner sombras en cards, inputs, o badges",
-      "Don't exceder 15% de cobertura del ámbar primario",
-      "Don't usar border-left/right mayor a 1px como acento decorativo",
-      "Don't animar propiedades de layout en transiciones de estado",
-      "Don't usar gradientes de texto",
-      "Don't redondear cards con radius mayor a 20px",
-      "Don't parecerse a herramientas de código o chats corporativos genéricos"
+      "Don't usar grises puros para neutros — siempre papel cálido (hue 88) o tinta azul (hue 258).",
+      "Don't usar ámbar fuera del reasoning del modelo.",
+      "Don't poner sombras decorativas en elementos que no cambian de nivel.",
+      "Don't usar sans-serif como fuente por defecto del sistema — solo por elección explícita del usuario.",
+      "Don't redondear cards con radius mayor a xl (17.6px).",
+      "Don't usar gradientes de texto (background-clip: text) — el énfasis es por peso y tamaño, no por degradado.",
+      "Don't animar propiedades de layout (width, height, padding) en transiciones de estado — excepto la transición de ancho del sidebar.",
+      "Don't parecerse a herramientas de código (Cursor, Windsurf) — Keryx pone el chat como superficie principal, no como sidebar de un IDE.",
+      "Don't parecerse a chats corporativos genéricos (ChatGPT, Claude) — Keryx tiene personalidad propia con su serif y su paleta de papel y tinta."
     ]
   }
 }
