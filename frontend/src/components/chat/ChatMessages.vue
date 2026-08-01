@@ -99,7 +99,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex-1 min-h-0 overflow-hidden relative">
     <ScrollArea ref="scrollAreaRef" class="h-full">
-      <div class="max-w-3xl mx-auto space-y-2 p-4 pb-12">
+      <div class="max-w-5xl mx-auto space-y-2 p-4 pb-12">
         <ChatMessageItem
           v-for="(message, index) in props.messages"
           :key="message.id"

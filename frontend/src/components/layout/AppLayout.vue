@@ -15,11 +15,27 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { Menu } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
+import { useChatStore } from '@/stores/chat'
 import AppSidebar from './AppSidebar.vue'
 
 const route = useRoute()
+const { t } = useI18n()
+const chatStore = useChatStore()
+
+// Mobile header title: the active chat's title when on a chat route, otherwise
+// the app name. Reads the store's chat index so it stays in sync with
+// updateChat() (rename in the sidebar, title refresh after streaming).
+const mobileHeaderTitle = computed(() => {
+  const chatId = route.params.id
+  if (typeof chatId !== 'string' || chatId.length === 0) {
+    return t('app.name')
+  }
+  // Fallback while the chat is not indexed yet (matches the page-level fallback).
+  return chatStore.chats.find((c) => c.id === chatId)?.label || 'Untitled'
+})
 
 // Mobile drawer state — local to this layout, never globalized.
 const mobileOpen = ref(false)
@@ -131,9 +147,8 @@ watch(mobileOpen, async (open) => {
       >
         <Menu class="h-5 w-5" />
       </Button>
-      <RouterLink to="/" class="flex min-w-0 items-center gap-2 py-2">
-        <img src="/logo.webp" alt="Keryx" class="h-8 w-8 object-contain" />
-        <span class="truncate font-bold">{{ $t('app.name') }}</span>
+      <RouterLink to="/" class="flex min-w-0 flex-1 items-center gap-2 py-2">
+        <span class="min-w-0 flex-1 truncate font-bold">{{ mobileHeaderTitle }}</span>
       </RouterLink>
     </header>
 
