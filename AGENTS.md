@@ -1,3 +1,10 @@
+## Command output and truncation
+
+- Always run supported commands through `rtk` as required by the global agent instructions.
+- For tests, builds, lint, type-checks, vulnerability scans, and other commands whose output may be long, preserve the final result lines: set the terminal tool's `tail_lines` to a sufficiently large value (normally 40–80 or more) instead of relying on the default output window.
+- Never pipe command output through `head`, `tail`, or another truncating filter just to reduce the response. The final lines usually contain the compilation result, test summary, or failure diagnostics.
+- Do not infer success from truncated output. If RTK reports a saved full-output path, read it with `rtk read <path>` rather than rerunning the command.
+
 ## Releases & tagging
 
 - Tags must use the `v` prefix (e.g. `v0.1.0`, `v1.2.3`) to trigger the CI release workflow in `.github/workflows/build.yml`.
