@@ -2,7 +2,7 @@
 import type { HTMLAttributes } from 'vue'
 import { cn } from '@/lib/utils'
 import { computed, useSlots } from 'vue'
-import { AppComark } from '@/components/ai-elements/comark'
+import { AppComark, normalizeMathDelimiters } from '@/components/ai-elements/comark'
 
 interface Props {
   content?: string
@@ -28,7 +28,7 @@ const slotContent = computed<string | undefined>(() => {
   return text || undefined
 })
 
-const md = computed(() => (slotContent.value ?? props.content ?? '') as string)
+const md = computed(() => normalizeMathDelimiters((slotContent.value ?? props.content ?? '') as string))
 </script>
 
 <template>

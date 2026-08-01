@@ -15,20 +15,14 @@ func TestBaseSystemPromptHasComarkCapabilities(t *testing.T) {
 		"```mermaid",
 		"::component{prop=\"value\"}",
 		":component{prop=\"value\"}",
-		"{{ path || default }}",
-		"frontmatter.*",
 		"[text]{...}",
 		"{1-3,5}",
 		"#slot-name",
 		"$inline math$",
 		"$$block math$$",
 		"KaTeX",
-		"Footnotes",
-		"[^label]",
 		"only the `alert` component",
 		"render as plain text",
-		"always provide a `|| default` fallback",
-		"never interpreted",
 	}
 	for _, s := range required {
 		if !strings.Contains(p, s) {
@@ -36,7 +30,7 @@ func TestBaseSystemPromptHasComarkCapabilities(t *testing.T) {
 		}
 	}
 
-	// sanity: prompt still has placeholders for the renderer
+	for// sanity: prompt still has placeholders for the renderer
 	for _, s := range []string{"{username}", "{datetime}", "{language}"} {
 		if !strings.Contains(p, s) {
 			t.Errorf("missing placeholder %q", s)

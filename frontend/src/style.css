@@ -234,19 +234,48 @@
         color: var(--primary-foreground);
     }
 
+    .markdown-content {
+        min-width: 0;
+        color: var(--foreground);
+        font-size: 0.95rem;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+    }
+
+    .markdown-content > * + * {
+        margin-top: 1rem;
+    }
+
     .markdown-content ol,
     .markdown-content ul {
-        list-style-position: inside;
-        padding-left: 0;
+        padding-left: 1.5rem;
+    }
+
+    .markdown-content ol {
+        list-style-type: decimal;
+    }
+
+    .markdown-content ul {
+        list-style-type: disc;
+    }
+
+    .markdown-content ol ol,
+    .markdown-content ul ul,
+    .markdown-content ol ul,
+    .markdown-content ul ol {
+        margin-top: 0.35rem;
+        margin-bottom: 0.35rem;
     }
 
     .markdown-content li {
-        display: list-item;
-        margin-left: 0;
+        padding-left: 0.25rem;
+    }
+
+    .markdown-content li + li {
+        margin-top: 0.35rem;
     }
 
     .markdown-content li > p {
-        display: inline;
         margin-top: 0;
         margin-bottom: 0;
     }
@@ -257,21 +286,25 @@
     .markdown-content h4,
     .markdown-content h5,
     .markdown-content h6 {
-        font-weight: 600;
+        color: var(--foreground);
+        font-weight: 650;
         line-height: 1.25;
-        margin-top: 1.2em;
-        margin-bottom: 0.6em;
+        margin-top: 1.5em;
+        margin-bottom: 0.55em;
         letter-spacing: var(--tracking-tight);
+        text-wrap: balance;
     }
 
     .markdown-content h1 {
-        font-size: 1.5em;
+        font-size: 1.55em;
     }
     .markdown-content h2 {
+        border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
         font-size: 1.3em;
+        padding-bottom: 0.25em;
     }
     .markdown-content h3 {
-        font-size: 1.15em;
+        font-size: 1.12em;
     }
     .markdown-content h4 {
         font-size: 1em;
@@ -282,8 +315,8 @@
     }
 
     .markdown-content p {
-        margin-top: 0.6em;
-        margin-bottom: 0.6em;
+        margin-top: 0.7em;
+        margin-bottom: 0.7em;
     }
 
     .markdown-content a {
@@ -308,13 +341,18 @@
     .markdown-content pre {
         background: var(--card);
         border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        padding: 0.75rem 1rem;
+        border-radius: var(--radius-lg);
+        padding: 1rem 1.1rem;
         overflow-x: auto;
-        margin-top: 0.6em;
-        margin-bottom: 0.6em;
-        font-size: 0.875rem;
-        line-height: 1.6;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        font-size: 0.8125rem;
+        line-height: 1.65;
+        tab-size: 2;
+    }
+
+    .markdown-content pre code {
+        white-space: pre;
     }
 
     .dark .markdown-content pre {
@@ -342,9 +380,11 @@
 
     .markdown-content blockquote {
         border-left: 3px solid var(--border);
-        padding-left: 1rem;
-        margin-top: 0.6em;
-        margin-bottom: 0.6em;
+        background: color-mix(in oklab, var(--muted) 45%, transparent);
+        border-radius: 0 var(--radius-md) var(--radius-md) 0;
+        padding: 0.65rem 1rem;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
         color: var(--muted-foreground);
     }
 
@@ -370,19 +410,54 @@
         border-left-color: var(--destructive);
     }
 
+    .markdown-content blockquote[as] {
+        background: color-mix(in oklab, var(--primary) 7%, var(--background));
+    }
+
+    .markdown-content blockquote[as='important'] {
+        background: color-mix(in oklab, var(--chart-2) 8%, var(--background));
+    }
+
+    .markdown-content blockquote[as='warning'] {
+        background: color-mix(in oklab, var(--chart-4) 9%, var(--background));
+    }
+
+    .markdown-content blockquote[as='caution'] {
+        background: color-mix(in oklab, var(--destructive) 8%, var(--background));
+    }
+
+    .markdown-content .markdown-alert-title {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
     .markdown-content table {
         width: 100%;
-        border-collapse: collapse;
-        margin-top: 0.6em;
-        margin-bottom: 0.6em;
+        border-collapse: separate;
+        border-spacing: 0;
+        overflow: hidden;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
         font-size: 0.875rem;
     }
 
     .markdown-content th,
     .markdown-content td {
-        border: 1px solid var(--border);
-        padding: 0.4rem 0.75rem;
+        border-right: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        padding: 0.6rem 0.75rem;
         text-align: left;
+        vertical-align: top;
+    }
+
+    .markdown-content th:first-child,
+    .markdown-content td:first-child {
+        border-left: 1px solid var(--border);
+    }
+
+    .markdown-content thead tr:first-child th {
+        border-top: 1px solid var(--border);
     }
 
     .markdown-content th {
@@ -486,14 +561,36 @@
         text-decoration: none;
     }
 
-    /* Math (KaTeX) */
+    /* Mermaid diagrams and Math (KaTeX) */
+    .markdown-content .mermaid,
+    .markdown-content .mermaid-container {
+        max-width: 100%;
+        overflow-x: auto;
+        margin: 1.25rem 0;
+        padding: 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--card);
+    }
+
     .markdown-content .math.block,
     .markdown-content .katex-display {
+        max-width: 100%;
         overflow-x: auto;
         overflow-y: hidden;
-        margin: 0.6em 0;
+        margin: 1rem 0;
+        padding: 0.25rem 0;
     }
+
     .markdown-content .math-error {
         color: var(--destructive);
+    }
+
+    .markdown-content input[type='checkbox'] {
+        width: 0.95rem;
+        height: 0.95rem;
+        margin-right: 0.35rem;
+        accent-color: var(--primary);
+        vertical-align: -0.1em;
     }
 }
