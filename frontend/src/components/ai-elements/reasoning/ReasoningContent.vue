@@ -3,8 +3,7 @@ import type { HTMLAttributes } from 'vue'
 import { CollapsibleContent } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { computed, useSlots } from 'vue'
-import { Markdown } from 'vue-stream-markdown'
-import 'vue-stream-markdown/index.css'
+import { AppComark } from '@/components/ai-elements/comark'
 import { useReasoningContext } from './context'
 
 interface Props {
@@ -84,6 +83,20 @@ const shouldShowPreview = computed(() =>
       props.class,
     )"
   >
-    <Markdown v-if="isOpen" :content="md" />
+    <Suspense>
+      <template #default>
+        <AppComark
+          v-if="isOpen"
+          :markdown="md"
+          :streaming="isStreaming"
+          class="markdown-content"
+        />
+      </template>
+      <template #fallback>
+        <div class="markdown-content whitespace-pre-wrap text-reasoning-foreground/80">
+          {{ md }}
+        </div>
+      </template>
+    </Suspense>
   </CollapsibleContent>
 </template>

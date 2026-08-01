@@ -223,6 +223,7 @@ function changeBranch(direction: -1 | 1) {
         <!-- Message text -->
         <MessageResponse
           :content="getTextContent(props.message)"
+          :streaming="props.isStreaming"
         />
 
         <!-- File attachments -->
