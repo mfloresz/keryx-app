@@ -19,15 +19,6 @@ import type { ModelPreset } from '@/components/chat/ChatInput.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Context,
-  ContextContent,
-  ContextContentBody,
-  ContextContentFooter,
-  ContextContentHeader,
-  ContextIcon,
-  ContextTrigger,
-} from '@/components/ai-elements/context'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const route = useRoute()
@@ -45,7 +36,6 @@ const editTextareaRef = ref<any>(null)
 const isEditing = ref(false)
 
 const chatId = computed(() => route.params.id as string)
-const compactNumberFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 
 const chatData = ref<ChatRecord | null>(null)
 const isLoading = ref(true)
@@ -89,31 +79,6 @@ function buildFallbackPresets(): ModelPreset[] {
       supportsSearch: false,
     },
   ]
-}
-
-const contextUsage = computed(() => chatData.value?.lastUsage)
-const usedTokens = computed(() => {
-  const usage = contextUsage.value
-  if (!usage) return 0
-  return usage.totalTokens ?? ((usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) + (usage.reasoningTokens ?? 0))
-})
-const formattedContextUsage = computed(() => {
-  if (usedTokens.value <= 0) return t('chat.context')
-  return compactNumberFormatter.format(usedTokens.value)
-})
-const contextUsageRows = computed(() => {
-  const usage = contextUsage.value
-  if (!usage) return []
-  return [
-    { labelKey: 'chat.contextInput', value: usage.inputTokens ?? 0 },
-    { labelKey: 'chat.contextOutput', value: usage.outputTokens ?? 0 },
-    { labelKey: 'chat.contextReasoning', value: usage.reasoningTokens ?? 0 },
-    { labelKey: 'chat.contextCache', value: usage.cachedInputTokens ?? 0 },
-  ].filter(row => row.value > 0)
-})
-
-function formatTokenCount(value: number): string {
-  return compactNumberFormatter.format(value)
 }
 
 function buildSearchRequestBody(webSearch: boolean) {
@@ -456,39 +421,8 @@ onMounted(async () => {
     </Dialog>
 
     <!-- Chat header -->
-    <div class="border-b px-4 py-3 flex items-center justify-between gap-3 min-w-0">
+    <div class="border-b px-4 py-3">
       <h2 class="font-semibold truncate">{{ chatTitle }}</h2>
-      <Context :used-tokens="usedTokens" :max-tokens="0" :usage="contextUsage">
-        <ContextTrigger>
-          <Button type="button" variant="ghost" class="h-auto gap-2 px-2 py-1 text-xs text-muted-foreground">
-            <span class="font-medium">{{ formattedContextUsage }}</span>
-            <ContextIcon class="size-4" />
-          </Button>
-        </ContextTrigger>
-        <ContextContent class="w-72">
-          <ContextContentHeader>
-            <div class="space-y-1">
-              <div class="flex items-center justify-between gap-3 text-xs">
-                <span class="text-muted-foreground">{{ $t('chat.contextUsed') }}</span>
-                <span class="font-mono">{{ formatTokenCount(usedTokens) }}</span>
-              </div>
-            </div>
-          </ContextContentHeader>
-          <ContextContentBody>
-            <div v-if="contextUsageRows.length" class="space-y-2">
-              <div v-for="row in contextUsageRows" :key="row.labelKey" class="flex items-center justify-between text-xs">
-                <span class="text-muted-foreground">{{ $t(row.labelKey) }}</span>
-                <span>{{ formatTokenCount(row.value) }}</span>
-              </div>
-            </div>
-            <p v-else class="text-xs text-muted-foreground">{{ $t('chat.contextNoUsage') }}</p>
-          </ContextContentBody>
-          <ContextContentFooter>
-            <span class="text-muted-foreground">{{ $t('chat.messages') }}</span>
-            <span>{{ chat.messages.length }}</span>
-          </ContextContentFooter>
-        </ContextContent>
-      </Context>
     </div>
 
     <!-- Messages -->
