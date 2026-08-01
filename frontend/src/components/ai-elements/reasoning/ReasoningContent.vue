@@ -4,6 +4,8 @@ import { CollapsibleContent } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { computed, useSlots } from 'vue'
 import { Markdown } from 'vue-stream-markdown'
+// KaTeX CSS is required for math (LaTeX) formulas to render with correct fonts/styles
+import 'katex/dist/katex.min.css'
 import 'vue-stream-markdown/index.css'
 import { useReasoningContext } from './context'
 
