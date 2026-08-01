@@ -3,10 +3,10 @@ import highlight from '@comark/vue/plugins/highlight'
 import alert from '@comark/vue/plugins/alert'
 import emoji from '@comark/vue/plugins/emoji'
 import security from '@comark/vue/plugins/security'
-import binding, { Binding } from '@comark/vue/plugins/binding'
+
 import mermaid, { Mermaid } from '@comark/vue/plugins/mermaid'
 import breaks from '@comark/vue/plugins/breaks'
-import footnotes from '@comark/vue/plugins/footnotes'
+
 import headings from '@comark/vue/plugins/headings'
 import jsonRender from '@comark/vue/plugins/json-render'
 import math, { Math as MathComponent } from '@comark/vue/plugins/math'
@@ -18,6 +18,42 @@ import type { ThemeRegistration } from 'shiki'
 import githubLight from 'shiki/dist/themes/github-light.mjs'
 import githubDark from 'shiki/dist/themes/github-dark.mjs'
 import Alert from '@/components/ai-elements/Alert.vue'
+
+/**
+ * Comark's math plugin uses dollar delimiters, while models commonly emit
+ * LaTeX's \\(inline\\) and \\[display\\] delimiters. Normalize the latter
+ * outside fenced code blocks so both conventions render through KaTeX.
+ */
+export function normalizeMathDelimiters(markdown: string): string {
+  const lines = markdown.split('\n')
+  const output: string[] = []
+  let inFence = false
+  let fenceCharacter = ''
+
+  for (const line of lines) {
+    const fence = line.match(/^\s{0,3}(`{3,}|~{3,})/)
+    const marker = fence?.[1]
+    if (marker) {
+      const markerCharacter = marker.charAt(0)
+      if (!inFence) {
+        inFence = true
+        fenceCharacter = markerCharacter
+      }
+      else if (markerCharacter === fenceCharacter) {
+        inFence = false
+        fenceCharacter = ''
+      }
+      output.push(line)
+      continue
+    }
+
+    output.push(inFence ? line : line.replace(/\\\((.*?)\\\)/g, '$$$1$$'))
+  }
+
+  return output
+    .join('\n')
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, content: string) => `$$\n${content.trim()}\n$$`)
+}
 
 const themes: { light: ThemeRegistration; dark: ThemeRegistration } = {
   light: githubLight as ThemeRegistration,
@@ -32,11 +68,11 @@ const themes: { light: ThemeRegistration; dark: ThemeRegistration } = {
  * - alert: GitHub-style alert blockquotes (> [!NOTE] etc.)
  * - emoji: emoji shortcodes (:smile: → 😄)
  * - security: sanitize dangerous HTML elements/attributes
- * - binding: {{ path || default }} interpolation of frontmatter/data/props
+
  * - mermaid: Mermaid diagrams in ```mermaid code blocks
  * - math: LaTeX formulas with KaTeX (companion Math component)
  * - breaks: soft line breaks → <br>
- * - footnotes: [^label] references and definitions
+
  * - headings: extracts page title/description into meta
  * - jsonRender: JSON Render specs → UI components
  * - punctuation: smart typography (straight quotes → curly, etc.)
@@ -46,7 +82,7 @@ const themes: { light: ThemeRegistration; dark: ThemeRegistration } = {
  *
  * Registered components (resolved from markdown tags):
  * - alert: `::alert{type="warning" title="..."}` → GitHub-style labeled alert
- * - Binding: `{{ path || default }}` interpolation
+
  * - Mermaid: ```mermaid blocks
  * - Math: `$...$` / `$$...$$` formulas
  *
@@ -61,14 +97,14 @@ export const AppComark = defineComarkComponent({
     alert(),
     emoji(),
     security(),
-    binding(),
+
     mermaid({
       theme: 'github-light',
       themeDark: 'github-dark',
     }),
     math(),
     breaks(),
-    footnotes(),
+
     headings(),
     jsonRender(),
     punctuation(),
@@ -78,7 +114,7 @@ export const AppComark = defineComarkComponent({
   ],
   components: {
     Alert,
-    Binding,
+
     Mermaid,
     Math: MathComponent,
   },

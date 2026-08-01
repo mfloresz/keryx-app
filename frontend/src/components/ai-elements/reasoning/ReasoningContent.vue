@@ -3,7 +3,7 @@ import type { HTMLAttributes } from 'vue'
 import { CollapsibleContent } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 import { computed, useSlots } from 'vue'
-import { AppComark } from '@/components/ai-elements/comark'
+import { AppComark, normalizeMathDelimiters } from '@/components/ai-elements/comark'
 import { useReasoningContext } from './context'
 
 interface Props {
@@ -31,7 +31,7 @@ const slotContent = computed<string | undefined>(() => {
   return text || undefined
 })
 
-const md = computed(() => (slotContent.value ?? props.content ?? '') as string)
+const md = computed(() => normalizeMathDelimiters((slotContent.value ?? props.content ?? '') as string))
 
 const normalizedLines = computed(() =>
   md.value
