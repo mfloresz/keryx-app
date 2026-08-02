@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -241,7 +241,7 @@ function onKeyDown(e: KeyboardEvent) {
       id="app-sidebar"
       tabindex="-1"
       :class="[
-        'flex h-full flex-col border-r border-border bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-sidebar-foreground transition-[width] duration-300',
+        'flex h-full flex-col bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-sidebar-foreground transition-[width] duration-300',
         collapsed && !isDrawer ? 'w-16' : 'w-72'
       ]"
     >
@@ -372,8 +372,6 @@ function onKeyDown(e: KeyboardEvent) {
         </Button>
       </div>
 
-      <Separator />
-
       <!-- Chat History -->
       <div v-if="!collapsed || isDrawer" class="flex-1 min-h-0 overflow-hidden">
         <ScrollArea class="h-full px-3 py-2">
@@ -485,8 +483,6 @@ function onKeyDown(e: KeyboardEvent) {
           </PopoverContent>
         </Popover>
       </div>
-
-      <Separator />
 
       <!-- Footer: user card with account menu -->
       <div class="p-3">
