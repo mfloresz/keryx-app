@@ -11,7 +11,7 @@ const props = defineProps<Props>()
 
 <template>
   <div
-    :class="cn('mt-2 rounded-md bg-red-50 p-3 dark:bg-red-900/20', props.class)"
+    :class="cn('mt-2 rounded-md bg-destructive/10 p-3', props.class)"
     v-bind="$attrs"
   >
     <slot />

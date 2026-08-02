@@ -10,10 +10,10 @@ interface Props extends /* @vue-ignore */ HTMLAttributes {
 const props = defineProps<Props>()
 
 const fileStatusStyles = {
-  added: 'text-green-600 dark:text-green-400',
-  modified: 'text-yellow-600 dark:text-yellow-400',
-  deleted: 'text-red-600 dark:text-red-400',
-  renamed: 'text-blue-600 dark:text-blue-400',
+  added: 'text-success',
+  modified: 'text-warning',
+  deleted: 'text-destructive',
+  renamed: 'text-primary',
 }
 
 const fileStatusLabels = {

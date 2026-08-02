@@ -287,7 +287,7 @@ async function handleAccept() {
           <p v-if="error" class="break-words text-sm text-destructive" role="alert">
             {{ error }}
           </p>
-          <p v-if="success" class="break-words text-sm text-green-600" role="alert">
+          <p v-if="success" class="break-words text-sm text-success" role="alert">
             {{ success }}
           </p>
 

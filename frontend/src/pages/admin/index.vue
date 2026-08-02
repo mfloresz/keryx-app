@@ -731,7 +731,7 @@ onMounted(() => {
                       <div class="flex items-center gap-2">
                         <span
                           class="inline-block size-2 rounded-full"
-                          :class="entry.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
+                          :class="entry.configured ? 'bg-success' : 'bg-muted-foreground/30'"
                         />
                         <span class="break-words">
                           {{ entry.configured ? t('admin.providerKeys.statusConfigured') : t('admin.providerKeys.statusNotConfigured') }}
@@ -783,7 +783,7 @@ onMounted(() => {
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span
                 class="inline-block size-2 rounded-full"
-                :class="webSearchConfig.configured ? 'bg-emerald-500' : 'bg-muted-foreground/30'"
+                :class="webSearchConfig.configured ? 'bg-success' : 'bg-muted-foreground/30'"
               />
               <span class="text-sm">
                 {{ webSearchConfig.configured ? t('admin.webSearch.configured') : t('admin.webSearch.notConfigured') }}

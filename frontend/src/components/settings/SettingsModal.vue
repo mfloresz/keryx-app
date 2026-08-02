@@ -499,7 +499,7 @@ const navItems = [
                 </p>
               </div>
 
-              <div v-if="profileSuccess" class="text-sm text-green-600 dark:text-green-400">
+              <div v-if="profileSuccess" class="text-sm text-success">
                 {{ profileSuccess }}
               </div>
 
@@ -553,7 +553,7 @@ const navItems = [
                   {{ passwordError }}
                 </div>
 
-                <div v-if="passwordSuccess" class="text-sm text-green-600 dark:text-green-400">
+                <div v-if="passwordSuccess" class="text-sm text-success">
                   {{ passwordSuccess }}
                 </div>
 

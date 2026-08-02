@@ -39,7 +39,7 @@ const pathParts = computed(() => {
   >
     <slot>
       <template v-for="(part, i) in pathParts" :key="i">
-        <span v-if="part.isParam" class="text-blue-600 dark:text-blue-400">{{ part.text }}</span>
+        <span v-if="part.isParam" class="text-primary">{{ part.text }}</span>
         <span v-else>{{ part.text }}</span>
       </template>
     </slot>

@@ -23,7 +23,7 @@ const props = defineProps<Props>()
       </Badge>
       <Badge
         v-if="required"
-        class="bg-red-100 text-red-700 text-xs dark:bg-red-900/30 dark:text-red-400"
+        class="bg-destructive/10 text-destructive text-xs"
         variant="secondary"
       >
         required

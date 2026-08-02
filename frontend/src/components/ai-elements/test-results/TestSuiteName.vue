@@ -23,10 +23,10 @@ const props = defineProps<Props>()
 const context = useTestSuiteContext()
 
 const statusStyles: Record<TestStatusType, string> = {
-  passed: 'text-green-600 dark:text-green-400',
-  failed: 'text-red-600 dark:text-red-400',
-  skipped: 'text-yellow-600 dark:text-yellow-400',
-  running: 'text-blue-600 dark:text-blue-400',
+  passed: 'text-success',
+  failed: 'text-destructive',
+  skipped: 'text-warning',
+  running: 'text-primary',
 }
 
 const statusIcons: Record<TestStatusType, Component> = {
