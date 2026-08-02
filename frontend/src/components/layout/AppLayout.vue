@@ -134,7 +134,7 @@ watch(mobileOpen, async (open) => {
     </Transition>
 
     <!-- Mobile header: minimal chrome to open the drawer -->
-    <header class="flex shrink-0 items-center gap-2 border-b border-border bg-sidebar px-3 pt-[env(safe-area-inset-top)] text-sidebar-foreground lg:hidden">
+    <header class="flex shrink-0 items-center gap-2 bg-sidebar px-3 pt-[env(safe-area-inset-top)] text-sidebar-foreground lg:hidden">
       <Button
         ref="menuButtonRef"
         variant="ghost"

@@ -138,7 +138,7 @@ function handleStop() {
 <template>
   <div class="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-0">
     <PromptInput
-      class="max-w-3xl mx-auto"
+      class="max-w-3xl mx-auto border-0 rounded-none shadow-none"
       multiple
       global-drop
       :max-files="3"
