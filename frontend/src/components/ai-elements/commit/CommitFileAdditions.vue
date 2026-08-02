@@ -14,7 +14,7 @@ const props = defineProps<Props>()
 <template>
   <span
     v-if="props.count > 0"
-    :class="cn('text-green-600 dark:text-green-400', props.class)"
+    :class="cn('text-success', props.class)"
     v-bind="$attrs"
   >
     <slot>

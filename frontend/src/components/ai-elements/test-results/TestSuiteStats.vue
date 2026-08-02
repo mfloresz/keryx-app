@@ -24,19 +24,19 @@ const props = withDefaults(defineProps<Props>(), {
     <slot>
       <span
         v-if="props.passed > 0"
-        class="text-green-600 dark:text-green-400"
+        class="text-success"
       >
         {{ props.passed }} passed
       </span>
       <span
         v-if="props.failed > 0"
-        class="text-red-600 dark:text-red-400"
+        class="text-destructive"
       >
         {{ props.failed }} failed
       </span>
       <span
         v-if="props.skipped > 0"
-        class="text-yellow-600 dark:text-yellow-400"
+        class="text-warning"
       >
         {{ props.skipped }} skipped
       </span>

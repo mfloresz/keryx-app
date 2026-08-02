@@ -22,7 +22,7 @@ const { summary } = useTestResultsContext()
   >
     <slot>
       <Badge
-        class="gap-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+        class="gap-1 bg-success/10 text-success"
         variant="secondary"
       >
         <CheckCircle2 class="size-3" />
@@ -30,7 +30,7 @@ const { summary } = useTestResultsContext()
       </Badge>
       <Badge
         v-if="summary.failed > 0"
-        class="gap-1 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+        class="gap-1 bg-destructive/10 text-destructive"
         variant="secondary"
       >
         <XCircle class="size-3" />
@@ -38,7 +38,7 @@ const { summary } = useTestResultsContext()
       </Badge>
       <Badge
         v-if="summary.skipped > 0"
-        class="gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+        class="gap-1 bg-warning/10 text-warning"
         variant="secondary"
       >
         <Circle class="size-3" />

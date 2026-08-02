@@ -36,7 +36,7 @@ function levelClass(level: LogLevel) {
   if (level === 'error')
     return 'text-destructive'
   if (level === 'warn')
-    return 'text-yellow-600'
+    return 'text-warning'
   return 'text-foreground'
 }
 </script>

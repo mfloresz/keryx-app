@@ -278,7 +278,7 @@ const isDisabled = computed(() => {
       <div
         v-for="index in [0, 1, 2]"
         :key="index"
-        class="absolute inset-0 animate-ping rounded-full border-2 border-red-400/30"
+        class="absolute inset-0 animate-ping rounded-full border-2 border-destructive/30"
         :style="{
           animationDelay: `${index * 0.3}s`,
           animationDuration: '2s',
