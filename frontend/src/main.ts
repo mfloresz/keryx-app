@@ -12,6 +12,7 @@ import "katex/dist/katex.min.css";
 import { createApp } from "vue";
 import { createPinia } from "pinia";
 import router from "./router";
+import { schedulePrefetch } from "./router/prefetch";
 import { useTheme } from "./composables/useTheme";
 
 import App from "./App.vue";
@@ -31,3 +32,7 @@ router.onError((error) => {
 });
 
 app.mount("#app");
+
+// Prefetch lazy route components (notably the /chat/:id page chunk) during
+// idle time so the first click on a previous chat doesn't pay the download.
+router.isReady().then(() => schedulePrefetch(router));

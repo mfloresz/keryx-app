@@ -24,6 +24,8 @@ type Config struct {
 	GoogleAPIKey string
 	// Chutes API Key (env fallback)
 	ChutesAPIKey string
+	// OpenRouter API Key (env fallback)
+	OpenRouterAPIKey string
 	// App base URL (for invitation links)
 	AppBaseURL string
 
@@ -108,6 +110,7 @@ func Load() (*Config, error) {
 	cfg.OpenCodeGoAPIKey = strings.TrimSpace(os.Getenv("OPENCODEGO_API_KEY"))
 	cfg.GoogleAPIKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
 	cfg.ChutesAPIKey = strings.TrimSpace(os.Getenv("CHUTES_API_KEY"))
+	cfg.OpenRouterAPIKey = strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
 	cfg.AppBaseURL = strings.TrimSpace(os.Getenv("APP_BASE_URL"))
 
 	// System prompts — env var > file path > default

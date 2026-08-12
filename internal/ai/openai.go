@@ -26,6 +26,34 @@ type OpenAIProvider struct {
 	GoAIOptions map[string]any
 }
 
+// reasoningEffort extracts the reasoning effort from a model variant string
+// like "openai/gpt-5.6-luna (reasoning: medium)". Returns "" for plain models.
+// The effort is fixed per catalog model (never chosen at request time), and is
+// sent to the provider as a reasoning option — mirroring Yara's provider
+// mapping of reasoning levels to distinct models.
+func reasoningEffort(model string) string {
+	const marker = " (reasoning: "
+	i := strings.Index(model, marker)
+	if i < 0 || !strings.HasSuffix(model, ")") {
+		return ""
+	}
+	effort := strings.TrimSpace(model[i+len(marker) : len(model)-1])
+	switch effort {
+	case "none", "low", "medium":
+		return effort
+	}
+	return ""
+}
+
+// reasoningBaseModel strips the "(reasoning: <effort>)" variant suffix from a
+// model string, returning the upstream model ID actually sent to the provider.
+func reasoningBaseModel(model string) string {
+	if effort := reasoningEffort(model); effort != "" {
+		return strings.TrimSuffix(model, " (reasoning: "+effort+")")
+	}
+	return model
+}
+
 func (p *OpenAIProvider) model() (provider.LanguageModel, error) {
 	if p == nil || p.APIKey == "" {
 		return nil, fmt.Errorf("openai-compatible provider not configured: missing API key")
@@ -34,8 +62,7 @@ func (p *OpenAIProvider) model() (provider.LanguageModel, error) {
 	if p.BaseURL != "" {
 		opts = append(opts, openai.WithBaseURL(p.BaseURL))
 	}
-	modelID := p.Model
-	return openai.Chat(modelID, opts...), nil
+	return openai.Chat(reasoningBaseModel(p.Model), opts...), nil
 }
 
 // mergedOptions merges static GoAIOptions with per-call ProviderOptions.
@@ -55,6 +82,22 @@ func (p *OpenAIProvider) mergedOptions() map[string]any {
 	// For text generation, strictJsonSchema is not needed
 	delete(out, "strictJsonSchema")
 	return out
+}
+
+// requestOptions returns the provider options for a single request. Reasoning
+// effort is derived from the per-request model variant (which is fixed per
+// catalog model), so it stays correct even when the provider instance is
+// cached and shared across different model variants.
+func (p *OpenAIProvider) requestOptions(req ChatRequest) map[string]any {
+	opts := p.mergedOptions()
+	model := req.Model
+	if model == "" {
+		model = p.Model
+	}
+	if effort := reasoningEffort(model); effort != "" {
+		opts["reasoning"] = map[string]any{"effort": effort}
+	}
+	return opts
 }
 
 func (p *OpenAIProvider) goaiOpts(req ChatRequest) []goai.Option {
@@ -84,7 +127,7 @@ func (p *OpenAIProvider) goaiOpts(req ChatRequest) []goai.Option {
 	}
 
 	// Provider-specific options
-	opts := p.mergedOptions()
+	opts := p.requestOptions(req)
 	if len(opts) > 0 {
 		o = append(o, goai.WithProviderOptions(opts))
 	}
@@ -145,7 +188,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (string, err
 		if p.BaseURL != "" {
 			opts = append(opts, openai.WithBaseURL(p.BaseURL))
 		}
-		model = openai.Chat(req.Model, opts...)
+		model = openai.Chat(reasoningBaseModel(req.Model), opts...)
 	}
 
 	result, err := goai.GenerateText(ctx, model, p.goaiOpts(req)...)
@@ -175,7 +218,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 		if p.BaseURL != "" {
 			opts = append(opts, openai.WithBaseURL(p.BaseURL))
 		}
-		model = openai.Chat(req.Model, opts...)
+		model = openai.Chat(reasoningBaseModel(req.Model), opts...)
 	}
 
 	stream, err := goai.StreamText(ctx, model, p.goaiOpts(req)...)
