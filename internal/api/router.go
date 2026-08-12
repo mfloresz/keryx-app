@@ -310,6 +310,11 @@ func (s *Server) apiKeyForProvider(providerID string) (string, error) {
 			return "", fmt.Errorf("Chutes API key not configured (set CHUTES_API_KEY or configure via admin UI)")
 		}
 		return s.Cfg.ChutesAPIKey, nil
+	case "openrouter":
+		if s.Cfg.OpenRouterAPIKey == "" {
+			return "", fmt.Errorf("OpenRouter API key not configured (set OPENROUTER_API_KEY or configure via admin UI)")
+		}
+		return s.Cfg.OpenRouterAPIKey, nil
 	case "lmstudio":
 		return "", nil // local, no API key needed
 	default:
