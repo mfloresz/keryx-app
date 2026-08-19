@@ -16,6 +16,11 @@ type ProviderInfo struct {
 	DefaultModel string         `json:"defaultModel"`
 	OpenAICompat bool           `json:"openaiCompat"`
 	GoAIOptions  map[string]any `json:"goaiOptions,omitempty"`
+	// ResponsesAPIModels lists base upstream model IDs (reasoning-suffix
+	// stripped) that must use the OpenAI Responses API instead of Chat
+	// Completions. Some gateways (e.g. opencode-go) only stream these models
+	// in real time over /responses.
+	ResponsesAPIModels []string `json:"responsesApiModels,omitempty"`
 }
 
 // ModelInfo describes a single model exposed by a provider.
@@ -74,6 +79,9 @@ var knownProviders = []ProviderInfo{
 			"useResponsesAPI":  false,
 			"strictJsonSchema": true,
 		},
+		// Luna only streams in real time over the Responses API on this
+		// gateway; Chat Completions buffers the full response.
+		ResponsesAPIModels: []string{"gpt-5.6-luna"},
 		Models: []ModelInfo{
 			{ID: "opencode-go/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode-go", DisplayName: "Mimo V2.5", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "opencode-go/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode-go", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},

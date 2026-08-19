@@ -643,12 +643,17 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 								Timeout: 120 * time.Second,
 							}
 						} else {
+							responsesAPIModels := make(map[string]bool, len(info.ResponsesAPIModels))
+							for _, m := range info.ResponsesAPIModels {
+								responsesAPIModels[m] = true
+							}
 							titleProvider = &ai.OpenAIProvider{
-								APIKey:      apiKey,
-								BaseURL:     info.BaseURL,
-								Model:       upstreamModel,
-								Timeout:     120 * time.Second,
-								GoAIOptions: info.GoAIOptions,
+								APIKey:             apiKey,
+								BaseURL:            info.BaseURL,
+								Model:              upstreamModel,
+								Timeout:            120 * time.Second,
+								GoAIOptions:        info.GoAIOptions,
+								ResponsesAPIModels: responsesAPIModels,
 							}
 						}
 					}
