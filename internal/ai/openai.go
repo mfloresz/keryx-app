@@ -24,6 +24,11 @@ type OpenAIProvider struct {
 	ProviderOptions map[string]any
 	// GoAIOptions are the static provider options from the registry (GoAIOptions).
 	GoAIOptions map[string]any
+	// ResponsesAPIModels is the set of base upstream model IDs (reasoning
+	// suffixes stripped) that must use the Responses API instead of Chat
+	// Completions. Some gateways (e.g. opencode-go) only stream these models
+	// in real time over /responses.
+	ResponsesAPIModels map[string]bool
 }
 
 // reasoningEffort extracts the reasoning effort from a model variant string
@@ -96,6 +101,12 @@ func (p *OpenAIProvider) requestOptions(req ChatRequest) map[string]any {
 	}
 	if effort := reasoningEffort(model); effort != "" {
 		opts["reasoning"] = map[string]any{"effort": effort}
+	}
+	// Some gateways (e.g. opencode-go) only stream reasoning-class models in
+	// real time over the Responses API; Chat Completions buffers the whole
+	// response. Keyed by base model so it survives the reasoning variants.
+	if p.ResponsesAPIModels != nil && p.ResponsesAPIModels[reasoningBaseModel(model)] {
+		opts["useResponsesAPI"] = true
 	}
 	return opts
 }

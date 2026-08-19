@@ -43,3 +43,33 @@ func TestOpenAIProviderModelIDStripsReasoningSuffix(t *testing.T) {
 		t.Errorf("model ID = %q, want %q", model.ModelID(), "openai/gpt-5.6-luna")
 	}
 }
+
+func TestOpenAIProviderResponsesAPIModels(t *testing.T) {
+	provider := &OpenAIProvider{
+		Model: "gpt-5.6-luna (reasoning: medium)",
+		GoAIOptions: map[string]any{
+			"useResponsesAPI": false,
+		},
+		ResponsesAPIModels: map[string]bool{"gpt-5.6-luna": true},
+	}
+
+	// Reasoning variants of a flagged base model switch to the Responses API,
+	// overriding the provider-level Chat Completions default.
+	opts := provider.requestOptions(ChatRequest{Model: "gpt-5.6-luna (reasoning: low)"})
+	if useResponses, _ := opts["useResponsesAPI"].(bool); !useResponses {
+		t.Errorf("useResponsesAPI = %v, want true", opts["useResponsesAPI"])
+	}
+
+	// Models not in the set keep the provider default (Chat Completions).
+	opts = provider.requestOptions(ChatRequest{Model: "mimo-v2.5"})
+	if useResponses, _ := opts["useResponsesAPI"].(bool); useResponses {
+		t.Errorf("useResponsesAPI = %v, want false", opts["useResponsesAPI"])
+	}
+
+	// Unset ResponsesAPIModels leaves the provider default untouched.
+	provider.ResponsesAPIModels = nil
+	opts = provider.requestOptions(ChatRequest{Model: "gpt-5.6-luna (reasoning: medium)"})
+	if useResponses, _ := opts["useResponsesAPI"].(bool); useResponses {
+		t.Errorf("useResponsesAPI = %v, want false without ResponsesAPIModels", opts["useResponsesAPI"])
+	}
+}

@@ -1,6 +1,9 @@
 package ai
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestResolveModel(t *testing.T) {
 	tests := []struct {
@@ -173,6 +176,12 @@ func TestOpenCodeGoCatalogMetadata(t *testing.T) {
 	byID := make(map[string]ModelInfo, len(catalog))
 	for _, m := range catalog {
 		byID[m.ID] = m
+	}
+
+	if info, ok := ProviderByID("opencode-go"); !ok {
+		t.Error("missing opencode-go provider")
+	} else if !slices.Contains(info.ResponsesAPIModels, "gpt-5.6-luna") {
+		t.Errorf("opencode-go should route gpt-5.6-luna over the Responses API, got %v", info.ResponsesAPIModels)
 	}
 
 	if m := byID["opencode-go/minimax-m3"]; !m.SupportsImages {
