@@ -50,6 +50,9 @@ var knownProviders = []ProviderInfo{
 		Models: []ModelInfo{
 			{ID: "venice/e2ee-deepseek-v4-flash", UpstreamID: "e2ee-deepseek-v4-flash", Provider: "venice", DisplayName: "DeepSeek V4 Flash (E2EE)", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/mistral-small-3-2-24b-instruct", UpstreamID: "mistral-small-3-2-24b-instruct", Provider: "venice", DisplayName: "Mistral Small 3.2", SupportsImages: true, SupportsSearch: true, MaxContext: 128000, MaxOutput: 0},
+			{ID: "venice/qwen-3-8-27b", UpstreamID: "qwen-3-8-27b", Provider: "venice", DisplayName: "Qwen 3 8 27B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/nvidia-nemotron-3-5-lightning-30b-a3b", UpstreamID: "nvidia-nemotron-3-5-lightning-30b-a3b", Provider: "venice", DisplayName: "NVIDIA Nemotron 3.5 Lightning 30B A3B", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "venice/qwen3-6-35b-a3b", UpstreamID: "qwen3-6-35b-a3b", Provider: "venice", DisplayName: "Qwen3 6 35B A3B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/google-gemma-4-31b-it:disable_thinking=true", UpstreamID: "google-gemma-4-31b-it:disable_thinking=true", Provider: "venice", DisplayName: "Gemma 4 31B IT", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/e2ee-gpt-oss-20b-p", UpstreamID: "e2ee-gpt-oss-20b-p", Provider: "venice", DisplayName: "GPT OSS 20B (E2EE)", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "venice/aion-labs-aion-3-0-mini", UpstreamID: "aion-labs-aion-3-0-mini", Provider: "venice", DisplayName: "Aion 3.0 Mini", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
@@ -74,6 +77,11 @@ var knownProviders = []ProviderInfo{
 		Models: []ModelInfo{
 			{ID: "opencode-go/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode-go", DisplayName: "Mimo V2.5", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "opencode-go/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode-go", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/minimax-m3", UpstreamID: "minimax-m3", Provider: "opencode-go", DisplayName: "MiniMax M3", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/glm-5.2", UpstreamID: "glm-5.2", Provider: "opencode-go", DisplayName: "GLM 5.2", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/gpt-5.6-luna (reasoning: none)", UpstreamID: "gpt-5.6-luna (reasoning: none)", Provider: "opencode-go", DisplayName: "GPT-5.6 Luna (reasoning: none)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/gpt-5.6-luna (reasoning: low)", UpstreamID: "gpt-5.6-luna (reasoning: low)", Provider: "opencode-go", DisplayName: "GPT-5.6 Luna (reasoning: low)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "opencode-go/gpt-5.6-luna (reasoning: medium)", UpstreamID: "gpt-5.6-luna (reasoning: medium)", Provider: "opencode-go", DisplayName: "GPT-5.6 Luna (reasoning: medium)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
