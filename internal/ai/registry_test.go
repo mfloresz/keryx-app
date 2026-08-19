@@ -12,8 +12,14 @@ func TestResolveModel(t *testing.T) {
 	}{
 		{name: "venice catalog model", modelID: "venice/e2ee-deepseek-v4-flash", wantProvider: "venice", wantUpstream: "e2ee-deepseek-v4-flash"},
 		{name: "venice mistral model", modelID: "venice/mistral-small-3-2-24b-instruct", wantProvider: "venice", wantUpstream: "mistral-small-3-2-24b-instruct"},
+		{name: "venice qwen image model", modelID: "venice/qwen-3-8-27b", wantProvider: "venice", wantUpstream: "qwen-3-8-27b"},
+		{name: "venice nemotron model", modelID: "venice/nvidia-nemotron-3-5-lightning-30b-a3b", wantProvider: "venice", wantUpstream: "nvidia-nemotron-3-5-lightning-30b-a3b"},
+		{name: "venice qwen3 image model", modelID: "venice/qwen3-6-35b-a3b", wantProvider: "venice", wantUpstream: "qwen3-6-35b-a3b"},
 		{name: "opencode-go catalog model", modelID: "opencode-go/mimo-v2.5", wantProvider: "opencode-go", wantUpstream: "mimo-v2.5"},
 		{name: "opencode-go deepseek model", modelID: "opencode-go/deepseek-v4-flash", wantProvider: "opencode-go", wantUpstream: "deepseek-v4-flash"},
+		{name: "opencode-go minimax model", modelID: "opencode-go/minimax-m3", wantProvider: "opencode-go", wantUpstream: "minimax-m3"},
+		{name: "opencode-go glm model", modelID: "opencode-go/glm-5.2", wantProvider: "opencode-go", wantUpstream: "glm-5.2"},
+		{name: "opencode-go reasoning variant keeps effort", modelID: "opencode-go/gpt-5.6-luna (reasoning: medium)", wantProvider: "opencode-go", wantUpstream: "gpt-5.6-luna (reasoning: medium)"},
 		{name: "lmstudio local model", modelID: "lmstudio/local-model", wantProvider: "lmstudio", wantUpstream: "local-model"},
 		{name: "google gemma model", modelID: "google/gemma-4-31b-it", wantProvider: "google", wantUpstream: "gemma-4-31b-it"},
 		{name: "openrouter nemotron model", modelID: "openrouter/nvidia/nemotron-3.5-lightning", wantProvider: "openrouter", wantUpstream: "nvidia/nemotron-3.5-lightning"},
@@ -63,8 +69,8 @@ func TestProviderByID(t *testing.T) {
 
 func TestModelCatalogCoversSeeds(t *testing.T) {
 	catalog := ModelCatalog()
-	if len(catalog) != 28 {
-		t.Fatalf("catalog len = %d, want 28", len(catalog))
+	if len(catalog) != 36 {
+		t.Fatalf("catalog len = %d, want 36", len(catalog))
 	}
 	for _, m := range catalog {
 		if info, ok := ProviderByID(m.Provider); !ok {
@@ -72,6 +78,28 @@ func TestModelCatalogCoversSeeds(t *testing.T) {
 		} else if m.UpstreamID == "" {
 			t.Errorf("model %q has empty UpstreamID", info.ID)
 		}
+	}
+}
+
+func TestVeniceCatalogMetadata(t *testing.T) {
+	catalog := ModelCatalog()
+	byID := make(map[string]ModelInfo, len(catalog))
+	for _, m := range catalog {
+		byID[m.ID] = m
+	}
+
+	for _, id := range []string{
+		"venice/qwen-3-8-27b",
+		"venice/qwen3-6-35b-a3b",
+	} {
+		if m, ok := byID[id]; !ok {
+			t.Errorf("missing model %q", id)
+		} else if !m.SupportsImages {
+			t.Errorf("%s should support images", id)
+		}
+	}
+	if m := byID["venice/nvidia-nemotron-3-5-lightning-30b-a3b"]; m.SupportsImages {
+		t.Error("venice/nvidia-nemotron-3-5-lightning-30b-a3b should not support images")
 	}
 }
 
@@ -131,6 +159,32 @@ func TestOpenRouterCatalogMetadata(t *testing.T) {
 		"openrouter/openai/gpt-5.6-luna (reasoning: none)",
 		"openrouter/openai/gpt-5.6-luna (reasoning: low)",
 		"openrouter/openai/gpt-5.6-luna (reasoning: medium)",
+	} {
+		if m, ok := byID[id]; !ok {
+			t.Errorf("missing reasoning variant %q", id)
+		} else if !m.SupportsImages {
+			t.Errorf("%s should support images", id)
+		}
+	}
+}
+
+func TestOpenCodeGoCatalogMetadata(t *testing.T) {
+	catalog := ModelCatalog()
+	byID := make(map[string]ModelInfo, len(catalog))
+	for _, m := range catalog {
+		byID[m.ID] = m
+	}
+
+	if m := byID["opencode-go/minimax-m3"]; !m.SupportsImages {
+		t.Error("opencode-go/minimax-m3 should support images")
+	}
+	if m := byID["opencode-go/glm-5.2"]; m.SupportsImages {
+		t.Error("opencode-go/glm-5.2 should not support images")
+	}
+	for _, id := range []string{
+		"opencode-go/gpt-5.6-luna (reasoning: none)",
+		"opencode-go/gpt-5.6-luna (reasoning: low)",
+		"opencode-go/gpt-5.6-luna (reasoning: medium)",
 	} {
 		if m, ok := byID[id]; !ok {
 			t.Errorf("missing reasoning variant %q", id)
