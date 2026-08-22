@@ -29,6 +29,11 @@ type Server struct {
 	// other's changes.
 	chatLocks sync.Map
 
+	// activeStreams tracks in-progress chat completions so clients can
+	// reconnect (GET /api/chats/{id}/stream) after navigating away or
+	// reloading the page mid-response.
+	activeStreams *streamRegistry
+
 	// invitationMu serializes invitation acceptance so two concurrent requests
 	// can't consume the same invitation (check-then-use race).
 	invitationMu sync.Mutex
@@ -51,6 +56,7 @@ func New(st *store.Store, cfg *config.Config) *Server {
 		Store:             st,
 		Cfg:               cfg,
 		AIProviders:       make(map[string]ai.Provider),
+		activeStreams:     newStreamRegistry(),
 		loginLimiter:      newRateLimiter(5),  // 5 login attempts/min per IP
 		invitationLimiter: newRateLimiter(10), // 10 invitation ops/min per IP
 		streamLimiter:     newRateLimiter(10), // 10 stream starts/min per user
@@ -106,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/chats/{id}/votes", s.withAuth(s.handleGetVotes))
 	mux.HandleFunc("POST /api/chats/{id}/votes", s.withAuth(s.handleSaveVote))
 	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.withRateLimit(s.streamLimiter, userKey, s.handleChatStream)))
+	mux.HandleFunc("GET /api/chats/{id}/stream", s.withAuth(s.handleReconnectStream))
 	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
 

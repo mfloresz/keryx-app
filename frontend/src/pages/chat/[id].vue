@@ -13,6 +13,7 @@ import { getUserFacingChatError } from '@/utils/chatErrors'
 import { getChatRepository } from '@/services/runtime'
 import { KeryxChatTransport } from '@/services/keryxChatTransport'
 import { getChatStreamApi, getChatTransportHeaders } from '@/services/chatTransport'
+import { watchChatTitle } from '@/services/titleWatcher'
 import { annotateBranchMetadata } from '@/shared/chatCore'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
@@ -239,6 +240,9 @@ watch(() => chat.status, async (status, prevStatus) => {
         if (updatedChat) {
           chatData.value = { ...updatedChat, messages: chatData.value?.messages ?? updatedChat.messages }
           chatStore.updateChat(chatId.value, { label: updatedChat.title || 'Untitled' })
+          // The title may still be generating server-side (async provider
+          // call after the stream). Keep watching until it lands.
+          if (!updatedChat.title) watchChatTitle(chatId.value)
         }
       } catch {
         // ignore refresh errors after streaming
@@ -440,7 +444,26 @@ onMounted(async () => {
 onMounted(async () => {
   if (chatData.value?.messages?.length === 1 && chatData.value.messages[0]?.role === 'user') {
     chat.regenerate({ body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+    return
   }
+  // Reconnect to an in-progress stream (e.g. the user navigated away and
+  // came back, or reloaded mid-response). The transport probes
+  // GET /api/chats/{id}/stream: if a stream is active it replays only the
+  // text the client is missing (`since`) and continues live; a 204 means
+  // nothing is running and resumeStream() is a no-op.
+  const msgs = (chatData.value?.messages ?? []) as any[]
+  const last = msgs[msgs.length - 1]
+  const since =
+    last && last.role === 'assistant' && Array.isArray(last.parts)
+      ? last.parts
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text ?? '')
+          .join('').length
+      : 0
+  await nextTick()
+  chat.resumeStream({
+    body: { ...buildSearchRequestBody(chatData.value?.webSearch ?? false), sinceTextLength: since },
+  })
 })
 </script>
 
