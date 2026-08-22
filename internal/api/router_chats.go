@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -629,6 +630,31 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		streamStarted                 bool
 	)
 
+	// Register the stream so clients that navigate away or reload can
+	// reconnect to it via GET /api/chats/{id}/stream. Removed on all exit
+	// paths below once the assistant message is durably persisted.
+	active := s.activeStreams.register(chatID, assistantMessageID)
+	defer func() {
+		active.broadcastFinish("finish", nil)
+		s.activeStreams.remove(chatID, active)
+	}()
+
+	// Persist the partial assistant message periodically while streaming,
+	// so a client that (re)loads the chat mid-generation sees the text
+	// generated so far instead of nothing. The final append after the
+	// stream ends remains authoritative.
+	lastPersist := time.Now()
+	persistPartial := func() {
+		if time.Since(lastPersist) < 1500*time.Millisecond {
+			return
+		}
+		lastPersist = time.Now()
+		text, reasoning := active.snapshot()
+		if strings.TrimSpace(text) != "" || reasoning != "" {
+			s.appendAssistantMessage(chatID, userID, assistantMessageID, text, reasoning)
+		}
+	}
+
 	// Build tool definitions for web search
 	var tools []ai.ToolDefinition
 	var toolExec ai.ToolExecFunc
@@ -679,11 +705,14 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		case ai.StreamChunkReasoning:
 			partialReasoning.WriteString(chunk.Text)
 			writeSSEEvent(w, "reasoning", map[string]string{"text": chunk.Text})
+			active.append("reasoning", chunk.Text)
 		default:
 			partialText.WriteString(chunk.Text)
 			writeSSEEvent(w, "text", map[string]string{"text": chunk.Text})
+			active.append("text", chunk.Text)
 		}
 		flusher.Flush()
+		persistPartial()
 	})
 
 	fullText := streamResult.Text
@@ -701,6 +730,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning)
 		}
 		slog.Error("chat stream failed", "error", err, "chat", chatID, "user", userID, "model", req.Model)
+		active.broadcastFinish("error", map[string]string{"error": "The model provider returned an error. Please try again."})
 		writeSSEEvent(w, "error", map[string]string{"error": "The model provider returned an error. Please try again."})
 		flusher.Flush()
 		return
@@ -948,6 +978,123 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 		return ""
 	}
 	return saved.Title
+}
+
+// handleReconnectStream lets a client rejoin an in-progress chat stream
+// (after navigating away, reloading the page, or opening the chat in
+// another tab). It replays the text generated so far as a single snapshot
+// event, then forwards live chunks until the stream finishes. Responds
+// 204 when no active stream exists for the chat, so the client knows to
+// just load the persisted messages.
+func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	chatID := r.PathValue("id")
+
+	// Verify ownership before revealing anything about the stream.
+	if _, err := s.Store.GetChat(chatID, userID); err != nil {
+		errorResponse(w, "Chat not found", http.StatusNotFound)
+		return
+	}
+
+	active := s.activeStreams.get(chatID)
+	if active == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		errorResponse(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// `since` is how many characters of the assistant text the client
+	// already has (from the incremental persistence). Only the remainder
+	// is replayed, which avoids duplicating text the client loaded from
+	// the store.
+	since := 0
+	if v := r.URL.Query().Get("since"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			since = n
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	// Subscribe BEFORE taking the snapshot: any chunk emitted from now on
+	// is buffered in the channel, so nothing is lost between snapshot and
+	// live forwarding.
+	events := active.subscribe()
+	defer active.unsubscribe(events)
+
+	// Replay: start event with the assistant message id (so the client
+	// adopts it), followed by whatever part of the accumulated content the
+	// client is missing.
+	writeSSEEvent(w, "start", map[string]string{
+		"assistantMessageId": active.AssistantMessageID,
+	})
+	text, reasoning := active.snapshot()
+	if since < len(text) {
+		text = text[since:]
+	} else {
+		text = ""
+	}
+	// A client that already has text implicitly has all reasoning emitted
+	// before it, so only replay reasoning for fresh clients (since == 0).
+	if since == 0 && reasoning != "" {
+		writeSSEEvent(w, "reasoning_snapshot", map[string]string{"text": reasoning})
+	}
+	if text != "" {
+		writeSSEEvent(w, "text_snapshot", map[string]string{"text": text})
+	}
+	flusher.Flush()
+
+	// If the stream finished between the get() and the replay above, the
+	// client already has the full content; tell it we're done.
+	select {
+	case <-active.done:
+		writeSSEEvent(w, "finish", nil)
+		flusher.Flush()
+		return
+	default:
+	}
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-active.done:
+			writeSSEEvent(w, "finish", nil)
+			flusher.Flush()
+			return
+		case ev := <-events:
+			switch ev.event {
+			case "error":
+				e := "Unknown error"
+				if ev.extra != nil {
+					if v, ok := ev.extra["error"]; ok && v != "" {
+						e = v
+					}
+				}
+				if e == "superseded" {
+					// This stream was replaced by a new generation; the
+					// client should reload messages rather than show an error.
+					continue
+				}
+				writeSSEEvent(w, "error", map[string]string{"error": e})
+				flusher.Flush()
+			case "finish":
+				// Handled via done channel; ignore duplicates here.
+			default:
+				writeSSEEvent(w, ev.event, map[string]string{"text": ev.extra["text"]})
+				flusher.Flush()
+			}
+		}
+	}
 }
 
 // resolveAttachments loads attachment bytes for any message whose attachment
