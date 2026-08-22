@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Chat } from '@ai-sdk/vue'
 import type { UIMessage, ChatStatus } from 'ai'
@@ -13,6 +13,7 @@ import { getUserFacingChatError } from '@/utils/chatErrors'
 import { getChatRepository } from '@/services/runtime'
 import { KeryxChatTransport } from '@/services/keryxChatTransport'
 import { getChatStreamApi, getChatTransportHeaders } from '@/services/chatTransport'
+import { annotateBranchMetadata } from '@/shared/chatCore'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { ModelPreset } from '@/components/chat/ChatInput.vue'
@@ -22,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const route = useRoute()
+const router = useRouter()
 const { t, locale } = useI18n()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
@@ -44,6 +46,31 @@ const loadError = ref<string | null>(null)
 const chatTitle = computed(() => {
   const storeChat = chatStore.chats.find(c => c.id === chatId.value)
   return storeChat?.label || chatData.value?.title || 'Untitled'
+})
+
+// Annotated messages with branch navigation metadata (non-destructive regenerate)
+const annotatedMessages = computed<UIMessage[]>(() => {
+  const rawMessages = chat.messages as unknown as any[]
+  const branches = (chatData.value as any)?.branches
+  if (!branches || typeof branches !== 'object' || Object.keys(branches).length === 0) {
+    return chat.messages as unknown as UIMessage[]
+  }
+  // Build a minimal ChatRecord for annotation: messages from live Chat + branches from persisted chat
+  const tempChat = {
+    id: chatId.value,
+    title: chatData.value?.title ?? null,
+    visibility: (chatData.value?.visibility ?? 'private') as ChatRecord['visibility'],
+    createdAt: chatData.value?.createdAt ?? new Date().toISOString(),
+    messages: rawMessages,
+    votes: [],
+    branches,
+  } as unknown as ChatRecord
+  try {
+    const annotated = annotateBranchMetadata(tempChat)
+    return annotated.messages as unknown as UIMessage[]
+  } catch {
+    return chat.messages as unknown as UIMessage[]
+  }
 })
 
 // Presets state
@@ -287,11 +314,40 @@ function cancelEdit() {
 async function handleRegenerate(message: UIMessage) {
   try {
     await chatRepository.deleteMessage(chatId.value, { messageId: message.id, type: 'regenerate' })
+    // Refresh branches so the new snapshot structure is visible for annotation
+    // (non-destructive regenerate keeps previous response as a branch version)
+    try {
+      const refreshed = await chatRepository.getChat(chatId.value)
+      if (refreshed && refreshed.branches) {
+        // Preserve live messages in chatData but update branches
+        chatData.value = { ...(chatData.value as ChatRecord), branches: refreshed.branches } as ChatRecord
+        // Also keep branches in sync if refreshed has newer title / etc.
+        if (refreshed.title) chatData.value.title = refreshed.title
+      }
+    } catch {
+      // ignore refresh errors — regeneration will still proceed
+    }
   } catch {
     toast(t('chat.failedRegenerate'))
     return
   }
   chat.regenerate({ messageId: message.id, body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+}
+
+async function handleFork(message: UIMessage) {
+  try {
+    const newChat = await chatRepository.forkChat(chatId.value, message.id)
+    // Add to sidebar store optimistically
+    chatStore.addChat({
+      id: newChat.id,
+      label: newChat.title || 'Untitled',
+      to: `/chat/${newChat.id}`,
+      createdAt: newChat.createdAt || new Date().toISOString(),
+    })
+    router.push(`/chat/${newChat.id}`)
+  } catch {
+    toast(t('chat.failedFork'))
+  }
 }
 
 async function handleBranchChange(payload: { rootMessageId: string; snapshotId: string }) {
@@ -406,14 +462,17 @@ onMounted(async () => {
   <div v-else class="flex flex-col h-full">
     <!-- Edit message dialog -->
     <Dialog :open="isEditDialogOpen" @update:open="(v: boolean) => { if (!v) cancelEdit() }">
-      <DialogContent class="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent class="sm:max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader class="shrink-0">
           <DialogTitle>{{ $t('message.edit') }}</DialogTitle>
         </DialogHeader>
-        <Textarea ref="editTextareaRef" v-model="editText" class="min-h-[120px]" maxlength="10000"
-          @keydown.enter.meta="confirmEdit" @keydown.enter.ctrl="confirmEdit" />
-        <div class="text-xs text-muted-foreground text-right mt-1">{{ editText.length }}/10000</div>
-        <DialogFooter class="gap-2 sm:gap-0">
+        <div class="flex-1 min-h-0 flex flex-col gap-1 overflow-hidden">
+          <Textarea ref="editTextareaRef" v-model="editText"
+            class="flex-1 min-h-[120px] max-h-[60vh] overflow-y-auto field-sizing-fixed" maxlength="10000"
+            @keydown.enter.meta="confirmEdit" @keydown.enter.ctrl="confirmEdit" />
+          <div class="text-xs text-muted-foreground text-right shrink-0">{{ editText.length }}/10000</div>
+        </div>
+        <DialogFooter class="gap-2 sm:gap-0 shrink-0">
           <Button variant="outline" @click="cancelEdit">{{ $t('app.cancel') }}</Button>
           <Button @click="confirmEdit">{{ $t('message.edit') }}</Button>
         </DialogFooter>
@@ -426,8 +485,8 @@ onMounted(async () => {
     </div>
 
     <!-- Messages -->
-    <ChatMessages :messages="chat.messages" :status="(chat.status as ChatStatus)" :votes="votes"
-      @branch-change="handleBranchChange" @edit="handleEdit" @regenerate="handleRegenerate" @vote="handleVote" />
+    <ChatMessages :messages="annotatedMessages" :status="(chat.status as ChatStatus)" :votes="votes"
+      @branch-change="handleBranchChange" @edit="handleEdit" @regenerate="handleRegenerate" @fork="handleFork" @vote="handleVote" />
 
     <!-- Input -->
     <ChatInput :status="chat.status" :preset="selectedPreset" :presets="presets" :web-search="chatData?.webSearch"

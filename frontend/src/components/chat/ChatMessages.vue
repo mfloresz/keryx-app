@@ -22,6 +22,7 @@ const emit = defineEmits<{
   (e: 'branch-change', payload: { rootMessageId: string, snapshotId: string }): void
   (e: 'edit', message: UIMessage): void
   (e: 'regenerate', message: UIMessage): void
+  (e: 'fork', message: UIMessage): void
   (e: 'vote', message: UIMessage, isUpvoted: boolean): void
 }>()
 
@@ -109,6 +110,7 @@ onBeforeUnmount(() => {
           @branch-change="emit('branch-change', $event)"
           @edit="emit('edit', $event)"
           @regenerate="emit('regenerate', $event)"
+          @fork="emit('fork', $event)"
           @vote="handleVote"
         />
 

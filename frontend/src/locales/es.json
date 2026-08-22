@@ -155,6 +155,7 @@
     "failedEdit": "Error al editar el mensaje",
     "failedRegenerate": "Error al regenerar el mensaje",
     "failedSwitchBranch": "Error al cambiar de rama",
+    "failedFork": "Error al crear nuevo chat desde el mensaje",
     "failedVote": "Error al votar",
     "unsupportedImageTitle": "Imagen no soportada",
     "unsupportedImageDescription": "El modelo seleccionado no soporta imagenes. Solo se permiten documentos de texto.",
@@ -185,7 +186,9 @@
     "deleteTitle": "Eliminar Chat",
     "deleteDescription": "¿Estás seguro de que quieres eliminar este chat? Esta acción no se puede deshacer.",
     "previousBranch": "Rama anterior",
-    "nextBranch": "Siguiente rama"
+    "nextBranch": "Siguiente rama",
+    "fork": "Nuevo chat desde aquí",
+    "forkTooltip": "Iniciar un nuevo chat desde este mensaje"
   },
   "reasoning": {
     "thinking": "Pensando...",

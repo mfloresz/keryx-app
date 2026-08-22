@@ -169,16 +169,108 @@ func (s *Server) handleDeleteMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Type == "regenerate" {
-		if targetIndex > 0 {
-			messages = messages[:targetIndex]
-		} else {
-			messages = messages[:1]
+		// Non-destructive regenerate: preserve previous response (and tail)
+		// as a branch snapshot instead of discarding it.
+		var branches map[string]any
+		if chat.Branches != nil {
+			_ = json.Unmarshal(chat.Branches, &branches)
 		}
+		if branches == nil {
+			branches = make(map[string]any)
+		}
+
+		// Sync current snapshots to latest messages before branching
+		syncBranchSnapshots(messages, branches)
+
+		if targetIndex == 0 {
+			errorResponse(w, "Cannot regenerate first message", http.StatusBadRequest)
+			return
+		}
+		rootMsg := messages[targetIndex-1]
+		rootID, _ := rootMsg["id"].(string)
+		if rootID == "" {
+			errorResponse(w, "Invalid branch root", http.StatusInternalServerError)
+			return
+		}
+
+		// Ensure branch state for this regeneration point.
+		branchStateRaw, hasBranch := branches[rootID]
+		var branchState map[string]any
+		if !hasBranch {
+			// Create branch state with "Original" snapshot containing previous tail
+			originalID := generateID()
+			oldTail := cloneMessages(messages[targetIndex:])
+			branchState = map[string]any{
+				"rootMessageId":     rootID,
+				"includeRoot":       false,
+				"currentSnapshotId": originalID,
+				"snapshots": []any{
+					map[string]any{
+						"id":        originalID,
+						"label":     "Original",
+						"createdAt": time.Now().UTC().Format(time.RFC3339),
+						"messages":  oldTail,
+					},
+				},
+			}
+			branches[rootID] = branchState
+		} else {
+			if bs, ok := branchStateRaw.(map[string]any); ok {
+				branchState = bs
+			} else {
+				// Corrupted branch state — reset
+				originalID := generateID()
+				oldTail := cloneMessages(messages[targetIndex:])
+				branchState = map[string]any{
+					"rootMessageId":     rootID,
+					"includeRoot":       false,
+					"currentSnapshotId": originalID,
+					"snapshots": []any{
+						map[string]any{
+							"id":        originalID,
+							"label":     "Original",
+							"createdAt": time.Now().UTC().Format(time.RFC3339),
+							"messages":  oldTail,
+						},
+					},
+				}
+				branches[rootID] = branchState
+			}
+		}
+
+		// Create new empty snapshot for the regeneration variant
+		snapshots, _ := branchState["snapshots"].([]any)
+		newID := generateID()
+		nextNum := len(snapshots) + 1
+		newSnapshot := map[string]any{
+			"id":        newID,
+			"label":     fmt.Sprintf("Regeneration %d", nextNum),
+			"createdAt": time.Now().UTC().Format(time.RFC3339),
+			"messages":  []any{},
+		}
+		snapshots = append(snapshots, newSnapshot)
+		branchState["snapshots"] = snapshots
+		branchState["currentSnapshotId"] = newID
+		branches[rootID] = branchState
+
+		// Truncate messages to before the assistant message being regenerated
+		messages = messages[:targetIndex]
+		chat.Messages, _ = json.Marshal(messages)
+		chat.Branches, _ = json.Marshal(branches)
 	} else {
 		messages = messages[:targetIndex+1]
+		chat.Messages, _ = json.Marshal(messages)
+		// Keep branches in sync after truncation for edit flow
+		var branches map[string]any
+		if chat.Branches != nil {
+			_ = json.Unmarshal(chat.Branches, &branches)
+		}
+		if branches != nil {
+			syncBranchSnapshots(messages, branches)
+			chat.Branches, _ = json.Marshal(branches)
+		}
 	}
 
-	chat.Messages, _ = json.Marshal(messages)
 	if _, err := s.Store.SaveChat(chat, userID); err != nil {
 		errorResponse(w, "Failed to save chat", http.StatusInternalServerError)
 		return
@@ -216,6 +308,12 @@ func (s *Server) handleSwitchBranch(w http.ResponseWriter, r *http.Request) {
 		branches = make(map[string]any)
 	}
 
+	var messages []map[string]any
+	json.Unmarshal(chat.Messages, &messages)
+
+	// Sync current snapshot before switching, so the tail being left behind is preserved
+	syncBranchSnapshots(messages, branches)
+
 	branchState, ok := branches[req.RootMessageID].(map[string]any)
 	if !ok {
 		errorResponse(w, "Branch not found", http.StatusNotFound)
@@ -238,9 +336,6 @@ func (s *Server) handleSwitchBranch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	snapshotMessages, _ := snapshot["messages"].([]any)
-
-	var messages []map[string]any
-	json.Unmarshal(chat.Messages, &messages)
 
 	rootIndex := -1
 	for i, msg := range messages {
@@ -775,6 +870,15 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 				messages = append(messages, um)
 			}
 			chat.Messages, _ = json.Marshal(messages)
+			// Keep branch snapshots in sync with new tail
+			var branches map[string]any
+			if chat.Branches != nil {
+				_ = json.Unmarshal(chat.Branches, &branches)
+			}
+			if branches != nil {
+				syncBranchSnapshots(messages, branches)
+				chat.Branches, _ = json.Marshal(branches)
+			}
 		}
 	}
 
@@ -825,6 +929,16 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 	}
 	chat.Messages, _ = json.Marshal(messages)
 
+	// Keep branch current snapshots in sync after appending new assistant message
+	var branches map[string]any
+	if chat.Branches != nil {
+		_ = json.Unmarshal(chat.Branches, &branches)
+	}
+	if branches != nil {
+		syncBranchSnapshots(messages, branches)
+		chat.Branches, _ = json.Marshal(branches)
+	}
+
 	if len(titleOverride) > 0 && titleOverride[0] != "" {
 		chat.Title = titleOverride[0]
 	}
@@ -871,4 +985,148 @@ func writeSSEEvent(w http.ResponseWriter, event string, extra map[string]string)
 
 func generateID() string {
 	return fmt.Sprintf("msg_%d", time.Now().UnixNano())
+}
+
+// cloneMessages deep-copies a slice of message maps via JSON round-trip.
+func cloneMessages(ms []map[string]any) []any {
+	if len(ms) == 0 {
+		return []any{}
+	}
+	out := make([]any, 0, len(ms))
+	for _, m := range ms {
+		// shallow copy is enough for branch snapshots because messages are
+		// treated as opaque JSON; deep copy via JSON ensures no sharedrefs.
+		data, _ := json.Marshal(m)
+		var cpy map[string]any
+		_ = json.Unmarshal(data, &cpy)
+		out = append(out, cpy)
+	}
+	return out
+}
+
+// syncBranchSnapshots updates the current snapshot of each branch state to
+// reflect the current live messages tail. This keeps branch history
+// consistent after appends/truncations.
+func syncBranchSnapshots(messages []map[string]any, branches map[string]any) {
+	for _, rawState := range branches {
+		state, ok := rawState.(map[string]any)
+		if !ok {
+			continue
+		}
+		rootID, _ := state["rootMessageId"].(string)
+		if rootID == "" {
+			continue
+		}
+		currentID, _ := state["currentSnapshotId"].(string)
+		if currentID == "" {
+			continue
+		}
+		includeRoot, _ := state["includeRoot"].(bool)
+		// Find root index
+		rootIndex := -1
+		for i, msg := range messages {
+			if id, _ := msg["id"].(string); id == rootID {
+				rootIndex = i
+				break
+			}
+		}
+		if rootIndex == -1 {
+			continue
+		}
+		startIndex := rootIndex
+		if !includeRoot {
+			startIndex = rootIndex + 1
+		}
+		if startIndex > len(messages) {
+			startIndex = len(messages)
+		}
+		snapshots, _ := state["snapshots"].([]any)
+		for idx, rawSnap := range snapshots {
+			snap, ok := rawSnap.(map[string]any)
+			if !ok {
+				continue
+			}
+			if sid, _ := snap["id"].(string); sid == currentID {
+				snap["messages"] = cloneMessages(messages[startIndex:])
+				snapshots[idx] = snap
+				break
+			}
+		}
+		state["snapshots"] = snapshots
+	}
+}
+
+// handleForkChat creates a new chat by forking from a specific message.
+// Standard "New chat from here" behavior: copies messages[0..index] into a new chat.
+func (s *Server) handleForkChat(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	chatID := r.PathValue("id")
+
+	var req struct {
+		MessageID string `json:"messageId"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.MessageID == "" {
+		errorResponse(w, "Missing messageId", http.StatusBadRequest)
+		return
+	}
+
+	// Lock source chat for consistent read
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
+	srcChat, err := s.Store.GetChat(chatID, userID)
+	if err != nil {
+		errorResponse(w, "Chat not found", http.StatusNotFound)
+		return
+	}
+
+	var messages []map[string]any
+	if err := json.Unmarshal(srcChat.Messages, &messages); err != nil {
+		errorResponse(w, "Failed to parse messages", http.StatusInternalServerError)
+		return
+	}
+
+	targetIndex := -1
+	for i, msg := range messages {
+		if id, _ := msg["id"].(string); id == req.MessageID {
+			targetIndex = i
+			break
+		}
+	}
+	if targetIndex == -1 {
+		errorResponse(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	// Slice up to and including the target message
+	newMessages := messages[:targetIndex+1]
+	newMessagesJSON, _ := json.Marshal(newMessages)
+
+	// Prepare new chat record (let PocketBase auto-generate ID)
+	newChat := &store.ChatRecord{
+		Title:      srcChat.Title,
+		Visibility: store.VisibilityPrivate,
+		WebSearch:  srcChat.WebSearch,
+		Messages:   newMessagesJSON,
+		Votes:      json.RawMessage("[]"),
+		Branches:   json.RawMessage("{}"),
+	}
+
+	saved, err := s.Store.SaveChat(newChat, userID)
+	if err != nil {
+		internalError(w, r, "Failed to fork chat", err)
+		return
+	}
+
+	// Duplicate attachments referenced in the forked messages (best-effort)
+	// If source messages referenced attachments by ID, those files remain
+	// associated with the original chat. Forked chat copies the message
+	// parts verbatim; attachment resolution by owner still works, but the
+	// files are logically shared. No physical copy needed.
+
+	jsonResponse(w, saved, http.StatusOK)
 }

@@ -102,6 +102,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/chats/{id}/visibility", s.withAuth(s.handleUpdateChatVisibility))
 	mux.HandleFunc("DELETE /api/chats/{id}/messages", s.withAuth(s.handleDeleteMessages))
 	mux.HandleFunc("POST /api/chats/{id}/branches", s.withAuth(s.handleSwitchBranch))
+	mux.HandleFunc("POST /api/chats/{id}/fork", s.withAuth(s.handleForkChat))
 	mux.HandleFunc("GET /api/chats/{id}/votes", s.withAuth(s.handleGetVotes))
 	mux.HandleFunc("POST /api/chats/{id}/votes", s.withAuth(s.handleSaveVote))
 	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.withRateLimit(s.streamLimiter, userKey, s.handleChatStream)))
