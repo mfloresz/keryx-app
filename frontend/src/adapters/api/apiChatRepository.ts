@@ -96,6 +96,15 @@ export const apiChatRepository: ChatRepository = {
     );
   },
 
+  async forkChat(chatId, messageId) {
+    return readJson<ChatRecord>(
+      await apiFetch(`/api/chats/${chatId}/fork`, {
+        method: "POST",
+        body: JSON.stringify({ messageId }),
+      }),
+    );
+  },
+
   async listFavorites() {
     return readJson(await apiFetch("/api/favorites"));
   },

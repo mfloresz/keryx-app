@@ -44,6 +44,7 @@ import {
   ThumbsDown,
   ChevronLeft,
   ChevronRight,
+  GitFork,
   Bot,
   User,
 } from 'lucide-vue-next'
@@ -59,6 +60,7 @@ const emit = defineEmits<{
   (e: 'branch-change', payload: { rootMessageId: string, snapshotId: string }): void
   (e: 'edit', message: UIMessage): void
   (e: 'regenerate', message: UIMessage): void
+  (e: 'fork', message: UIMessage): void
   (e: 'vote', message: UIMessage, isUpvoted: boolean): void
 }>()
 
@@ -319,6 +321,13 @@ function changeBranch(direction: -1 | 1) {
         ]"
       >
         <MessageAction
+          :tooltip="justCopied ? $t('message.copied') : $t('message.copy')"
+          @click="copyText"
+        >
+          <Check v-if="justCopied" class="h-3.5 w-3.5" />
+          <Copy v-else class="h-3.5 w-3.5" />
+        </MessageAction>
+        <MessageAction
           v-if="props.message.role === 'user'"
           :tooltip="$t('message.edit')"
           @click="emit('edit', props.message)"
@@ -327,18 +336,16 @@ function changeBranch(direction: -1 | 1) {
         </MessageAction>
         <MessageAction
           v-if="props.message.role === 'assistant'"
-          :tooltip="justCopied ? $t('message.copied') : $t('message.copy')"
-          @click="copyText"
-        >
-          <Check v-if="justCopied" class="h-3.5 w-3.5" />
-          <Copy v-else class="h-3.5 w-3.5" />
-        </MessageAction>
-        <MessageAction
-          v-if="props.message.role === 'assistant'"
           :tooltip="$t('message.regenerate')"
           @click="emit('regenerate', props.message)"
         >
           <RotateCcw class="h-3.5 w-3.5" />
+        </MessageAction>
+        <MessageAction
+          :tooltip="$t('message.forkTooltip')"
+          @click="emit('fork', props.message)"
+        >
+          <GitFork class="h-3.5 w-3.5" />
         </MessageAction>
         <MessageAction
           v-if="props.message.role === 'assistant'"

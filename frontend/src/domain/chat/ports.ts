@@ -32,6 +32,7 @@ export interface ChatRepository {
     chatId: string,
     request: BranchSelectionRequest,
   ): Promise<ChatRecord>;
+  forkChat(chatId: string, messageId: string): Promise<ChatRecord>;
   listFavorites(): Promise<FavoriteMessageEntry[]>;
   getVotes(chatId: string): Promise<Array<Record<string, any>>>;
   saveVote(chatId: string, request: VoteRequest): Promise<Record<string, any>>;
