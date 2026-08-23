@@ -1,8 +1,8 @@
 import { ref } from 'vue'
-import { randomUUID } from '../shared/uuid.js'
+import { toast as sonnerToast } from 'vue-sonner'
 
 export interface Toast {
-  id: string
+  id: string | number
   message: string
   type: 'error' | 'success' | 'info'
 }
@@ -11,18 +11,17 @@ const toasts = ref<Toast[]>([])
 
 export function useToast() {
   function toast(message: string, type: Toast['type'] = 'error') {
-    const id = randomUUID()
-    toasts.value.push({ id, message, type })
-    setTimeout(() => {
-      dismiss(id)
-    }, 5000)
+    if (type === 'success') {
+      sonnerToast.success(message)
+    } else if (type === 'info') {
+      sonnerToast.info(message)
+    } else {
+      sonnerToast.error(message)
+    }
   }
 
-  function dismiss(id: string) {
-    const index = toasts.value.findIndex(t => t.id === id)
-    if (index !== -1) {
-      toasts.value.splice(index, 1)
-    }
+  function dismiss(id: string | number) {
+    sonnerToast.dismiss(id)
   }
 
   return { toasts, toast, dismiss }
