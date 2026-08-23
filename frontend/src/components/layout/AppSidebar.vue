@@ -241,7 +241,7 @@ function onKeyDown(e: KeyboardEvent) {
       id="app-sidebar"
       tabindex="-1"
       :class="[
-        'flex h-full flex-col bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-sidebar-foreground transition-[width] duration-300',
+        'flex h-full flex-col border-r border-sidebar-border bg-sidebar pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-sidebar-foreground transition-[width] duration-300',
         collapsed && !isDrawer ? 'w-16' : 'w-72'
       ]"
     >
@@ -288,13 +288,13 @@ function onKeyDown(e: KeyboardEvent) {
         </template>
       </div>
 
-      <!-- New Chat & Search -->
-      <div class="px-3 pb-2 space-y-1">
+      <!-- Primary action + secondary nav -->
+      <div class="px-3 pb-3 space-y-3">
+        <!-- Primary CTA: high-contrast, full-width, unmistakable -->
         <Tooltip v-if="collapsed && !isDrawer">
           <TooltipTrigger as-child>
             <Button
-              variant="outline"
-              class="w-full justify-center"
+              class="w-full justify-center shadow-sm"
               size="sm"
               @click="router.push('/'); closeMobile()"
             >
@@ -307,69 +307,71 @@ function onKeyDown(e: KeyboardEvent) {
         </Tooltip>
         <Button
           v-else
-          variant="outline"
-          class="w-full justify-start gap-2"
-          size="sm"
+          class="w-full justify-center gap-2 font-medium shadow-sm"
+          size="default"
           @click="router.push('/'); closeMobile()"
         >
           <Plus class="h-4 w-4" />
           {{ $t('sidebar.newChat') }}
         </Button>
 
-        <Tooltip v-if="collapsed && !isDrawer">
-          <TooltipTrigger as-child>
-            <Button
-              variant="ghost"
-              class="w-full justify-center"
-              size="sm"
-              @click="searchOpen = true"
-            >
-              <Search class="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            <p>{{ $t('sidebar.searchChats') }}</p>
-          </TooltipContent>
-        </Tooltip>
-        <Button
-          v-else
-          variant="ghost"
-          class="w-full justify-start gap-2"
-          size="sm"
-          @click="searchOpen = true"
-        >
-          <Search class="h-4 w-4" />
-          {{ $t('sidebar.search') }}
-          <kbd class="ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
-            <span class="text-xs">Ctrl</span>K
-          </kbd>
-        </Button>
+        <!-- Secondary nav: lighter, grouped with subtle separator -->
+        <div class="space-y-0.5 border-t border-sidebar-border/70 pt-3">
+          <Tooltip v-if="collapsed && !isDrawer">
+            <TooltipTrigger as-child>
+              <Button
+                variant="ghost"
+                class="w-full justify-center"
+                size="sm"
+                @click="searchOpen = true"
+              >
+                <Search class="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{{ $t('sidebar.searchChats') }}</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            v-else
+            variant="ghost"
+            class="w-full justify-start gap-2 font-normal text-sidebar-foreground/80 hover:text-sidebar-foreground"
+            size="sm"
+            @click="searchOpen = true"
+          >
+            <Search class="h-4 w-4 opacity-70" />
+            {{ $t('sidebar.search') }}
+            <kbd class="ml-auto inline-flex h-5 select-none items-center gap-1 rounded border border-sidebar-border bg-sidebar px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <span class="text-xs">Ctrl</span>K
+            </kbd>
+          </Button>
 
-        <Tooltip v-if="collapsed && !isDrawer">
-          <TooltipTrigger as-child>
-            <Button
-              :variant="isFavoritesRoute() ? 'secondary' : 'ghost'"
-              class="w-full justify-center"
-              size="sm"
-              @click="router.push('/favorites'); closeMobile()"
-            >
-              <Star class="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">
-            <p>{{ $t('sidebar.favorites') }}</p>
-          </TooltipContent>
-        </Tooltip>
-        <Button
-          v-else
-          :variant="isFavoritesRoute() ? 'secondary' : 'ghost'"
-          class="w-full justify-start gap-2"
-          size="sm"
-          @click="router.push('/favorites'); closeMobile()"
-        >
-          <Star class="h-4 w-4" />
-          {{ $t('sidebar.favorites') }}
-        </Button>
+          <Tooltip v-if="collapsed && !isDrawer">
+            <TooltipTrigger as-child>
+              <Button
+                :variant="isFavoritesRoute() ? 'secondary' : 'ghost'"
+                class="w-full justify-center"
+                size="sm"
+                @click="router.push('/favorites'); closeMobile()"
+              >
+                <Star class="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{{ $t('sidebar.favorites') }}</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            v-else
+            :variant="isFavoritesRoute() ? 'secondary' : 'ghost'"
+            class="w-full justify-start gap-2 font-normal"
+            size="sm"
+            @click="router.push('/favorites'); closeMobile()"
+          >
+            <Star class="h-4 w-4 opacity-70" />
+            {{ $t('sidebar.favorites') }}
+          </Button>
+        </div>
       </div>
 
       <!-- Chat History -->
@@ -383,7 +385,7 @@ function onKeyDown(e: KeyboardEvent) {
           </div>
           <div v-else class="space-y-4">
             <div v-for="group in chatStore.groups" :key="group.id">
-              <div class="text-xs font-medium text-muted-foreground px-2 py-1 tracking-wider">
+              <div class="px-2 pb-1.5 pt-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
                 {{ group.label }}
               </div>
               <div class="space-y-0.5">
@@ -392,10 +394,10 @@ function onKeyDown(e: KeyboardEvent) {
                   :key="item.id"
                   :to="item.to"
                   :class="[
-                    'group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+                    'group flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors',
                     isActive(item.id)
-                      ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                      ? 'bg-foreground font-medium text-background shadow-sm'
+                      : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   ]"
                   @click="closeMobile"
                 >
@@ -485,7 +487,7 @@ function onKeyDown(e: KeyboardEvent) {
       </div>
 
       <!-- Footer: user card with account menu -->
-      <div class="p-3">
+      <div class="border-t border-sidebar-border/70 p-3">
         <DropdownMenu v-model:open="userMenuOpen">
           <DropdownMenuTrigger as-child>
             <button
