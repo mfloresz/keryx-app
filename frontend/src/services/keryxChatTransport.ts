@@ -117,6 +117,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         username: (body.username as string) ?? '',
         datetime: (body.datetime as string) ?? '',
         timezone: (body.timezone as string) ?? '',
+        agentId: (body.agentId as string) ?? '',
         userMessage: lastUserMessage,
       }),
       signal: options.abortSignal,

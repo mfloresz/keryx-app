@@ -1,6 +1,6 @@
 # Plan — Feature Agentes
 
-> Fecha: 2026-08-22 · Estado: **Ajustado tras aclaraciones** · No OPFS (legacy descartado)
+> Fecha: 2026-08-22 · Estado: **Ajustado tras aclaraciones + revisión** · No OPFS (legacy descartado)
 
 ## 0. Resumen
 
@@ -13,7 +13,7 @@ System prompts específicos por tarea (Agentes) que **sobrescriben** el prompt b
 | Requisito | Decisión |
 |---|---|
 | **Composición** | **Sobrescribe**, no aditivo. Si `agentId != null` → `effectiveSystemPrompt = agent.system_prompt`; si `null` → `basePrompt` efectivo. `buildSearchSystemPrompt()` (`internal/api/web_search.go:224`) y `applyUserContext()` se aplican **después**, sobre el ganador. |
-| **Tags** | Campos `system_prompt` (agentes) y `prompt_overrides.prompt` deben soportar placeholders `{username}`, `{datetime}`, `{language}`. UI expone chips/botones para insertar tags en cursor. Backend resuelve todos vía `applyUserContext` + `languageName`. |
+| **Tags** | Campos `system_prompt` (agentes) y `prompt_overrides.prompt` deben soportar placeholders `{username}`, `{datetime}`, `{language}`. Backend resuelve vía `applyUserContext` + `languageName`. **Excepción:** en el Prompt de Título solo se garantiza `{language}` (ver §5); la UI de título ofrece únicamente ese tag. |
 | **OPFS** | Descartado. Solo backend Go + PocketBase. Toda persistencia en colecciones PocketBase. |
 | **Selector agente** | Botón `+` (`PromptInputActionMenu` en `frontend/src/components/chat/ChatInput.vue:164`) añade ítem `Agentes`. Al seleccionar, `ChatInput.vue` emite `update:agentId`. Display: badge al lado del `Select` de preset (`ChatInput.vue:184`) con nombre + `X` visible en `group-hover`. |
 | **Reset** | Solo para **prompts globales** (`prompt_overrides` keys `base`/`title`). `DELETE /api/admin/prompt-overrides/{key}` borra registro → fallback a embebido. Para agentes built-in, `DELETE`/`POST reset` borra override global y vuelve a catálogo embebido. |
@@ -38,7 +38,7 @@ System prompts específicos por tarea (Agentes) que **sobrescriben** el prompt b
 ### Coupling — ¿Qué se rompe si borro esto?
 - Borrar `prompt_overrides` → seguro, fallback embebido (mismo que `store_title_policy.go:10`).
 - Borrar `agents` global usado por chats → degradación a base, no 500. Handler `GetAgentForStream` retorna `ErrNotFound` → fallback.
-- `KeryxChatTransport.ts:114` envía `agentId`. Clientes viejos sin `agentId` siguen funcionando (backend trata `""` como `null`).
+- `KeryxChatTransport.ts` **no** soporta aún `agentId`: el payload actual (`frontend/src/services/keryxChatTransport.ts:110`) solo envía `model, preset, messages, system, webSearch, language, username, datetime, timezone, userMessage`. Añadir `agentId` es parte del alcance (ver §7). Clientes viejos sin `agentId` seguirán funcionando (backend trata `""` como `null`).
 - Admin lista dependiente de catálogo embebido: si se renombra un `builtin_id`, overrides huérfanos quedan ocultos pero no rompen.
 
 ### Timing — ¿Cuándo puede fallar el orden?
@@ -118,7 +118,7 @@ indexes:
 ```
 **Resolución efectiva** `internal/store/store_agents.go`:
 - `ListEffectiveAgents(userID, role) []EffectiveAgent` — merge: por cada `DefaultAgents`, buscar `FindFirst(builtin_id=id && owner=null)` → si existe usar override, sino builtin; + `FindRecords(owner=null && builtin_id=''||null)` (globales custom) + `FindRecords(owner=userID)` (privados). Retorna con campo `source: builtin|override|global_custom|user_custom`.
-- `GetAgentForStream(agentID, userID, role) (*Agent, error)` — valida visibilidad (`owner=null` o `owner=userID`).
+- `GetAgentForStream(agentID, userID) (*Agent, error)` — valida visibilidad (`owner=null` o `owner=userID`). Sin parámetro `role`: la visibilidad solo depende de `owner` (los globales ya son `owner=null`).
 - `DuplicateAgent(fromID, userID)` — copia global a `owner=userID`, `builtin_id=null`, `name = orig.name + " (copia)"`.
 
 ### 4.3 `chats` — migración
@@ -127,6 +127,8 @@ En `ensureChatsCollection` (`store_schema.go:130`) añadir:
 c.Fields.Add(&core.TextField{Name: "agent_id", Max: 80})
 ```
 Para colecciones existentes `ensureField` lo añade. `store_chats.go:SaveChat`/`chatFromRecord` incluir `AgentID`.
+
+**Decisión de diseño — TextField y no RelationField:** intencional. Un Relation a `agents` rompería los chats existentes si el agente se borra (integridad referencial de PocketBase); con TextField + fallback en stream (`§5`) la degradación es graceful. Documentado para que nadie lo "corrija" a Relation después.
 
 ---
 
@@ -143,7 +145,7 @@ systemPrompt = applyUserContext(...)
 ```go
 var systemPrompt string
 if req.AgentID != "" {
-  if ag, err := s.Store.GetAgentForStream(req.AgentID, userID, role); err == nil {
+  if ag, err := s.Store.GetAgentForStream(req.AgentID, userID); err == nil {
     systemPrompt = ag.SystemPrompt
     slog.Info("stream agent", "agentId", ag.ID, "source", ag.Source, "chat", chatID)
   } else {
@@ -151,7 +153,9 @@ if req.AgentID != "" {
     systemPrompt = s.Store.GetEffectiveBasePrompt()
   }
 } else if req.System != "" {
-  systemPrompt = req.System // backward compat
+  // backward compat: solo aplica si NO hay agente. El frontend no debe enviar
+  // `system` cuando hay agente activo (regla en §7).
+  systemPrompt = req.System
 } else {
   systemPrompt = s.Store.GetEffectiveBasePrompt()
 }
@@ -159,10 +163,14 @@ if webSearchActive { systemPrompt += s.buildSearchSystemPrompt() }
 systemPrompt = s.applyUserContext(systemPrompt, req.Username, req.Datetime, req.Language, req.Timezone, userID)
 ```
 
+Regla de prioridad explícita: `agentId` > `req.System` > base efectiva. Cuando el frontend tenga un agente seleccionado **no envía `system`**, para evitar ambigüedad.
+
 `GenerateTitle` (`router_chats.go:759`):
 ```go
 titlePrompt := s.Store.GetEffectiveTitlePrompt()
 titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
+// {username}/{datetime} NO se resuelven aquí (sin contexto de usuario en la generación de título);
+// la UI de título solo ofrece el tag {language}. Si aparecen otros tags quedan literales.
 ```
 
 Campos request `handleChatStream` añadir `AgentID string \`json:"agentId"\``.
@@ -207,7 +215,9 @@ POST   /api/chats/{id}/stream body += {agentId?: string}
 GET    /api/agents ya cubre selector
 ```
 
-Validaciones: `systemPrompt` 1..10000, `name` 1..80, max 50 agentes por user (enforced en handler), sanitizar no-ejecutable (no HTML, igual que `prompts.go:67`).
+`PATCH /api/chats/{id}/agent` — autorización: mismo patrón owner-only que los demás handlers de chats (`ownerID == chat.owner`; reusar el patrón de `UpdateChatVisibility` en `store_chats.go:107`). Guardar con `lockChat` existente. Si `agentId != null`, validar que el agente sea visible para el owner antes de persistir (sino 400).
+
+Validaciones: `systemPrompt` 1..10000, `name` 1..80, max 50 agentes por user (aplica a custom y overrides propios; enforced en handler, respuesta **400** con mensaje localizable), sanitizar no-ejecutable (no HTML, igual que `prompts.go:67`).
 
 ---
 
@@ -246,13 +256,15 @@ Ubicación: nueva Sección **E. Prompts & Agentes** debajo de Model Presets (gri
 **`frontend/src/pages/chat/[id].vue:1` y `frontend/src/pages/index.vue`:**
 - Fetch `GET /api/agents` en `onMounted` (mismo patrón que presets `:440`).
 - Estado `selectedAgentId` (inicial desde `chatData.agent_id` o `route.query.agentId`).
-- `buildSearchRequestBody()` (`:111`) añade `agentId: selectedAgentId.value ?? undefined`.
-- `KeryxChatTransport.ts:114` ya reenvía `body.agentId` → incluir `agentId` en JSON del `fetch`.
+- `buildSearchRequestBody()` (`:111`) añade `agentId: selectedAgentId.value ?? undefined`; cuando hay agente seleccionado, **no enviar `system`** (regla §5).
+- `KeryxChatTransport.ts` aún no reenvía `agentId` — añadirlo en `keryxChatTransport.ts:110` (ver §7).
 - `handleSubmit` persiste `agentId` vía `PATCH /api/chats/{id}/agent` si cambió.
 
-**`frontend/src/services/keryxChatTransport.ts:54`:** añadir `agentId = body.agentId as string|undefined` en `JSON.stringify` payload.
+**`frontend/src/services/keryxChatTransport.ts:110`:** añadir `agentId: (body.agentId as string) ?? undefined` en el payload de `JSON.stringify`. **Regla:** cuando haya agente seleccionado, las páginas no incluyen `system` en el body (ver §5).
 
-**Locales `frontend/src/locales/es.json:206`:** añadir `admin.prompts.*`, `admin.agents.*`, `chat.agent.*` (ver §9).
+**Agente borrado / inaccesible (frontend):** al cargar un chat cuyo `chatData.agent_id` no aparece en `GET /api/agents` (404 o ausente en lista), limpiar `selectedAgentId` localmente, ocultar el badge y mostrar toast discreto (`chat.agent.missing`). No hacer PATCH automático (el backend ya hace fallback); la limpieza se persiste con la próxima selección del usuario.
+
+**Locales `frontend/src/locales/es.json:206` y `frontend/src/locales/en.json`:** añadir `admin.prompts.*`, `admin.agents.*`, `chat.agent.*` en **ambos** idiomas — `frontend/src/i18n.test.ts` valida paridad entre locales y fallará si solo se actualiza uno. Ver §9 para las claves.
 
 ---
 
@@ -277,15 +289,17 @@ Ubicación: nueva Sección **E. Prompts & Agentes** debajo de Model Presets (gri
 5. *Verify:* tests visibilidad (A no ve custom de B, user no puede PUT global), duplicar, stream con/sin agente, `govulncheck`.
 
 ### Fase 3 — Frontend: Admin (1 día)
-1. `frontend/src/pages/admin/index.vue` Sec. E (Prompts + Agentes), chips tags, dialogs, `PromptInsert` helper.
-2. Locales `es.json`.
+1. `frontend/src/pages/admin/index.vue` Sec. E (Prompts + Agentes), chips tags, dialogs, `PromptInsert` helper. En el textarea de Prompt Título, chips limitadas a `{language}`.
+2. Locales **`es.json` y `en.json`** (paridad obligatoria — ver §9).
 3. *Verify:* `bun run build`, flujo manual admin edita base → nuevo chat usa override; Reset → vuelve embebido; crear/editar agente global.
 
 ### Fase 4 — Frontend: Chat selector (1 día)
 1. `frontend/src/components/chat/ChatInput.vue` menú `+` → Agentes, badge al lado de preset con `X` hover.
-2. `frontend/src/pages/chat/[id].vue` + `frontend/src/pages/index.vue` wiring `agentId`, `keryxChatTransport.ts`.
-3. Persistencia `PATCH /api/chats/{id}/agent`.
-4. *Verify:* seleccionar agente → badge visible → hover X → vuelve a base; crear agente user → solo visible para ese user; duplicar admin → copia editable.
+2. `frontend/src/pages/chat/[id].vue` + `frontend/src/pages/index.vue` wiring `agentId`, `keryxChatTransport.ts` (payload en `:110`), regla "sin `system` si hay agente".
+3. Manejo de agente inexistente al cargar chat: limpiar selección + toast (`chat.agent.missing`) sin PATCH automático.
+4. Persistencia `PATCH /api/chats/{id}/agent`.
+5. Tests: extender `frontend/src/test/` para el selector (selección, limpieza con X, agente ausente) y paridad i18n ya cubierta por `i18n.test.ts`.
+6. *Verify:* seleccionar agente → badge visible → hover X → vuelve a base; crear agente user → solo visible para ese user; duplicar admin → copia editable; chat con `agent_id` borrado carga sin error.
 
 ### Fase 5 — Hardening (0.5 día)
 - Rate limits (`adminLimiter`/`accountLimiter`), validación longitudes, `auditLog` completo.
@@ -327,9 +341,11 @@ Ubicación: nueva Sección **E. Prompts & Agentes** debajo de Model Presets (gri
   }
 },
 "chat": {
-  "agent": { "selectPlaceholder": "Sin agente (Base)", "selected": "Agente: {name}", "clear": "Quitar agente", "duplicate": "Duplicar", "duplicated": "Agente duplicado" }
+  "agent": { "selectPlaceholder": "Sin agente (Base)", "selected": "Agente: {name}", "clear": "Quitar agente", "duplicate": "Duplicar", "duplicated": "Agente duplicado", "missing": "El agente de este chat ya no está disponible", "limitReached": "Alcanzaste el máximo de agentes (50)" }
 }
 ```
+
+> **Paridad i18n:** estas mismas claves deben añadirse a `frontend/src/locales/en.json` (traducidas al inglés). `frontend/src/i18n.test.ts` verifica que ambos locales tengan exactamente las mismas claves — el test fallará si se actualiza solo uno.
 
 ---
 
@@ -346,9 +362,23 @@ Ubicación: nueva Sección **E. Prompts & Agentes** debajo de Model Presets (gri
 ## 11. Criterios de aceptación
 
 - [ ] `GET /api/admin/prompt-overrides` muestra `source` correcto; `DELETE` vuelve a embebido y stream lo usa.
-- [ ] Chips `{username}/{datetime}/{language}` insertan en cursor y se resuelven en stream (verificado con `slog`).
+- [ ] Chips `{username}/{datetime}/{language}` insertan en cursor y se resuelven en stream (verificado con `slog`). En Prompt Título solo `{language}` se resuelve.
 - [ ] `+` → Agentes lista globales+propios; badge al lado de preset con `X` hover limpia selección.
 - [ ] User no puede `PUT/DELETE` agente `owner=null`; `POST /duplicate` crea copia privada editable.
-- [ ] Chats nuevos y existentes persisten `agent_id`; cambiar agente afecta solo streams futuros.
+- [ ] Chats nuevos y existentes persisten `agent_id`; cambiar agente afecta solo streams futuros. Chat con agente borrado carga sin error y hace fallback a base.
+- [ ] Locales `es.json`/`en.json` con paridad de claves (`i18n.test.ts` green).
 - [ ] `go vet` + `govulncheck` + `bun run build` + `bun test` green.
+
+---
+
+## 12. Correcciones aplicadas (revisión 2026-08-22)
+
+1. §2 Coupling: corregida afirmación falsa — `KeryxChatTransport.ts` aún no soporta `agentId`; añadirlo es parte del alcance.
+2. §1/§5: tags del Prompt Título limitados a `{language}`; documentado qué pasa con los demás (quedan literales).
+3. §5: regla explícita de prioridad (`agentId` > `system` > base) y el frontend no envía `system` cuando hay agente.
+4. §4.2: `GetAgentForStream` sin parámetro `role` sobrante.
+5. §4.3: justificación de `agent_id` como TextField vs RelationField.
+6. §6: autorización y validación de visibilidad para `PATCH /api/chats/{id}/agent`; código de error (400) para límite de 50 agentes.
+7. §7/§9: i18n requiere actualizar `en.json` además de `es.json` (paridad validada por `i18n.test.ts`); claves nuevas `chat.agent.missing` y `chat.agent.limitReached`; manejo frontend de agente borrado.
+8. Refs de línea actualizadas donde el código real difiere (`keryxChatTransport.ts:110`).
 

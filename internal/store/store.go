@@ -10,6 +10,8 @@ import (
 
 var ErrNotFound = errors.New("not found")
 var ErrForbidden = errors.New("forbidden")
+var ErrInvalid = errors.New("invalid input")
+var ErrLimitReached = errors.New("limit reached")
 
 type Store struct {
 	App       core.App
@@ -31,12 +33,17 @@ func (s *Store) EnsureSchema() error {
 	if _, err := s.ensureUserModelAccessCollection(users); err != nil {
 		return fmt.Errorf("ensure user_model_access: %w", err)
 	}
-	if _, err := s.ensureInvitationsCollection(users); err != nil {
-		return fmt.Errorf("ensure invitations: %w", err)
+	if _, err := s.ensureAgentsCollection(users); err != nil {
+		return fmt.Errorf("ensure agents: %w", err)
 	}
+	// chats.agent_id: TextField (not Relation) so deleting an agent never
+	// breaks existing chats — the stream falls back to the base prompt.
 	chats, err := s.ensureChatsCollection(users)
 	if err != nil {
 		return fmt.Errorf("ensure chats: %w", err)
+	}
+	if err := s.migrateChatsCollectionForAgents(chats); err != nil {
+		return fmt.Errorf("migrate chats agent_id: %w", err)
 	}
 	if _, err := s.ensureAttachmentsCollection(users, chats); err != nil {
 		return fmt.Errorf("ensure attachments: %w", err)
@@ -58,6 +65,12 @@ func (s *Store) EnsureSchema() error {
 	}
 	if err := s.seedModelPresets(); err != nil {
 		return fmt.Errorf("seed model presets: %w", err)
+	}
+	if err := s.ensurePromptOverridesCollection(); err != nil {
+		return fmt.Errorf("ensure prompt overrides: %w", err)
+	}
+	if _, err := s.ensureAgentsCollection(users); err != nil {
+		return fmt.Errorf("ensure agents: %w", err)
 	}
 	// NOTE: no admin user is seeded here. On a fresh install the first user
 	// registers via the browser and is promoted to admin by handleRegister.
