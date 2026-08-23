@@ -152,14 +152,17 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
 </script>
 
 <template>
-  <div class="flex flex-col h-full overflow-hidden">
-    <div class="flex-1 flex flex-col items-center justify-center px-4">
+  <div class="flex flex-col h-full overflow-hidden bg-background">
+    <div class="flex-1 flex flex-col items-center justify-center px-4 py-8">
       <div class="w-full max-w-3xl min-w-0">
-        <div class="mb-6 px-4">
-          <img src="/logo.webp" alt="" class="h-12 w-12 object-contain" />
-          <h1 class="mt-4 text-3xl font-semibold tracking-tight">
+        <div class="mb-8 px-1">
+          <img src="/logo.webp" alt="" class="h-11 w-11 object-contain" />
+          <h1 class="mt-4 text-[30px] font-semibold tracking-tight text-foreground">
             {{ userDisplayName ? $t('chat.greeting', { name: userDisplayName }) : $t('chat.welcomeTitle') }}
           </h1>
+          <p class="mt-1.5 text-sm text-muted-foreground">
+            {{ $t('chat.inputPlaceholder') }}
+          </p>
         </div>
 
         <ChatInput

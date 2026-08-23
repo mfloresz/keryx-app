@@ -171,9 +171,9 @@ function handleAgentSelect(id: string) {
 </script>
 
 <template>
-  <div class="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-0">
+  <div class="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
     <PromptInput
-      class="max-w-3xl mx-auto border-0 rounded-none shadow-none"
+      class="mx-auto max-w-3xl overflow-hidden rounded-2xl border border-border bg-card shadow-sm focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/10 transition-shadow"
       multiple
       global-drop
       :max-files="3"
