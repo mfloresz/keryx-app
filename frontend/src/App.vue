@@ -3,14 +3,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useAuthStore } from '@/stores/auth'
-import { useToast } from '@/composables/useToast'
 import { useAppFont } from '@/composables/useAppFont'
+import { Toaster } from '@/components/ui/sonner'
 import AppLayout from './components/layout/AppLayout.vue'
+import 'vue-sonner/style.css'
 
 const route = useRoute()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
-const { toasts, dismiss } = useToast()
 const showLayout = computed(() => route.meta.layout !== false)
 const isPublicRoute = computed(() => route.meta.public === true)
 const canRenderProtectedLayout = computed(() => {
@@ -77,26 +77,5 @@ watch(() => authStore.session, async (session, previousSession) => {
     </template>
   </Suspense>
 
-  <!-- Toast notifications -->
-  <div aria-live="polite" role="status" class="fixed bottom-4 right-4 z-[100] flex flex-col gap-2 pointer-events-none">
-    <div
-      v-for="t in toasts"
-      :key="t.id"
-      class="pointer-events-auto flex items-center gap-3 rounded-lg border bg-background px-4 py-3 shadow-lg transition-all"
-      :class="{
-        'border-destructive text-destructive': t.type === 'error',
-        'border-success text-success': t.type === 'success',
-        'border-primary text-primary': t.type === 'info',
-      }"
-    >
-      <span class="text-sm">{{ t.message }}</span>
-      <button
-        type="button"
-        class="text-xs opacity-70 hover:opacity-100"
-        @click="dismiss(t.id)"
-      >
-        {{ $t('app.dismiss') || 'Dismiss' }}
-      </button>
-    </div>
-  </div>
+  <Toaster rich-colors position="top-right" :close-button="true" />
 </template>
