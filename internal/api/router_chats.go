@@ -510,6 +510,9 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		// user message (id, role, createdAt, parts). The backend persists it
 		// verbatim before streaming so it survives failed/aborted streams.
 		UserMessage json.RawMessage `json:"userMessage"`
+		// AgentID selects an Agent whose system prompt fully overrides the
+		// base prompt. Empty = use base (or legacy System).
+		AgentID string `json:"agentId"`
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
@@ -598,9 +601,25 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	systemPrompt := req.System
-	if systemPrompt == "" {
-		systemPrompt = s.Cfg.BaseSystemPrompt
+	// System prompt resolution priority: agent > legacy client system > base.
+	// An agent's prompt fully overrides the base prompt; search section and
+	// user context are appended afterwards either way. A missing/inaccessible
+	// agent degrades gracefully to the effective base prompt.
+	var systemPrompt string
+	if req.AgentID != "" {
+		if ag, agErr := s.Store.GetAgentForStream(req.AgentID, userID); agErr == nil {
+			systemPrompt = ag.SystemPrompt
+			slog.Info("stream agent", "agentId", ag.ID, "source", string(ag.Source), "chat", chatID)
+		} else {
+			slog.Warn("agent not found, fallback to base", "agentId", req.AgentID, "chat", chatID)
+			systemPrompt = s.Store.GetEffectiveBasePrompt(s.Cfg.BaseSystemPrompt).Prompt
+		}
+	} else if req.System != "" {
+		// Backward compat: only honored when no agent is selected; the
+		// frontend never sends `system` alongside an agent (see PLAN_AGENTES.md §5).
+		systemPrompt = req.System
+	} else {
+		systemPrompt = s.Store.GetEffectiveBasePrompt(s.Cfg.BaseSystemPrompt).Prompt
 	}
 	if webSearchActive {
 		systemPrompt += s.buildSearchSystemPrompt()
@@ -786,7 +805,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			}
 
 			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			titlePrompt := s.Cfg.TitleGenerationSystemPrompt
+			titlePrompt := s.Store.GetEffectiveTitlePrompt(s.Cfg.TitleGenerationSystemPrompt).Prompt
 			titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
 			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, firstUserMsg, lang)
 			cancel()

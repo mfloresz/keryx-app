@@ -31,6 +31,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 
 type UserRole = "admin" | "user";
 
@@ -69,6 +71,26 @@ interface CatalogModel {
   provider: string;
   displayName: string;
 }
+
+interface PromptOverrideInfo {
+  key: string;
+  prompt: string;
+  source: "embedded" | "override";
+  updatedAt?: string;
+}
+
+type AdminAgent = {
+  id: string;
+  builtinId?: string;
+  ownerId?: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  systemPrompt: string;
+  source: "builtin" | "override" | "global_custom" | "user_custom";
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 interface TitleGenerationPolicy {
   mode: "chat_model" | "custom";
@@ -296,6 +318,220 @@ async function handleDeleteProviderKey(entry: ProviderKeyEntry): Promise<void> {
 }
 
 	// ---- Title generation policy handlers ----
+
+	// ---- E. Prompts & Agents ----
+
+
+const promptOverrides = ref<Record<"base" | "title", PromptOverrideInfo>>({
+  base: { key: "base", prompt: "", source: "embedded" },
+  title: { key: "title", prompt: "", source: "embedded" },
+});
+const originalPromptOverrides = ref<Record<"base" | "title", PromptOverrideInfo>>({
+  base: { key: "base", prompt: "", source: "embedded" },
+  title: { key: "title", prompt: "", source: "embedded" },
+});
+const isSavingPrompt = ref(false);
+const isResettingPrompt = ref(false);
+const resetPromptKey = ref<"base" | "title" | null>(null);
+
+function hasPromptChanges(key: "base" | "title"): boolean {
+  return promptOverrides.value[key].prompt !== originalPromptOverrides.value[key].prompt;
+}
+
+const agents = ref<AdminAgent[]>([]);
+const agentDialogOpen = ref(false);
+const agentDialogMode = ref<"create" | "edit">("create");
+const agentForm = ref<{ id: string; builtinId: string; name: string; description: string; icon: string; systemPrompt: string }>({
+  id: "", builtinId: "", name: "", description: "", icon: "", systemPrompt: "",
+});
+const isSavingAgent = ref(false);
+const deleteAgentTarget = ref<AdminAgent | null>(null);
+const isDeletingAgent = ref(false);
+
+const PROMPT_TAG_KEYS = ["{username}", "{datetime}", "{language}"] as const;
+
+async function loadPromptsAndAgents(): Promise<void> {
+  try {
+    const [promptsResponse, agentsResponse] = await Promise.all([
+      apiFetch("/api/admin/prompt-overrides"),
+      apiFetch("/api/admin/agents"),
+    ]);
+    await assertOk(promptsResponse, t("admin.shared.loadError"));
+    await assertOk(agentsResponse, t("admin.shared.loadError"));
+    const promptsData = await readPayload<Record<string, PromptOverrideInfo>>(promptsResponse);
+    if (promptsData) {
+      for (const key of ["base", "title"] as const) {
+        const entry = promptsData[key] ?? { key, prompt: "", source: "embedded" };
+        promptOverrides.value[key] = { ...entry };
+        originalPromptOverrides.value[key] = { ...entry };
+      }
+    }
+    agents.value = (await readPayload<AdminAgent[]>(agentsResponse)) ?? [];
+  } catch {
+    // Non-fatal: the section simply stays empty.
+  }
+}
+
+function insertPromptTag(key: "base" | "title", tag: string, event?: MouseEvent): void {
+  // Chips are buttons inside a form-less card; prevent focus loss side effects.
+  if (event) event.preventDefault();
+  // Insert at cursor of the matching textarea by ref id.
+  const el = document.querySelector<HTMLTextAreaElement>(`textarea[data-prompt-key="${key}"]`);
+  const current = promptOverrides.value[key];
+  if (!el) {
+    promptOverrides.value[key] = { ...current, prompt: current.prompt + tag };
+    return;
+  }
+  const start = el.selectionStart ?? current.prompt.length;
+  const end = el.selectionEnd ?? start;
+  const next = current.prompt.slice(0, start) + tag + current.prompt.slice(end);
+  promptOverrides.value[key] = { ...current, prompt: next };
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(start + tag.length, start + tag.length);
+  });
+}
+
+async function handleSavePrompt(key: "base" | "title"): Promise<void> {
+  if (isSavingPrompt.value) return;
+  isSavingPrompt.value = true;
+  try {
+    const response = await apiFetch(`/api/admin/prompt-overrides/${key}`, {
+      method: "PUT",
+      body: JSON.stringify({ prompt: promptOverrides.value[key].prompt }),
+    });
+    await assertOk(response, t("admin.prompts.saveError"));
+    const refreshed = await apiFetch("/api/admin/prompt-overrides");
+    await assertOk(refreshed, t("admin.shared.loadError"));
+    const data = await readPayload<Record<string, PromptOverrideInfo>>(refreshed);
+    if (data && data[key]) {
+      promptOverrides.value[key] = { ...data[key] };
+      originalPromptOverrides.value[key] = { ...data[key] };
+    }
+    toast(t("admin.prompts.saveSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.prompts.saveError"));
+  } finally {
+    isSavingPrompt.value = false;
+  }
+}
+
+async function handleResetPrompt(): Promise<void> {
+  const key = resetPromptKey.value;
+  if (!key || isResettingPrompt.value) return;
+  isResettingPrompt.value = true;
+  try {
+    const response = await apiFetch(`/api/admin/prompt-overrides/${key}`, { method: "DELETE" });
+    await assertOk(response, t("admin.prompts.resetError"));
+    const refreshed = await apiFetch("/api/admin/prompt-overrides");
+    await assertOk(refreshed, t("admin.shared.loadError"));
+    const data = await readPayload<Record<string, PromptOverrideInfo>>(refreshed);
+    if (data && data[key]) {
+      promptOverrides.value[key] = { ...data[key] };
+      originalPromptOverrides.value[key] = { ...data[key] };
+    }
+    resetPromptKey.value = null;
+    toast(t("admin.prompts.resetSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.prompts.resetError"));
+  } finally {
+    isResettingPrompt.value = false;
+  }
+}
+
+function agentSourceLabel(source: AdminAgent["source"]): string {
+  if (source === "builtin") return t("admin.agents.sourceBuiltin");
+  if (source === "override") return t("admin.agents.sourceOverride");
+  return t("admin.agents.sourceCustom");
+}
+
+function insertAgentTag(tag: string, event?: MouseEvent): void {
+  if (event) event.preventDefault();
+  const el = document.querySelector<HTMLTextAreaElement>("textarea[data-agent-prompt]");
+  if (!el) {
+    agentForm.value.systemPrompt += tag;
+    return;
+  }
+  const start = el.selectionStart ?? agentForm.value.systemPrompt.length;
+  const end = el.selectionEnd ?? start;
+  const next = agentForm.value.systemPrompt.slice(0, start) + tag + agentForm.value.systemPrompt.slice(end);
+  agentForm.value.systemPrompt = next;
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(start + tag.length, start + tag.length);
+  });
+}
+
+function openCreateAgentDialog(builtinId = ""): void {
+  agentDialogMode.value = "create";
+  agentForm.value = { id: "", builtinId, name: "", description: "", icon: "", systemPrompt: "" };
+  agentDialogOpen.value = true;
+}
+
+function openEditAgentDialog(agent: AdminAgent): void {
+  agentDialogMode.value = "edit";
+  agentForm.value = {
+    id: agent.id,
+    builtinId: agent.builtinId ?? "",
+    name: agent.name,
+    description: agent.description ?? "",
+    icon: agent.icon ?? "",
+    systemPrompt: agent.systemPrompt,
+  };
+  agentDialogOpen.value = true;
+}
+
+async function handleSaveAgent(): Promise<void> {
+  if (isSavingAgent.value) return;
+  isSavingAgent.value = true;
+  try {
+    const form = agentForm.value;
+    const body = JSON.stringify({
+      name: form.name,
+      description: form.description,
+      icon: form.icon,
+      systemPrompt: form.systemPrompt,
+    });
+    let response: Response;
+    if (agentDialogMode.value === "create" && form.builtinId) {
+      response = await apiFetch("/api/admin/agents", {
+        method: "POST",
+        body: JSON.stringify({ ...JSON.parse(body), builtinId: form.builtinId }),
+      });
+    } else if (agentDialogMode.value === "create") {
+      response = await apiFetch("/api/admin/agents", { method: "POST", body });
+    } else {
+      response = await apiFetch(`/api/agents/${encodeURIComponent(form.id)}`, { method: "PUT", body });
+    }
+    await assertOk(response, t("admin.shared.loadError"));
+    agentDialogOpen.value = false;
+    await loadPromptsAndAgents();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.shared.loadError"));
+  } finally {
+    isSavingAgent.value = false;
+  }
+}
+
+async function handleDeleteAgentConfirmed(): Promise<void> {
+  const target = deleteAgentTarget.value;
+  if (!target || isDeletingAgent.value) return;
+  isDeletingAgent.value = true;
+  try {
+    const recordId = target.source === "override" || target.source === "global_custom"
+      ? target.id
+      : target.id;
+    const response = await apiFetch(`/api/admin/agents/${encodeURIComponent(recordId)}`, { method: "DELETE" });
+    await assertOk(response, t("admin.shared.loadError"));
+    deleteAgentTarget.value = null;
+    await loadPromptsAndAgents();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.shared.loadError"));
+  } finally {
+    isDeletingAgent.value = false;
+  }
+}
+
 
 const titleGenHasChanges = computed(() => {
   return titleGenPolicy.value.mode !== originalTitleGenPolicy.value.mode ||
@@ -582,6 +818,7 @@ async function handleModelToggle(model: AdminModel, event: Event): Promise<void>
 
 onMounted(() => {
   void loadData();
+  void loadPromptsAndAgents();
 });
 </script>
 
@@ -990,8 +1227,240 @@ onMounted(() => {
           </div>
         </CardContent>
       </Card>
+
+      <!-- E. Prompts & Agents -->
+      <div class="grid items-start gap-6 xl:grid-cols-2">
+        <!-- Prompts Generales -->
+        <Card>
+          <CardHeader>
+            <CardTitle>{{ t('admin.prompts.title') }}</CardTitle>
+            <p class="text-sm text-muted-foreground">
+              {{ t('admin.prompts.description') }}
+            </p>
+          </CardHeader>
+          <CardContent class="space-y-6">
+            <div
+              v-for="key in (['base', 'title'] as const)"
+              :key="key"
+              class="space-y-2"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <Label class="text-sm font-medium">
+                  {{ key === 'base' ? t('admin.prompts.baseLabel') : t('admin.prompts.titleLabel') }}
+                </Label>
+                <Badge :variant="promptOverrides[key].source === 'override' ? 'default' : 'secondary'">
+                  {{
+                    promptOverrides[key].source === 'override'
+                      ? t('admin.prompts.sourceOverride')
+                      : t('admin.prompts.sourceEmbedded')
+                  }}
+                </Badge>
+              </div>
+              <Textarea
+                v-model="promptOverrides[key].prompt"
+                :data-prompt-key="key"
+                class="min-h-[160px] font-mono text-xs"
+              />
+              <div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <span>{{ t('admin.prompts.availableTags') }}:</span>
+                <button
+                  v-for="tag in PROMPT_TAG_KEYS"
+                  :key="tag"
+                  type="button"
+                  class="rounded-full border bg-muted px-2 py-0.5 font-mono hover:bg-accent"
+                  @click="insertPromptTag(key, tag, $event)"
+                >
+                  {{ tag }}
+                </button>
+                <span class="ms-auto">{{ t('admin.prompts.charsUsed', { used: promptOverrides[key].prompt.length, max: 20000 }) }}</span>
+              </div>
+              <div class="flex justify-end gap-2">
+                <Button
+                  v-if="promptOverrides[key].source === 'override'"
+                  variant="outline"
+ size="sm"
+                  @click="resetPromptKey = key"
+                >
+                  {{ t('admin.prompts.resetButton') }}
+                </Button>
+                <Button
+                  size="sm"
+                  :disabled="!hasPromptChanges(key) || isSavingPrompt || promptOverrides[key].prompt.length === 0"
+                  @click="handleSavePrompt(key)"
+                >
+                  {{ isSavingPrompt ? t('admin.prompts.saving') : t('admin.prompts.saveButton') }}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Agentes Globales -->
+        <Card>
+          <CardHeader class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div class="space-y-1">
+              <CardTitle>{{ t('admin.agents.title') }}</CardTitle>
+              <p class="text-sm text-muted-foreground">
+                {{ t('admin.agents.description') }}
+              </p>
+            </div>
+            <Button size="sm" @click="openCreateAgentDialog()">
+              {{ t('admin.agents.createButton') }}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div class="rounded-md border">
+              <Table class="min-w-[420px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{{ t('admin.agents.nameLabel') }}</TableHead>
+                    <TableHead class="hidden md:table-cell">{{ t('admin.agents.tableDescription') }}</TableHead>
+                    <TableHead class="w-[110px]">{{ t('admin.agents.tableOrigin') }}</TableHead>
+                    <TableHead class="w-[150px]">{{ t('admin.agents.tableActions') }}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableEmpty v-if="agents.length === 0" :colspan="4">
+                    {{ t('admin.shared.loadError') }}
+                  </TableEmpty>
+                  <TableRow v-for="agent in agents" :key="agent.id + ':' + agent.source">
+                    <TableCell>
+                      <div class="font-medium">{{ agent.name }}</div>
+                    </TableCell>
+                    <TableCell class="hidden max-w-[220px] truncate md:table-cell">
+                      {{ agent.description }}
+                    </TableCell>
+                    <TableCell>
+                      <Badge :variant="agent.source === 'builtin' ? 'secondary' : agent.source === 'override' ? 'default' : 'outline'">
+                        {{ agentSourceLabel(agent.source) }}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div class="flex flex-wrap gap-1.5">
+                        <!-- Builtin: editing creates an override. Override/global custom: edit in place. -->
+                        <Button
+                          v-if="agent.source === 'builtin' || agent.source === 'override' || agent.source === 'global_custom'"
+                          variant="outline" size="sm"
+                          @click="openEditAgentDialog(agent); agentForm.builtinId = agent.builtinId ?? ''"
+                        >
+                          {{ t('admin.agents.editAction') }}
+                        </Button>
+                        <Button
+                          v-if="agent.source === 'override'"
+                          variant="outline" size="sm"
+                          @click="deleteAgentTarget = agent"
+                        >
+                          {{ t('admin.agents.resetButton') }}
+                        </Button>
+                        <Button
+                          v-if="agent.source === 'global_custom' || agent.source === 'user_custom'"
+                          variant="outline" size="sm"
+                          @click="deleteAgentTarget = agent"
+                        >
+                          {{ t('admin.agents.deleteAction') }}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
 	    </div>
 		
+	<!-- Agent create/edit dialog -->
+        <Dialog v-model:open="agentDialogOpen">
+          <DialogContent class="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>
+                {{ agentDialogMode === 'create' ? t('admin.agents.createTitle') : t('admin.agents.editTitle') }}
+              </DialogTitle>
+              <DialogDescription v-if="agentDialogMode === 'edit' && agentForm.builtinId">
+                {{ t('admin.agents.builtinHint') }}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div class="space-y-4">
+              <div class="space-y-2">
+                <Label for="agent-name">{{ t('admin.agents.nameLabel') }}</Label>
+                <Input id="agent-name" v-model="agentForm.name" maxlength="80" />
+              </div>
+              <div class="space-y-2">
+                <Label for="agent-description">{{ t('admin.agents.descriptionLabel') }}</Label>
+                <Input id="agent-description" v-model="agentForm.description" maxlength="300" />
+              </div>
+              <div class="space-y-2">
+                <Label for="agent-icon">{{ t('admin.agents.iconLabel') }}</Label>
+                <Input id="agent-icon" v-model="agentForm.icon" maxlength="40" placeholder="bot" />
+              </div>
+              <div class="space-y-2">
+                <div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                  <span>{{ t('admin.prompts.availableTags') }}:</span>
+                  <button
+                    v-for="tag in PROMPT_TAG_KEYS"
+                    :key="tag"
+                    type="button"
+                    class="rounded-full border bg-muted px-2 py-0.5 font-mono hover:bg-accent"
+                    @click="insertAgentTag(tag, $event)"
+                  >
+                    {{ tag }}
+                  </button>
+                </div>
+                <Label for="agent-prompt">{{ t('admin.agents.promptLabel') }}</Label>
+                <Textarea
+                  id="agent-prompt"
+                  v-model="agentForm.systemPrompt"
+                  data-agent-prompt
+                  class="min-h-[180px] font-mono text-xs"
+                  :placeholder="t('admin.agents.promptPlaceholder')"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" @click="agentDialogOpen = false">{{ t('app.cancel') }}</Button>
+              <Button :disabled="isSavingAgent || !agentForm.name || !agentForm.systemPrompt" @click="handleSaveAgent">
+                {{ isSavingAgent ? t('admin.prompts.saving') : t('admin.prompts.saveButton') }}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <!-- Reset prompt confirm -->
+        <AlertDialog :open="resetPromptKey !== null" @update:open="(v: boolean) => { if (!v) resetPromptKey = null }">
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{{ t('admin.prompts.resetButton') }}</AlertDialogTitle>
+              <AlertDialogDescription>{{ t('admin.prompts.resetConfirm') }}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction @click="resetPromptKey = null">{{ t('app.cancel') }}</AlertDialogAction>
+              <AlertDialogAction :disabled="isResettingPrompt" @click="handleResetPrompt()">
+                {{ t('admin.prompts.resetButton') }}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <!-- Delete/reset agent confirm -->
+        <AlertDialog :open="deleteAgentTarget !== null" @update:open="(v: boolean) => { if (!v) deleteAgentTarget = null }">
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{{ deleteAgentTarget?.source === 'override' ? t('admin.agents.resetButton') : t('admin.agents.deleteAction') }}</AlertDialogTitle>
+              <AlertDialogDescription>{{ t('admin.agents.deleteConfirm') }}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction @click="deleteAgentTarget = null">{{ t('app.cancel') }}</AlertDialogAction>
+              <AlertDialogAction :disabled="isDeletingAgent" @click="handleDeleteAgentConfirmed()">
+                {{ deleteAgentTarget?.source === 'override' ? t('admin.agents.resetButton') : t('admin.agents.deleteAction') }}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
 	    <Dialog v-model:open="isInviteDialogOpen">
       <DialogContent>
         <DialogHeader>

@@ -171,7 +171,17 @@
       "provider": "El proveedor de IA devolvió un error. Por favor verifica tu configuración.",
       "unexpected": "Ocurrió un error inesperado. Por favor inténtalo de nuevo.",
       "unknown": "Ocurrió un error inesperado"
-    }
+    },
+    "agent": {
+      "selected": "Agente: {name}",
+      "clear": "Quitar agente",
+      "duplicate": "Duplicar",
+      "duplicated": "Agente duplicado",
+      "missing": "El agente de este chat ya no está disponible",
+      "limitReached": "Alcanzaste el máximo de agentes (50)",
+      "menuLabel": "Agentes"
+    },
+    "addPhotosOrFiles": "Agrega fotos o archivos"
   },
   "message": {
     "user": "Usuario",
@@ -290,46 +300,92 @@
       "saveError": "No se pudo guardar la API key",
       "deleteSuccess": "API key eliminada correctamente",
       "deleteError": "No se pudo eliminar la API key",
-  	    "updatedAt": "Actualizada"
-	    },
-	    "titleGeneration": {
-	      "title": "Generación de títulos",
-	      "description": "Elige qué modelo genera los títulos del chat. Un modelo ligero evita los límites de tasa en tu modelo principal.",
-	      "modeChatModel": "Usar el mismo modelo que el chat",
-	      "modeCustom": "Usar un modelo ligero dedicado",
-	      "modelLabel": "Modelo",
-	      "modelPlaceholder": "Selecciona un modelo…",
-	      "saveButton": "Guardar",
-	      "saving": "Guardando…",
-	      "saveSuccess": "Política de generación de títulos guardada",
-	      "saveError": "No se pudo guardar la política de generación de títulos"
-	    },
-	    "modelPresets": {
-	      "title": "Presets de modelos",
-	      "description": "Establece qué modelo real se usa para cada modo visible al usuario.",
-	      "modelPlaceholder": "Selecciona un modelo…",
-	      "saveButton": "Guardar",
-	      "saving": "Guardando…",
-	      "saveSuccess": "Presets guardados",
-	      "saveError": "No se pudieron guardar los presets"
-			    },
-			    "webSearch": {
-			      "title": "Búsqueda web (Brave)",
-			      "description": "Configura la API key de Brave Search y habilita la función de búsqueda web para los usuarios.",
-			      "apiKeyLabel": "API Key de Brave Search",
-			      "apiKeyPlaceholder": "Ingresa la API key de Brave…",
-			      "enabledLabel": "Habilitar búsqueda web",
-			      "saveButton": "Guardar",
-			      "saving": "Guardando…",
-			      "saveSuccess": "Configuración de búsqueda web guardada",
-			      "saveError": "No se pudo guardar la configuración de búsqueda web",
-			      "configured": "Configurada",
-			      "notConfigured": "No configurada",
-			      "enabled": "Habilitada",
-			      "disabled": "Deshabilitada"
-			    }
-			  },
-		  "auth": {
+      "updatedAt": "Actualizada"
+    },
+    "titleGeneration": {
+      "title": "Generación de títulos",
+      "description": "Elige qué modelo genera los títulos del chat. Un modelo ligero evita los límites de tasa en tu modelo principal.",
+      "modeChatModel": "Usar el mismo modelo que el chat",
+      "modeCustom": "Usar un modelo ligero dedicado",
+      "modelLabel": "Modelo",
+      "modelPlaceholder": "Selecciona un modelo…",
+      "saveButton": "Guardar",
+      "saving": "Guardando…",
+      "saveSuccess": "Política de generación de títulos guardada",
+      "saveError": "No se pudo guardar la política de generación de títulos"
+    },
+    "modelPresets": {
+      "title": "Presets de modelos",
+      "description": "Establece qué modelo real se usa para cada modo visible al usuario.",
+      "modelPlaceholder": "Selecciona un modelo…",
+      "saveButton": "Guardar",
+      "saving": "Guardando…",
+      "saveSuccess": "Presets guardados",
+      "saveError": "No se pudieron guardar los presets"
+    },
+    "webSearch": {
+      "title": "Búsqueda web (Brave)",
+      "description": "Configura la API key de Brave Search y habilita la función de búsqueda web para los usuarios.",
+      "apiKeyLabel": "API Key de Brave Search",
+      "apiKeyPlaceholder": "Ingresa la API key de Brave…",
+      "enabledLabel": "Habilitar búsqueda web",
+      "saveButton": "Guardar",
+      "saving": "Guardando…",
+      "saveSuccess": "Configuración de búsqueda web guardada",
+      "saveError": "No se pudo guardar la configuración de búsqueda web",
+      "configured": "Configurada",
+      "notConfigured": "No configurada",
+      "enabled": "Habilitada",
+      "disabled": "Deshabilitada"
+    },
+    "prompts": {
+      "title": "Prompts del sistema",
+      "description": "Edita los prompts globales Base y Título. Si no hay override en DB se usan los embebidos del código.",
+      "baseLabel": "Prompt Base (chat)",
+      "titleLabel": "Prompt de Títulos",
+      "availableTags": "Tags disponibles",
+      "tagUsername": "{username}",
+      "tagDatetime": "{datetime}",
+      "tagLanguage": "{language}",
+      "tagHint": "Se reemplazan al enviar el mensaje. En el Prompt de Títulos solo se resuelve {language}.",
+      "saveButton": "Guardar",
+      "saving": "Guardando…",
+      "resetButton": "Restablecer",
+      "resetConfirm": "¿Borrar override y volver al embebido?",
+      "sourceEmbedded": "Embebido",
+      "sourceOverride": "Override",
+      "saveSuccess": "Prompt guardado",
+      "saveError": "No se pudo guardar",
+      "resetSuccess": "Prompt restablecido",
+      "resetError": "No se pudo restablecer",
+      "charsUsed": "{used}/{max} caracteres"
+    },
+    "agents": {
+      "title": "Agentes Globales",
+      "description": "Gestiona agentes visibles para todos. Los usuarios pueden duplicarlos pero no editarlos.",
+      "createTitle": "Crear agente",
+      "editTitle": "Editar agente",
+      "nameLabel": "Nombre",
+      "descriptionLabel": "Descripción",
+      "iconLabel": "Icono",
+      "promptLabel": "System Prompt",
+      "promptPlaceholder": "Eres un experto en...",
+      "sourceBuiltin": "Catálogo",
+      "sourceOverride": "Override",
+      "sourceCustom": "Custom",
+      "resetButton": "Restablecer",
+      "duplicateHint": "Crea un override en DB",
+      "tableDescription": "Descripción",
+      "tableOrigin": "Origen",
+      "tableActions": "Acciones",
+      "createButton": "Crear agente",
+      "editAction": "Editar",
+      "deleteAction": "Eliminar",
+      "deleteConfirm": "¿Eliminar este agente? Los chats que lo usen volverán al prompt base.",
+      "builtinHint": "Esto creará un override en DB"
+    }
+  },
+  "auth": {
     "login": {
       "welcome": "Bienvenido de nuevo",
       "subtitle": "Inicia sesión en tu cuenta de {appName}.",

@@ -67,6 +67,9 @@ func (s *Store) SaveChat(chat *ChatRecord, ownerID string) (*ChatRecord, error) 
 	record.Set("title", chat.Title)
 	record.Set("visibility", defaultString(chat.Visibility, VisibilityPrivate))
 	record.Set("web_search", chat.WebSearch)
+	if v := record.Collection().Fields.GetByName("agent_id"); v != nil {
+		record.Set("agent_id", chat.AgentID)
+	}
 
 	if chat.Messages != nil {
 		record.Set("messages", string(chat.Messages))
@@ -233,6 +236,7 @@ func chatFromRecord(r *core.Record) *ChatRecord {
 		Title:      r.GetString("title"),
 		Visibility: r.GetString("visibility"),
 		WebSearch:  r.GetBool("web_search"),
+		AgentID:    r.GetString("agent_id"),
 		CreatedAt:  r.GetString("created"),
 		UpdatedAt:  r.GetString("updated"),
 	}

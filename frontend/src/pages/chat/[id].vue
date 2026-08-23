@@ -10,14 +10,14 @@ import type { ChatRecord } from '@/domain/chat/types'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
-import { getChatRepository } from '@/services/runtime'
+import { getChatRepository, getAuthAdapter } from '@/services/runtime'
 import { KeryxChatTransport } from '@/services/keryxChatTransport'
 import { getChatStreamApi, getChatTransportHeaders } from '@/services/chatTransport'
 import { watchChatTitle } from '@/services/titleWatcher'
 import { annotateBranchMetadata } from '@/shared/chatCore'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
-import type { ModelPreset } from '@/components/chat/ChatInput.vue'
+import type { ModelPreset, ChatAgent } from '@/components/chat/ChatInput.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -118,8 +118,53 @@ function buildSearchRequestBody(webSearch: boolean) {
     username: authStore.userName || authStore.userEmail || '',
     datetime: new Date().toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    // Agent override: when set, the backend ignores any client `system`.
+    ...(selectedAgentId.value ? { agentId: selectedAgentId.value } : {}),
   }
 }
+
+// ---- Agents ----
+const agents = ref<ChatAgent[]>([])
+const selectedAgentId = ref<string | null>(
+  typeof route.query.agentId === 'string' && route.query.agentId ? route.query.agentId : null,
+)
+
+const selectedAgentExists = computed(() =>
+  !selectedAgentId.value || agents.value.some(a => a.id === selectedAgentId.value),
+)
+
+watch(selectedAgentExists, (exists) => {
+  if (!exists && selectedAgentId.value) {
+    toast(t('chat.agent.missing'))
+    selectedAgentId.value = null
+  }
+})
+
+async function fetchAgents() {
+  try {
+    const res = await fetch('/api/agents', { headers: await (await getAuthAdapter()).getAuthorizationHeaders() })
+    if (res.ok) agents.value = await res.json()
+  } catch {
+    agents.value = []
+  }
+}
+
+async function persistChatAgent(agentId: string | null) {
+  if (!chatId.value) return
+  if ((chatData.value?.agentId ?? null) === (agentId ?? null)) return
+  try {
+    const headers = await (await getAuthAdapter()).getAuthorizationHeaders()
+    await fetch(`/api/chats/${chatId.value}/agent`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ agentId }),
+    })
+  } catch {
+    // Non-fatal: selection stays local for this session.
+  }
+}
+
+watch(selectedAgentId, (value) => { void persistChatAgent(value) })
 
 async function loadChat() {
   isLoading.value = true
@@ -425,6 +470,7 @@ onMounted(async () => {
   } catch {
     // silently ignore — search toggle won't appear
   }
+  void fetchAgents()
   // Fetch presets with capabilities
   try {
     const res = await fetch('/api/models/presets')
@@ -514,6 +560,8 @@ onMounted(async () => {
     <!-- Input -->
     <ChatInput :status="chat.status" :preset="selectedPreset" :presets="presets" :web-search="chatData?.webSearch"
       :webSearchGloballyEnabled="webSearchGloballyEnabled"
+      :agents="agents" :agent-id="selectedAgentId"
+      @update:agentId="selectedAgentId = $event"
       @submit="handleSubmit" @update:preset="selectedPreset = $event" @stop="handleStop" />
   </div>
 </template>
