@@ -117,6 +117,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
         username: (body.username as string) ?? '',
         datetime: (body.datetime as string) ?? '',
         timezone: (body.timezone as string) ?? '',
+        agentId: (body.agentId as string) ?? '',
         userMessage: lastUserMessage,
       }),
       signal: options.abortSignal,
@@ -255,13 +256,154 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
     });
   }
 
-  async reconnectToStream(_options: {
+  async reconnectToStream(options: {
     chatId: string;
     headers?: Record<string, string> | Headers;
     body?: object;
     metadata?: unknown;
   }): Promise<ReadableStream<UIMessageChunk> | null> {
-    // Keryx backend doesn't support reconnecting to active streams
-    return null;
+    const additionalHeaders = await this.getHeaders();
+    const mergedHeaders: Record<string, string> = { ...additionalHeaders };
+    if (options.headers) {
+      if (options.headers instanceof Headers) {
+        for (const [key, value] of options.headers.entries()) {
+          mergedHeaders[key] = value;
+        }
+      } else {
+        Object.assign(mergedHeaders, options.headers);
+      }
+    }
+
+    let response: Response;
+    try {
+      const since =
+        typeof (options.body as any)?.sinceTextLength === 'number'
+          ? Math.max(0, Math.floor((options.body as any).sinceTextLength))
+          : 0;
+      response = await fetch(`${this.api}?since=${since}`, {
+        method: 'GET',
+        headers: mergedHeaders,
+      });
+    } catch {
+      // Network error while probing — treat as "no active stream" and let
+      // the normal load path handle recovery.
+      return null;
+    }
+
+    if (response.status === 204) {
+      // No active stream for this chat.
+      return null;
+    }
+    if (!response.ok || !response.body) {
+      return null;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const messageId = randomUUID();
+
+    return new ReadableStream({
+      async start(controller) {
+        let buffer = '';
+        const reasoningId = randomUUID();
+        let reasoningOpen = false;
+        let startSent = false;
+
+        const ensureStart = (serverMessageId?: string) => {
+          if (startSent) return;
+          startSent = true;
+          controller.enqueue({
+            type: 'start',
+            messageId: serverMessageId,
+          } as UIMessageChunk);
+          controller.enqueue({ type: 'start-step' } as UIMessageChunk);
+          controller.enqueue({ type: 'text-start', id: messageId } as UIMessageChunk);
+        };
+
+        const closeReasoning = () => {
+          if (reasoningOpen) {
+            controller.enqueue({ type: 'reasoning-end', id: reasoningId } as UIMessageChunk);
+            reasoningOpen = false;
+          }
+        };
+        const closeAll = () => {
+          closeReasoning();
+          controller.enqueue({ type: 'text-end', id: messageId } as UIMessageChunk);
+        };
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed.startsWith('data: ')) continue;
+
+              try {
+                const data = JSON.parse(trimmed.slice(6));
+
+                if (data.type === 'start') {
+                  ensureStart(data.assistantMessageId || undefined);
+                  continue;
+                }
+                ensureStart();
+
+                if (data.type === 'reasoning_snapshot' && data.text) {
+                  // Full accumulated reasoning replaces whatever partial state
+                  // the fresh client had (none, on a reload).
+                  if (!reasoningOpen) {
+                    controller.enqueue({ type: 'reasoning-start', id: reasoningId } as UIMessageChunk);
+                    reasoningOpen = true;
+                  }
+                  controller.enqueue({
+                    type: 'reasoning-delta',
+                    id: reasoningId,
+                    delta: data.text,
+                  } as UIMessageChunk);
+                } else if ((data.type === 'text_snapshot' || data.type === 'text') && data.text) {
+                  closeReasoning();
+                  controller.enqueue({
+                    type: 'text-delta',
+                    id: messageId,
+                    delta: data.text,
+                  } as UIMessageChunk);
+                } else if (data.type === 'finish') {
+                  closeAll();
+                  controller.enqueue({ type: 'finish-step' } as UIMessageChunk);
+                  controller.enqueue({ type: 'finish', finishReason: 'stop' } as UIMessageChunk);
+                  controller.close();
+                  return;
+                } else if (data.type === 'error') {
+                  closeAll();
+                  controller.enqueue({ type: 'error', errorText: data.error ?? 'Unknown error' } as UIMessageChunk);
+                  controller.enqueue({ type: 'finish-step' } as UIMessageChunk);
+                  controller.enqueue({ type: 'finish', finishReason: 'error' } as UIMessageChunk);
+                  controller.close();
+                  return;
+                }
+              } catch {
+                // skip malformed JSON lines
+              }
+            }
+          }
+        } catch {
+          // Connection dropped mid-replay — close cleanly so the SDK keeps
+          // whatever text arrived; the persisted message covers the rest.
+        } finally {
+          reader.releaseLock();
+        }
+
+        ensureStart();
+        closeAll();
+        controller.enqueue({ type: 'finish-step' } as UIMessageChunk);
+        controller.enqueue({ type: 'finish', finishReason: 'stop' } as UIMessageChunk);
+        controller.close();
+      },
+    });
   }
 }

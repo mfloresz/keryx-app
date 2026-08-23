@@ -35,7 +35,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { GlobeIcon } from 'lucide-vue-next'
+import {
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '@/components/ui/dropdown-menu'
+import { GlobeIcon, XIcon, BotIcon, CheckIcon } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -47,6 +54,17 @@ export interface ModelPreset {
   description?: string
   supportsImages: boolean
   supportsSearch: boolean
+}
+
+export interface ChatAgent {
+  id: string
+  builtinId?: string
+  ownerId?: string
+  name: string
+  description?: string
+  icon?: string
+  systemPrompt: string
+  source: 'builtin' | 'override' | 'global_custom' | 'user_custom'
 }
 
 const PRESET_DESCRIPTION_KEYS: Record<string, { title: string; subtitle: string }> = {
@@ -63,12 +81,15 @@ const props = defineProps<{
   presets: ModelPreset[]
   webSearch?: boolean
   webSearchGloballyEnabled?: boolean
+  agents?: ChatAgent[]
+  agentId?: string | null
 }>()
 
 const emit = defineEmits<{
   (e: 'submit', payload: { text: string; files: AttachmentFile[]; webSearch: boolean }): void
   (e: 'update:preset', value: string): void
   (e: 'stop'): void
+  (e: 'update:agentId', value: string | null): void
 }>()
 
 const useWebSearch = ref(props.webSearch ?? false)
@@ -133,12 +154,26 @@ function handlePresetSelect(value: string) {
 function handleStop() {
   emit('stop')
 }
+
+const selectedAgent = computed(() =>
+  (props.agents ?? []).find(a => a.id === props.agentId) ?? null
+)
+
+// The base prompt is the default when nothing is selected, so the catalog
+// never lists a "general" agent; filter it defensively if a server sends one.
+const selectableAgents = computed(() =>
+  (props.agents ?? []).filter(a => a.id !== 'general' && a.builtinId !== 'general')
+)
+
+function handleAgentSelect(id: string) {
+  emit('update:agentId', id === '' ? null : id)
+}
 </script>
 
 <template>
-  <div class="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-0">
+  <div class="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
     <PromptInput
-      class="max-w-3xl mx-auto border-0 rounded-none shadow-none"
+      class="mx-auto max-w-3xl overflow-hidden rounded-2xl border border-border bg-card shadow-sm focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/10 transition-shadow"
       multiple
       global-drop
       :max-files="3"
@@ -165,6 +200,41 @@ function handleStop() {
           <PromptInputActionMenuTrigger />
           <PromptInputActionMenuContent>
             <PromptInputActionAddAttachments />
+            <DropdownMenuSub v-if="selectableAgents.length">
+              <DropdownMenuSubTrigger
+                class="gap-2"
+                :class="{ 'data-[highlighted]:bg-accent': !!props.agentId }"
+              >
+                <BotIcon :size="16" />
+                <span>{{ $t('chat.agent.menuLabel') }}</span>
+                <span
+                  v-if="selectedAgent"
+                  class="ms-auto max-w-[100px] truncate text-xs text-muted-foreground"
+                >{{ selectedAgent.name }}</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent
+                  side="right"
+                  :side-offset="8"
+                  class="max-h-64 w-64 overflow-y-auto"
+                >
+                  <DropdownMenuItem
+                    v-for="agent in selectableAgents"
+                    :key="agent.id + ':' + agent.source"
+                    class="gap-2"
+                    @select="handleAgentSelect(agent.id)"
+                  >
+                    <BotIcon :size="14" class="shrink-0 text-muted-foreground" />
+                    <span class="truncate">{{ agent.name }}</span>
+                    <CheckIcon
+                      v-if="props.agentId === agent.id"
+                      class="ms-auto shrink-0"
+                      :size="14"
+                    />
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
           </PromptInputActionMenuContent>
         </PromptInputActionMenu>
 
@@ -180,6 +250,22 @@ function handleStop() {
 
       <!-- Right tools -->
       <div class="order-3 my-1.5 ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2 me-2">
+          <!-- Selected agent badge -->
+          <div
+            v-if="selectedAgent"
+            class="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs"
+          >
+            <BotIcon :size="12" class="shrink-0" />
+            <span class="max-w-[120px] truncate">{{ selectedAgent.name }}</span>
+            <button
+              type="button"
+              :aria-label="$t('chat.agent.clear')"
+              class="opacity-0 transition-opacity group-hover:opacity-100"
+              @click="emit('update:agentId', null)"
+            >
+              <XIcon :size="12" />
+            </button>
+          </div>
           <!-- Preset selector -->
           <Select
             :model-value="props.preset"

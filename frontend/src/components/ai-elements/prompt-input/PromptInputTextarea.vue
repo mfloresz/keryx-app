@@ -94,7 +94,7 @@ const modelValue = computed({
          placeholder would otherwise change the textarea height. -->
     <div
       v-show="!textInput && !isComposing"
-      class="absolute top-3 left-3 right-3 pointer-events-none text-muted-foreground text-base md:text-sm leading-normal select-none truncate"
+      class="absolute top-3.5 left-3.5 right-3.5 pointer-events-none text-muted-foreground/70 text-base md:text-sm leading-normal select-none truncate"
     >
       {{ placeholderText }}
     </div>

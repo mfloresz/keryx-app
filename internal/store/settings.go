@@ -17,7 +17,9 @@ const (
 	ProviderKeysCollection           = "provider_keys"
 	TitleGenerationPolicyCollection  = "title_generation_policy"
 		ModelPresetsCollection            = "model_presets"
-			WebSearchConfigCollection         = "web_search_config"
+		WebSearchConfigCollection         = "web_search_config"
+	PromptOverridesCollection         = "prompt_overrides"
+	AgentsCollection                  = "agents"
 )
 
 // User roles
@@ -60,6 +62,7 @@ type ChatRecord struct {
 	Messages   json.RawMessage `json:"messages"`
 	Votes      json.RawMessage `json:"votes"`
 	WebSearch  bool            `json:"webSearch"`
+	AgentID    string          `json:"agentId,omitempty"`
 	Branches   json.RawMessage `json:"branches"`
 	LastUsage  json.RawMessage `json:"lastUsage,omitempty"`
 	CreatedAt  string          `json:"createdAt,omitempty"`

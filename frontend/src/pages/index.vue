@@ -8,10 +8,10 @@ import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
-import { getChatRepository } from '@/services/runtime'
+import { getChatRepository, getAuthAdapter } from '@/services/runtime'
 import { randomUUID } from '@/shared/uuid'
 import ChatInput from '@/components/chat/ChatInput.vue'
-import type { ModelPreset } from '@/components/chat/ChatInput.vue'
+import type { ModelPreset, ChatAgent } from '@/components/chat/ChatInput.vue'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const router = useRouter()
@@ -22,6 +22,8 @@ const { toast } = useToast()
 const selectedPreset = ref('fast')
 const presets = ref<ModelPreset[]>([])
 const webSearchGloballyEnabled = ref(false)
+const agents = ref<ChatAgent[]>([])
+const selectedAgentId = ref<string | null>(null)
 
 onMounted(async () => {
   try {
@@ -32,6 +34,14 @@ onMounted(async () => {
     }
   } catch {
     // silently ignore — search toggle won't appear
+  }
+  try {
+    const res = await fetch('/api/agents', {
+      headers: await (await getAuthAdapter()).getAuthorizationHeaders(),
+    })
+    if (res.ok) agents.value = await res.json()
+  } catch {
+    agents.value = []
   }
 })
 
@@ -130,7 +140,7 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
 
     router.push({
       path: `/chat/${chatId}`,
-      query: { preset: selectedPreset.value },
+      query: { preset: selectedPreset.value, ...(selectedAgentId.value ? { agentId: selectedAgentId.value } : {}) },
     })
   } catch (error: any) {
     if (import.meta.env.DEV) console.error('Failed to create chat:', error)
@@ -142,14 +152,17 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
 </script>
 
 <template>
-  <div class="flex flex-col h-full overflow-hidden">
-    <div class="flex-1 flex flex-col items-center justify-center px-4">
+  <div class="flex flex-col h-full overflow-hidden bg-background">
+    <div class="flex-1 flex flex-col items-center justify-center px-4 py-8">
       <div class="w-full max-w-3xl min-w-0">
-        <div class="mb-6 px-4">
-          <img src="/logo.webp" alt="" class="h-12 w-12 object-contain" />
-          <h1 class="mt-4 text-3xl font-semibold tracking-tight">
+        <div class="mb-8 px-1">
+          <img src="/logo.webp" alt="" class="h-11 w-11 object-contain" />
+          <h1 class="mt-4 text-[30px] font-semibold tracking-tight text-foreground">
             {{ userDisplayName ? $t('chat.greeting', { name: userDisplayName }) : $t('chat.welcomeTitle') }}
           </h1>
+          <p class="mt-1.5 text-sm text-muted-foreground">
+            {{ $t('chat.inputPlaceholder') }}
+          </p>
         </div>
 
         <ChatInput
@@ -157,6 +170,9 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
           :preset="selectedPreset"
           :presets="presets"
           :webSearchGloballyEnabled="webSearchGloballyEnabled"
+          :agents="agents"
+          :agent-id="selectedAgentId"
+          @update:agentId="selectedAgentId = $event"
           @submit="handleSubmit"
           @update:preset="selectedPreset = $event"
         />
