@@ -155,6 +155,7 @@
     "failedEdit": "Failed to edit message",
     "failedRegenerate": "Failed to regenerate message",
     "failedSwitchBranch": "Failed to switch branch",
+    "failedFork": "Failed to create new chat from message",
     "failedVote": "Failed to vote",
     "unsupportedImageTitle": "Image not supported",
     "unsupportedImageDescription": "The selected model does not support images. Only text documents are allowed.",
@@ -171,6 +172,15 @@
       "provider": "The AI provider returned an error. Please check your configuration.",
       "unexpected": "An unexpected error occurred. Please try again.",
       "unknown": "An unexpected error occurred"
+    },
+    "agent": {
+      "selected": "Agent: {name}",
+      "clear": "Remove agent",
+      "duplicate": "Duplicate",
+      "duplicated": "Agent duplicated",
+      "missing": "The agent for this chat is no longer available",
+      "limitReached": "You reached the agent limit (50)",
+      "menuLabel": "Agents"
     }
   },
   "message": {
@@ -186,7 +196,9 @@
     "deleteTitle": "Delete Chat",
     "deleteDescription": "Are you sure you want to delete this chat? This action cannot be undone.",
     "previousBranch": "Previous branch",
-    "nextBranch": "Next branch"
+    "nextBranch": "Next branch",
+    "fork": "New chat from here",
+    "forkTooltip": "Start a new chat from this message"
   },
   "reasoning": {
     "thinking": "Thinking...",
@@ -288,46 +300,92 @@
       "saveError": "Unable to save API key",
       "deleteSuccess": "API key deleted successfully",
       "deleteError": "Unable to delete API key",
-  	    "updatedAt": "Updated"
-	    },
-	    "titleGeneration": {
-	      "title": "Title Generation",
-	      "description": "Choose which model generates chat titles. A lightweight model avoids rate limits on your main chat model.",
-	      "modeChatModel": "Use the same model as the chat",
-	      "modeCustom": "Use a dedicated lightweight model",
-	      "modelLabel": "Model",
-	      "modelPlaceholder": "Select a model…",
-	      "saveButton": "Save",
-	      "saving": "Saving…",
-	      "saveSuccess": "Title generation policy saved",
-	      "saveError": "Unable to save title generation policy"
-	    },
-	    "modelPresets": {
-	      "title": "Model Presets",
-	      "description": "Set which real model is used for each user-facing mode.",
-	      "modelPlaceholder": "Select a model…",
-	      "saveButton": "Save",
-	      "saving": "Saving…",
-	      "saveSuccess": "Model presets saved",
-	      "saveError": "Unable to save model presets"
-			    },
-			    "webSearch": {
-			      "title": "Web Search (Brave)",
-			      "description": "Configure the Brave Search API key and enable the web search feature for users.",
-			      "apiKeyLabel": "Brave Search API Key",
-			      "apiKeyPlaceholder": "Enter Brave API key…",
-			      "enabledLabel": "Enable web search",
-			      "saveButton": "Save",
-			      "saving": "Saving…",
-			      "saveSuccess": "Web search configuration saved",
-			      "saveError": "Unable to save web search configuration",
-			      "configured": "Configured",
-			      "notConfigured": "Not configured",
-			      "enabled": "Enabled",
-			      "disabled": "Disabled"
-			    }
-			  },
-		  "auth": {
+      "updatedAt": "Updated"
+    },
+    "titleGeneration": {
+      "title": "Title Generation",
+      "description": "Choose which model generates chat titles. A lightweight model avoids rate limits on your main chat model.",
+      "modeChatModel": "Use the same model as the chat",
+      "modeCustom": "Use a dedicated lightweight model",
+      "modelLabel": "Model",
+      "modelPlaceholder": "Select a model…",
+      "saveButton": "Save",
+      "saving": "Saving…",
+      "saveSuccess": "Title generation policy saved",
+      "saveError": "Unable to save title generation policy"
+    },
+    "modelPresets": {
+      "title": "Model Presets",
+      "description": "Set which real model is used for each user-facing mode.",
+      "modelPlaceholder": "Select a model…",
+      "saveButton": "Save",
+      "saving": "Saving…",
+      "saveSuccess": "Model presets saved",
+      "saveError": "Unable to save model presets"
+    },
+    "webSearch": {
+      "title": "Web Search (Brave)",
+      "description": "Configure the Brave Search API key and enable the web search feature for users.",
+      "apiKeyLabel": "Brave Search API Key",
+      "apiKeyPlaceholder": "Enter Brave API key…",
+      "enabledLabel": "Enable web search",
+      "saveButton": "Save",
+      "saving": "Saving…",
+      "saveSuccess": "Web search configuration saved",
+      "saveError": "Unable to save web search configuration",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "prompts": {
+      "title": "System prompts",
+      "description": "Edit the global Base and Title prompts. If there is no DB override, the embedded defaults are used.",
+      "baseLabel": "Base prompt (chat)",
+      "titleLabel": "Title prompt",
+      "availableTags": "Available tags",
+      "tagUsername": "{username}",
+      "tagDatetime": "{datetime}",
+      "tagLanguage": "{language}",
+      "tagHint": "Replaced when the message is sent. Only {language} resolves in the Title prompt.",
+      "saveButton": "Save",
+      "saving": "Saving…",
+      "resetButton": "Reset",
+      "resetConfirm": "Delete the override and go back to the embedded default?",
+      "sourceEmbedded": "Embedded",
+      "sourceOverride": "Override",
+      "saveSuccess": "Prompt saved",
+      "saveError": "Could not save prompt",
+      "resetSuccess": "Prompt reset",
+      "resetError": "Could not reset prompt",
+      "charsUsed": "{used}/{max} characters"
+    },
+    "agents": {
+      "title": "Global Agents",
+      "description": "Manage agents visible to everyone. Users can duplicate them but not edit them.",
+      "createTitle": "Create agent",
+      "editTitle": "Edit agent",
+      "nameLabel": "Name",
+      "descriptionLabel": "Description",
+      "iconLabel": "Icon",
+      "promptLabel": "System Prompt",
+      "promptPlaceholder": "You are an expert in...",
+      "sourceBuiltin": "Catalog",
+      "sourceOverride": "Override",
+      "sourceCustom": "Custom",
+      "resetButton": "Reset",
+      "duplicateHint": "Creates a DB override",
+      "tableDescription": "Description",
+      "tableOrigin": "Origin",
+      "tableActions": "Actions",
+      "createButton": "Create agent",
+      "editAction": "Edit",
+      "deleteAction": "Delete",
+      "deleteConfirm": "Delete this agent? Chats using it will fall back to the base prompt.",
+      "builtinHint": "This will create a DB override"
+    }
+  },
+  "auth": {
     "login": {
       "welcome": "Welcome back",
       "subtitle": "Sign in to your {appName} account.",

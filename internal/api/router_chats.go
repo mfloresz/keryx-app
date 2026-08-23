@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -169,16 +170,108 @@ func (s *Server) handleDeleteMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Type == "regenerate" {
-		if targetIndex > 0 {
-			messages = messages[:targetIndex]
-		} else {
-			messages = messages[:1]
+		// Non-destructive regenerate: preserve previous response (and tail)
+		// as a branch snapshot instead of discarding it.
+		var branches map[string]any
+		if chat.Branches != nil {
+			_ = json.Unmarshal(chat.Branches, &branches)
 		}
+		if branches == nil {
+			branches = make(map[string]any)
+		}
+
+		// Sync current snapshots to latest messages before branching
+		syncBranchSnapshots(messages, branches)
+
+		if targetIndex == 0 {
+			errorResponse(w, "Cannot regenerate first message", http.StatusBadRequest)
+			return
+		}
+		rootMsg := messages[targetIndex-1]
+		rootID, _ := rootMsg["id"].(string)
+		if rootID == "" {
+			errorResponse(w, "Invalid branch root", http.StatusInternalServerError)
+			return
+		}
+
+		// Ensure branch state for this regeneration point.
+		branchStateRaw, hasBranch := branches[rootID]
+		var branchState map[string]any
+		if !hasBranch {
+			// Create branch state with "Original" snapshot containing previous tail
+			originalID := generateID()
+			oldTail := cloneMessages(messages[targetIndex:])
+			branchState = map[string]any{
+				"rootMessageId":     rootID,
+				"includeRoot":       false,
+				"currentSnapshotId": originalID,
+				"snapshots": []any{
+					map[string]any{
+						"id":        originalID,
+						"label":     "Original",
+						"createdAt": time.Now().UTC().Format(time.RFC3339),
+						"messages":  oldTail,
+					},
+				},
+			}
+			branches[rootID] = branchState
+		} else {
+			if bs, ok := branchStateRaw.(map[string]any); ok {
+				branchState = bs
+			} else {
+				// Corrupted branch state — reset
+				originalID := generateID()
+				oldTail := cloneMessages(messages[targetIndex:])
+				branchState = map[string]any{
+					"rootMessageId":     rootID,
+					"includeRoot":       false,
+					"currentSnapshotId": originalID,
+					"snapshots": []any{
+						map[string]any{
+							"id":        originalID,
+							"label":     "Original",
+							"createdAt": time.Now().UTC().Format(time.RFC3339),
+							"messages":  oldTail,
+						},
+					},
+				}
+				branches[rootID] = branchState
+			}
+		}
+
+		// Create new empty snapshot for the regeneration variant
+		snapshots, _ := branchState["snapshots"].([]any)
+		newID := generateID()
+		nextNum := len(snapshots) + 1
+		newSnapshot := map[string]any{
+			"id":        newID,
+			"label":     fmt.Sprintf("Regeneration %d", nextNum),
+			"createdAt": time.Now().UTC().Format(time.RFC3339),
+			"messages":  []any{},
+		}
+		snapshots = append(snapshots, newSnapshot)
+		branchState["snapshots"] = snapshots
+		branchState["currentSnapshotId"] = newID
+		branches[rootID] = branchState
+
+		// Truncate messages to before the assistant message being regenerated
+		messages = messages[:targetIndex]
+		chat.Messages, _ = json.Marshal(messages)
+		chat.Branches, _ = json.Marshal(branches)
 	} else {
 		messages = messages[:targetIndex+1]
+		chat.Messages, _ = json.Marshal(messages)
+		// Keep branches in sync after truncation for edit flow
+		var branches map[string]any
+		if chat.Branches != nil {
+			_ = json.Unmarshal(chat.Branches, &branches)
+		}
+		if branches != nil {
+			syncBranchSnapshots(messages, branches)
+			chat.Branches, _ = json.Marshal(branches)
+		}
 	}
 
-	chat.Messages, _ = json.Marshal(messages)
 	if _, err := s.Store.SaveChat(chat, userID); err != nil {
 		errorResponse(w, "Failed to save chat", http.StatusInternalServerError)
 		return
@@ -216,6 +309,12 @@ func (s *Server) handleSwitchBranch(w http.ResponseWriter, r *http.Request) {
 		branches = make(map[string]any)
 	}
 
+	var messages []map[string]any
+	json.Unmarshal(chat.Messages, &messages)
+
+	// Sync current snapshot before switching, so the tail being left behind is preserved
+	syncBranchSnapshots(messages, branches)
+
 	branchState, ok := branches[req.RootMessageID].(map[string]any)
 	if !ok {
 		errorResponse(w, "Branch not found", http.StatusNotFound)
@@ -238,9 +337,6 @@ func (s *Server) handleSwitchBranch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	snapshotMessages, _ := snapshot["messages"].([]any)
-
-	var messages []map[string]any
-	json.Unmarshal(chat.Messages, &messages)
 
 	rootIndex := -1
 	for i, msg := range messages {
@@ -414,6 +510,9 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		// user message (id, role, createdAt, parts). The backend persists it
 		// verbatim before streaming so it survives failed/aborted streams.
 		UserMessage json.RawMessage `json:"userMessage"`
+		// AgentID selects an Agent whose system prompt fully overrides the
+		// base prompt. Empty = use base (or legacy System).
+		AgentID string `json:"agentId"`
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
@@ -502,9 +601,25 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	systemPrompt := req.System
-	if systemPrompt == "" {
-		systemPrompt = s.Cfg.BaseSystemPrompt
+	// System prompt resolution priority: agent > legacy client system > base.
+	// An agent's prompt fully overrides the base prompt; search section and
+	// user context are appended afterwards either way. A missing/inaccessible
+	// agent degrades gracefully to the effective base prompt.
+	var systemPrompt string
+	if req.AgentID != "" {
+		if ag, agErr := s.Store.GetAgentForStream(req.AgentID, userID); agErr == nil {
+			systemPrompt = ag.SystemPrompt
+			slog.Info("stream agent", "agentId", ag.ID, "source", string(ag.Source), "chat", chatID)
+		} else {
+			slog.Warn("agent not found, fallback to base", "agentId", req.AgentID, "chat", chatID)
+			systemPrompt = s.Store.GetEffectiveBasePrompt(s.Cfg.BaseSystemPrompt).Prompt
+		}
+	} else if req.System != "" {
+		// Backward compat: only honored when no agent is selected; the
+		// frontend never sends `system` alongside an agent (see PLAN_AGENTES.md §5).
+		systemPrompt = req.System
+	} else {
+		systemPrompt = s.Store.GetEffectiveBasePrompt(s.Cfg.BaseSystemPrompt).Prompt
 	}
 	if webSearchActive {
 		systemPrompt += s.buildSearchSystemPrompt()
@@ -533,6 +648,31 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		partialText, partialReasoning strings.Builder
 		streamStarted                 bool
 	)
+
+	// Register the stream so clients that navigate away or reload can
+	// reconnect to it via GET /api/chats/{id}/stream. Removed on all exit
+	// paths below once the assistant message is durably persisted.
+	active := s.activeStreams.register(chatID, assistantMessageID)
+	defer func() {
+		active.broadcastFinish("finish", nil)
+		s.activeStreams.remove(chatID, active)
+	}()
+
+	// Persist the partial assistant message periodically while streaming,
+	// so a client that (re)loads the chat mid-generation sees the text
+	// generated so far instead of nothing. The final append after the
+	// stream ends remains authoritative.
+	lastPersist := time.Now()
+	persistPartial := func() {
+		if time.Since(lastPersist) < 1500*time.Millisecond {
+			return
+		}
+		lastPersist = time.Now()
+		text, reasoning := active.snapshot()
+		if strings.TrimSpace(text) != "" || reasoning != "" {
+			s.appendAssistantMessage(chatID, userID, assistantMessageID, text, reasoning)
+		}
+	}
 
 	// Build tool definitions for web search
 	var tools []ai.ToolDefinition
@@ -584,11 +724,14 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		case ai.StreamChunkReasoning:
 			partialReasoning.WriteString(chunk.Text)
 			writeSSEEvent(w, "reasoning", map[string]string{"text": chunk.Text})
+			active.append("reasoning", chunk.Text)
 		default:
 			partialText.WriteString(chunk.Text)
 			writeSSEEvent(w, "text", map[string]string{"text": chunk.Text})
+			active.append("text", chunk.Text)
 		}
 		flusher.Flush()
+		persistPartial()
 	})
 
 	fullText := streamResult.Text
@@ -606,6 +749,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning)
 		}
 		slog.Error("chat stream failed", "error", err, "chat", chatID, "user", userID, "model", req.Model)
+		active.broadcastFinish("error", map[string]string{"error": "The model provider returned an error. Please try again."})
 		writeSSEEvent(w, "error", map[string]string{"error": "The model provider returned an error. Please try again."})
 		flusher.Flush()
 		return
@@ -661,7 +805,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			}
 
 			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			titlePrompt := s.Cfg.TitleGenerationSystemPrompt
+			titlePrompt := s.Store.GetEffectiveTitlePrompt(s.Cfg.TitleGenerationSystemPrompt).Prompt
 			titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
 			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, firstUserMsg, lang)
 			cancel()
@@ -775,6 +919,15 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 				messages = append(messages, um)
 			}
 			chat.Messages, _ = json.Marshal(messages)
+			// Keep branch snapshots in sync with new tail
+			var branches map[string]any
+			if chat.Branches != nil {
+				_ = json.Unmarshal(chat.Branches, &branches)
+			}
+			if branches != nil {
+				syncBranchSnapshots(messages, branches)
+				chat.Branches, _ = json.Marshal(branches)
+			}
 		}
 	}
 
@@ -825,6 +978,16 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 	}
 	chat.Messages, _ = json.Marshal(messages)
 
+	// Keep branch current snapshots in sync after appending new assistant message
+	var branches map[string]any
+	if chat.Branches != nil {
+		_ = json.Unmarshal(chat.Branches, &branches)
+	}
+	if branches != nil {
+		syncBranchSnapshots(messages, branches)
+		chat.Branches, _ = json.Marshal(branches)
+	}
+
 	if len(titleOverride) > 0 && titleOverride[0] != "" {
 		chat.Title = titleOverride[0]
 	}
@@ -834,6 +997,123 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 		return ""
 	}
 	return saved.Title
+}
+
+// handleReconnectStream lets a client rejoin an in-progress chat stream
+// (after navigating away, reloading the page, or opening the chat in
+// another tab). It replays the text generated so far as a single snapshot
+// event, then forwards live chunks until the stream finishes. Responds
+// 204 when no active stream exists for the chat, so the client knows to
+// just load the persisted messages.
+func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	chatID := r.PathValue("id")
+
+	// Verify ownership before revealing anything about the stream.
+	if _, err := s.Store.GetChat(chatID, userID); err != nil {
+		errorResponse(w, "Chat not found", http.StatusNotFound)
+		return
+	}
+
+	active := s.activeStreams.get(chatID)
+	if active == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		errorResponse(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// `since` is how many characters of the assistant text the client
+	// already has (from the incremental persistence). Only the remainder
+	// is replayed, which avoids duplicating text the client loaded from
+	// the store.
+	since := 0
+	if v := r.URL.Query().Get("since"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			since = n
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	// Subscribe BEFORE taking the snapshot: any chunk emitted from now on
+	// is buffered in the channel, so nothing is lost between snapshot and
+	// live forwarding.
+	events := active.subscribe()
+	defer active.unsubscribe(events)
+
+	// Replay: start event with the assistant message id (so the client
+	// adopts it), followed by whatever part of the accumulated content the
+	// client is missing.
+	writeSSEEvent(w, "start", map[string]string{
+		"assistantMessageId": active.AssistantMessageID,
+	})
+	text, reasoning := active.snapshot()
+	if since < len(text) {
+		text = text[since:]
+	} else {
+		text = ""
+	}
+	// A client that already has text implicitly has all reasoning emitted
+	// before it, so only replay reasoning for fresh clients (since == 0).
+	if since == 0 && reasoning != "" {
+		writeSSEEvent(w, "reasoning_snapshot", map[string]string{"text": reasoning})
+	}
+	if text != "" {
+		writeSSEEvent(w, "text_snapshot", map[string]string{"text": text})
+	}
+	flusher.Flush()
+
+	// If the stream finished between the get() and the replay above, the
+	// client already has the full content; tell it we're done.
+	select {
+	case <-active.done:
+		writeSSEEvent(w, "finish", nil)
+		flusher.Flush()
+		return
+	default:
+	}
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-active.done:
+			writeSSEEvent(w, "finish", nil)
+			flusher.Flush()
+			return
+		case ev := <-events:
+			switch ev.event {
+			case "error":
+				e := "Unknown error"
+				if ev.extra != nil {
+					if v, ok := ev.extra["error"]; ok && v != "" {
+						e = v
+					}
+				}
+				if e == "superseded" {
+					// This stream was replaced by a new generation; the
+					// client should reload messages rather than show an error.
+					continue
+				}
+				writeSSEEvent(w, "error", map[string]string{"error": e})
+				flusher.Flush()
+			case "finish":
+				// Handled via done channel; ignore duplicates here.
+			default:
+				writeSSEEvent(w, ev.event, map[string]string{"text": ev.extra["text"]})
+				flusher.Flush()
+			}
+		}
+	}
 }
 
 // resolveAttachments loads attachment bytes for any message whose attachment
@@ -871,4 +1151,148 @@ func writeSSEEvent(w http.ResponseWriter, event string, extra map[string]string)
 
 func generateID() string {
 	return fmt.Sprintf("msg_%d", time.Now().UnixNano())
+}
+
+// cloneMessages deep-copies a slice of message maps via JSON round-trip.
+func cloneMessages(ms []map[string]any) []any {
+	if len(ms) == 0 {
+		return []any{}
+	}
+	out := make([]any, 0, len(ms))
+	for _, m := range ms {
+		// shallow copy is enough for branch snapshots because messages are
+		// treated as opaque JSON; deep copy via JSON ensures no sharedrefs.
+		data, _ := json.Marshal(m)
+		var cpy map[string]any
+		_ = json.Unmarshal(data, &cpy)
+		out = append(out, cpy)
+	}
+	return out
+}
+
+// syncBranchSnapshots updates the current snapshot of each branch state to
+// reflect the current live messages tail. This keeps branch history
+// consistent after appends/truncations.
+func syncBranchSnapshots(messages []map[string]any, branches map[string]any) {
+	for _, rawState := range branches {
+		state, ok := rawState.(map[string]any)
+		if !ok {
+			continue
+		}
+		rootID, _ := state["rootMessageId"].(string)
+		if rootID == "" {
+			continue
+		}
+		currentID, _ := state["currentSnapshotId"].(string)
+		if currentID == "" {
+			continue
+		}
+		includeRoot, _ := state["includeRoot"].(bool)
+		// Find root index
+		rootIndex := -1
+		for i, msg := range messages {
+			if id, _ := msg["id"].(string); id == rootID {
+				rootIndex = i
+				break
+			}
+		}
+		if rootIndex == -1 {
+			continue
+		}
+		startIndex := rootIndex
+		if !includeRoot {
+			startIndex = rootIndex + 1
+		}
+		if startIndex > len(messages) {
+			startIndex = len(messages)
+		}
+		snapshots, _ := state["snapshots"].([]any)
+		for idx, rawSnap := range snapshots {
+			snap, ok := rawSnap.(map[string]any)
+			if !ok {
+				continue
+			}
+			if sid, _ := snap["id"].(string); sid == currentID {
+				snap["messages"] = cloneMessages(messages[startIndex:])
+				snapshots[idx] = snap
+				break
+			}
+		}
+		state["snapshots"] = snapshots
+	}
+}
+
+// handleForkChat creates a new chat by forking from a specific message.
+// Standard "New chat from here" behavior: copies messages[0..index] into a new chat.
+func (s *Server) handleForkChat(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	chatID := r.PathValue("id")
+
+	var req struct {
+		MessageID string `json:"messageId"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.MessageID == "" {
+		errorResponse(w, "Missing messageId", http.StatusBadRequest)
+		return
+	}
+
+	// Lock source chat for consistent read
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
+	srcChat, err := s.Store.GetChat(chatID, userID)
+	if err != nil {
+		errorResponse(w, "Chat not found", http.StatusNotFound)
+		return
+	}
+
+	var messages []map[string]any
+	if err := json.Unmarshal(srcChat.Messages, &messages); err != nil {
+		errorResponse(w, "Failed to parse messages", http.StatusInternalServerError)
+		return
+	}
+
+	targetIndex := -1
+	for i, msg := range messages {
+		if id, _ := msg["id"].(string); id == req.MessageID {
+			targetIndex = i
+			break
+		}
+	}
+	if targetIndex == -1 {
+		errorResponse(w, "Message not found", http.StatusNotFound)
+		return
+	}
+
+	// Slice up to and including the target message
+	newMessages := messages[:targetIndex+1]
+	newMessagesJSON, _ := json.Marshal(newMessages)
+
+	// Prepare new chat record (let PocketBase auto-generate ID)
+	newChat := &store.ChatRecord{
+		Title:      srcChat.Title,
+		Visibility: store.VisibilityPrivate,
+		WebSearch:  srcChat.WebSearch,
+		Messages:   newMessagesJSON,
+		Votes:      json.RawMessage("[]"),
+		Branches:   json.RawMessage("{}"),
+	}
+
+	saved, err := s.Store.SaveChat(newChat, userID)
+	if err != nil {
+		internalError(w, r, "Failed to fork chat", err)
+		return
+	}
+
+	// Duplicate attachments referenced in the forked messages (best-effort)
+	// If source messages referenced attachments by ID, those files remain
+	// associated with the original chat. Forked chat copies the message
+	// parts verbatim; attachment resolution by owner still works, but the
+	// files are logically shared. No physical copy needed.
+
+	jsonResponse(w, saved, http.StatusOK)
 }

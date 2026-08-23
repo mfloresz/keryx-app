@@ -29,6 +29,11 @@ type Server struct {
 	// other's changes.
 	chatLocks sync.Map
 
+	// activeStreams tracks in-progress chat completions so clients can
+	// reconnect (GET /api/chats/{id}/stream) after navigating away or
+	// reloading the page mid-response.
+	activeStreams *streamRegistry
+
 	// invitationMu serializes invitation acceptance so two concurrent requests
 	// can't consume the same invitation (check-then-use race).
 	invitationMu sync.Mutex
@@ -51,6 +56,7 @@ func New(st *store.Store, cfg *config.Config) *Server {
 		Store:             st,
 		Cfg:               cfg,
 		AIProviders:       make(map[string]ai.Provider),
+		activeStreams:     newStreamRegistry(),
 		loginLimiter:      newRateLimiter(5),  // 5 login attempts/min per IP
 		invitationLimiter: newRateLimiter(10), // 10 invitation ops/min per IP
 		streamLimiter:     newRateLimiter(10), // 10 stream starts/min per user
@@ -92,6 +98,14 @@ func (s *Server) Handler() http.Handler {
 	// Protected chat routes
 	mux.HandleFunc("GET /api/chats", s.withAuth(s.handleListChats))
 	mux.HandleFunc("POST /api/chats", s.withAuth(s.handleSaveChat))
+
+	// Agent routes (user)
+	mux.HandleFunc("GET /api/agents", s.withAuth(s.handleListAgents))
+	mux.HandleFunc("GET /api/agents/{id}", s.withAuth(s.handleGetAgent))
+	mux.HandleFunc("POST /api/agents", s.withAuth(s.handleCreateAgent))
+	mux.HandleFunc("PUT /api/agents/{id}", s.withAuth(s.handleUpdateAgent))
+	mux.HandleFunc("DELETE /api/agents/{id}", s.withAuth(s.handleDeleteAgent))
+	mux.HandleFunc("POST /api/agents/{id}/duplicate", s.withAuth(s.handleDuplicateAgent))
 	mux.HandleFunc("DELETE /api/chats", s.withAuth(s.handleDeleteAllChats))
 	mux.HandleFunc("GET /api/favorites", s.withAuth(s.handleListFavorites))
 
@@ -102,9 +116,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/chats/{id}/visibility", s.withAuth(s.handleUpdateChatVisibility))
 	mux.HandleFunc("DELETE /api/chats/{id}/messages", s.withAuth(s.handleDeleteMessages))
 	mux.HandleFunc("POST /api/chats/{id}/branches", s.withAuth(s.handleSwitchBranch))
+	mux.HandleFunc("POST /api/chats/{id}/fork", s.withAuth(s.handleForkChat))
 	mux.HandleFunc("GET /api/chats/{id}/votes", s.withAuth(s.handleGetVotes))
 	mux.HandleFunc("POST /api/chats/{id}/votes", s.withAuth(s.handleSaveVote))
 	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.withRateLimit(s.streamLimiter, userKey, s.handleChatStream)))
+	mux.HandleFunc("PATCH /api/chats/{id}/agent", s.withAuth(s.handleUpdateChatAgent))
+	mux.HandleFunc("GET /api/chats/{id}/stream", s.withAuth(s.handleReconnectStream))
 	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
 
@@ -138,6 +155,17 @@ func (s *Server) Handler() http.Handler {
 	// Admin model preset routes
 	mux.HandleFunc("GET /api/admin/model-presets", s.adminRoute(s.handleAdminListModelPresets))
 	mux.HandleFunc("PUT /api/admin/model-presets/{preset}", s.adminRoute(s.handleAdminUpdateModelPreset))
+
+	// Admin prompt override routes (base/title system prompts)
+	mux.HandleFunc("GET /api/admin/prompt-overrides", s.adminRoute(s.handleAdminGetPromptOverrides))
+	mux.HandleFunc("PUT /api/admin/prompt-overrides/{key}", s.adminRoute(s.handleAdminSetPromptOverride))
+	mux.HandleFunc("DELETE /api/admin/prompt-overrides/{key}", s.adminRoute(s.handleAdminDeletePromptOverride))
+
+	// Admin agent routes (global agents / catalog overrides)
+	mux.HandleFunc("GET /api/admin/agents", s.adminRoute(s.handleAdminListAgents))
+	mux.HandleFunc("POST /api/admin/agents", s.adminRoute(s.handleAdminCreateAgent))
+	mux.HandleFunc("PUT /api/admin/agents/{id}", s.adminRoute(s.handleAdminUpdateAgent))
+	mux.HandleFunc("DELETE /api/admin/agents/{id}", s.adminRoute(s.handleAdminDeleteAgent))
 
 	// Public web search config endpoint (no auth required — exposes only a
 	// boolean feature flag, and chat pages fetch it without auth headers)

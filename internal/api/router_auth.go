@@ -1,11 +1,17 @@
 package api
 
 import (
+	"bytes"
+	"image"
+	"image/jpeg"
+	_ "image/gif"
+	_ "image/png"
 	"io"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/disintegration/imaging"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 
 	"keryx-server/internal/store"
@@ -23,6 +29,28 @@ func invitationExpired(inv *store.InvitationRecord) bool {
 		return false
 	}
 	return time.Now().After(sx)
+}
+
+const (
+	avatarMaxBytes = 5 << 20
+	avatarSize     = 512
+	avatarQuality  = 80
+)
+
+func optimizeAvatar(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return nil, io.ErrUnexpectedEOF
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	img = imaging.Fill(img, avatarSize, avatarSize, imaging.Center, imaging.Lanczos)
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: avatarQuality}); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 type loginRequest struct {
@@ -170,7 +198,7 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		// Multipart form: may include name and/or avatar
-		if err := r.ParseMultipartForm(5 << 20); err != nil {
+		if err := r.ParseMultipartForm(avatarMaxBytes); err != nil {
 			errorResponse(w, "Invalid form data", http.StatusBadRequest)
 			return
 		}
@@ -188,15 +216,20 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Update avatar if provided
-		file, fh, err := r.FormFile("avatar")
+		file, _, err := r.FormFile("avatar")
 		if err == nil {
 			defer file.Close()
-			data, err := io.ReadAll(io.LimitReader(file, 5<<20))
+			data, err := io.ReadAll(io.LimitReader(file, avatarMaxBytes))
 			if err != nil {
 				errorResponse(w, "Failed to read avatar", http.StatusBadRequest)
 				return
 			}
-			pbfile, err := filesystem.NewFileFromBytes(data, fh.Filename)
+			optimized, err := optimizeAvatar(data)
+			if err != nil {
+				errorResponse(w, "Invalid image file", http.StatusBadRequest)
+				return
+			}
+			pbfile, err := filesystem.NewFileFromBytes(optimized, "avatar.jpg")
 			if err != nil {
 				errorResponse(w, "Invalid file", http.StatusBadRequest)
 				return

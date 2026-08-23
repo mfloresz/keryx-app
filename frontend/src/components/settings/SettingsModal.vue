@@ -146,7 +146,27 @@ async function handleRemoveAvatar() {
   }
 }
 
-function handleAvatarSelected(event: Event) {
+async function compressAvatarToJpeg(file: File): Promise<File> {
+  const bitmap = await createImageBitmap(file)
+  const size = 512
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return file
+  const scale = Math.max(size / bitmap.width, size / bitmap.height)
+  const w = bitmap.width * scale
+  const h = bitmap.height * scale
+  const dx = (size - w) / 2
+  const dy = (size - h) / 2
+  ctx.drawImage(bitmap, dx, dy, w, h)
+  bitmap.close()
+  const blob: Blob | null = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.8))
+  if (!blob) return file
+  return new File([blob], 'avatar.jpg', { type: 'image/jpeg' })
+}
+
+async function handleAvatarSelected(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
@@ -154,12 +174,26 @@ function handleAvatarSelected(event: Event) {
     toast('Image must be under 5MB')
     return
   }
-  localAvatarFile.value = file
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    localAvatarPreview.value = e.target?.result as string
+  try {
+    const compressed = await compressAvatarToJpeg(file)
+    localAvatarFile.value = compressed
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      localAvatarPreview.value = e.target?.result as string
+    }
+    reader.readAsDataURL(compressed)
   }
-  reader.readAsDataURL(file)
+  catch {
+    localAvatarFile.value = file
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      localAvatarPreview.value = e.target?.result as string
+    }
+    reader.readAsDataURL(file)
+  }
+  finally {
+    input.value = ''
+  }
 }
 
 async function handleChangePassword() {

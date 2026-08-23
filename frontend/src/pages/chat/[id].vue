@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Chat } from '@ai-sdk/vue'
 import type { UIMessage, ChatStatus } from 'ai'
@@ -10,18 +10,21 @@ import type { ChatRecord } from '@/domain/chat/types'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
-import { getChatRepository } from '@/services/runtime'
+import { getChatRepository, getAuthAdapter } from '@/services/runtime'
 import { KeryxChatTransport } from '@/services/keryxChatTransport'
 import { getChatStreamApi, getChatTransportHeaders } from '@/services/chatTransport'
+import { watchChatTitle } from '@/services/titleWatcher'
+import { annotateBranchMetadata } from '@/shared/chatCore'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
-import type { ModelPreset } from '@/components/chat/ChatInput.vue'
+import type { ModelPreset, ChatAgent } from '@/components/chat/ChatInput.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const route = useRoute()
+const router = useRouter()
 const { t, locale } = useI18n()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
@@ -44,6 +47,31 @@ const loadError = ref<string | null>(null)
 const chatTitle = computed(() => {
   const storeChat = chatStore.chats.find(c => c.id === chatId.value)
   return storeChat?.label || chatData.value?.title || 'Untitled'
+})
+
+// Annotated messages with branch navigation metadata (non-destructive regenerate)
+const annotatedMessages = computed<UIMessage[]>(() => {
+  const rawMessages = chat.messages as unknown as any[]
+  const branches = (chatData.value as any)?.branches
+  if (!branches || typeof branches !== 'object' || Object.keys(branches).length === 0) {
+    return chat.messages as unknown as UIMessage[]
+  }
+  // Build a minimal ChatRecord for annotation: messages from live Chat + branches from persisted chat
+  const tempChat = {
+    id: chatId.value,
+    title: chatData.value?.title ?? null,
+    visibility: (chatData.value?.visibility ?? 'private') as ChatRecord['visibility'],
+    createdAt: chatData.value?.createdAt ?? new Date().toISOString(),
+    messages: rawMessages,
+    votes: [],
+    branches,
+  } as unknown as ChatRecord
+  try {
+    const annotated = annotateBranchMetadata(tempChat)
+    return annotated.messages as unknown as UIMessage[]
+  } catch {
+    return chat.messages as unknown as UIMessage[]
+  }
 })
 
 // Presets state
@@ -90,8 +118,53 @@ function buildSearchRequestBody(webSearch: boolean) {
     username: authStore.userName || authStore.userEmail || '',
     datetime: new Date().toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    // Agent override: when set, the backend ignores any client `system`.
+    ...(selectedAgentId.value ? { agentId: selectedAgentId.value } : {}),
   }
 }
+
+// ---- Agents ----
+const agents = ref<ChatAgent[]>([])
+const selectedAgentId = ref<string | null>(
+  typeof route.query.agentId === 'string' && route.query.agentId ? route.query.agentId : null,
+)
+
+const selectedAgentExists = computed(() =>
+  !selectedAgentId.value || agents.value.some(a => a.id === selectedAgentId.value),
+)
+
+watch(selectedAgentExists, (exists) => {
+  if (!exists && selectedAgentId.value) {
+    toast(t('chat.agent.missing'))
+    selectedAgentId.value = null
+  }
+})
+
+async function fetchAgents() {
+  try {
+    const res = await fetch('/api/agents', { headers: await (await getAuthAdapter()).getAuthorizationHeaders() })
+    if (res.ok) agents.value = await res.json()
+  } catch {
+    agents.value = []
+  }
+}
+
+async function persistChatAgent(agentId: string | null) {
+  if (!chatId.value) return
+  if ((chatData.value?.agentId ?? null) === (agentId ?? null)) return
+  try {
+    const headers = await (await getAuthAdapter()).getAuthorizationHeaders()
+    await fetch(`/api/chats/${chatId.value}/agent`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ agentId }),
+    })
+  } catch {
+    // Non-fatal: selection stays local for this session.
+  }
+}
+
+watch(selectedAgentId, (value) => { void persistChatAgent(value) })
 
 async function loadChat() {
   isLoading.value = true
@@ -212,6 +285,9 @@ watch(() => chat.status, async (status, prevStatus) => {
         if (updatedChat) {
           chatData.value = { ...updatedChat, messages: chatData.value?.messages ?? updatedChat.messages }
           chatStore.updateChat(chatId.value, { label: updatedChat.title || 'Untitled' })
+          // The title may still be generating server-side (async provider
+          // call after the stream). Keep watching until it lands.
+          if (!updatedChat.title) watchChatTitle(chatId.value)
         }
       } catch {
         // ignore refresh errors after streaming
@@ -287,11 +363,40 @@ function cancelEdit() {
 async function handleRegenerate(message: UIMessage) {
   try {
     await chatRepository.deleteMessage(chatId.value, { messageId: message.id, type: 'regenerate' })
+    // Refresh branches so the new snapshot structure is visible for annotation
+    // (non-destructive regenerate keeps previous response as a branch version)
+    try {
+      const refreshed = await chatRepository.getChat(chatId.value)
+      if (refreshed && refreshed.branches) {
+        // Preserve live messages in chatData but update branches
+        chatData.value = { ...(chatData.value as ChatRecord), branches: refreshed.branches } as ChatRecord
+        // Also keep branches in sync if refreshed has newer title / etc.
+        if (refreshed.title) chatData.value.title = refreshed.title
+      }
+    } catch {
+      // ignore refresh errors — regeneration will still proceed
+    }
   } catch {
     toast(t('chat.failedRegenerate'))
     return
   }
   chat.regenerate({ messageId: message.id, body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+}
+
+async function handleFork(message: UIMessage) {
+  try {
+    const newChat = await chatRepository.forkChat(chatId.value, message.id)
+    // Add to sidebar store optimistically
+    chatStore.addChat({
+      id: newChat.id,
+      label: newChat.title || 'Untitled',
+      to: `/chat/${newChat.id}`,
+      createdAt: newChat.createdAt || new Date().toISOString(),
+    })
+    router.push(`/chat/${newChat.id}`)
+  } catch {
+    toast(t('chat.failedFork'))
+  }
 }
 
 async function handleBranchChange(payload: { rootMessageId: string; snapshotId: string }) {
@@ -365,6 +470,7 @@ onMounted(async () => {
   } catch {
     // silently ignore — search toggle won't appear
   }
+  void fetchAgents()
   // Fetch presets with capabilities
   try {
     const res = await fetch('/api/models/presets')
@@ -384,7 +490,26 @@ onMounted(async () => {
 onMounted(async () => {
   if (chatData.value?.messages?.length === 1 && chatData.value.messages[0]?.role === 'user') {
     chat.regenerate({ body: buildSearchRequestBody(chatData.value?.webSearch ?? false) })
+    return
   }
+  // Reconnect to an in-progress stream (e.g. the user navigated away and
+  // came back, or reloaded mid-response). The transport probes
+  // GET /api/chats/{id}/stream: if a stream is active it replays only the
+  // text the client is missing (`since`) and continues live; a 204 means
+  // nothing is running and resumeStream() is a no-op.
+  const msgs = (chatData.value?.messages ?? []) as any[]
+  const last = msgs[msgs.length - 1]
+  const since =
+    last && last.role === 'assistant' && Array.isArray(last.parts)
+      ? last.parts
+          .filter((p: any) => p.type === 'text')
+          .map((p: any) => p.text ?? '')
+          .join('').length
+      : 0
+  await nextTick()
+  chat.resumeStream({
+    body: { ...buildSearchRequestBody(chatData.value?.webSearch ?? false), sinceTextLength: since },
+  })
 })
 </script>
 
@@ -406,14 +531,17 @@ onMounted(async () => {
   <div v-else class="flex flex-col h-full">
     <!-- Edit message dialog -->
     <Dialog :open="isEditDialogOpen" @update:open="(v: boolean) => { if (!v) cancelEdit() }">
-      <DialogContent class="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent class="sm:max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader class="shrink-0">
           <DialogTitle>{{ $t('message.edit') }}</DialogTitle>
         </DialogHeader>
-        <Textarea ref="editTextareaRef" v-model="editText" class="min-h-[120px]" maxlength="10000"
-          @keydown.enter.meta="confirmEdit" @keydown.enter.ctrl="confirmEdit" />
-        <div class="text-xs text-muted-foreground text-right mt-1">{{ editText.length }}/10000</div>
-        <DialogFooter class="gap-2 sm:gap-0">
+        <div class="flex-1 min-h-0 flex flex-col gap-1 overflow-hidden">
+          <Textarea ref="editTextareaRef" v-model="editText"
+            class="flex-1 min-h-[120px] max-h-[60vh] overflow-y-auto field-sizing-fixed" maxlength="10000"
+            @keydown.enter.meta="confirmEdit" @keydown.enter.ctrl="confirmEdit" />
+          <div class="text-xs text-muted-foreground text-right shrink-0">{{ editText.length }}/10000</div>
+        </div>
+        <DialogFooter class="gap-2 sm:gap-0 shrink-0">
           <Button variant="outline" @click="cancelEdit">{{ $t('app.cancel') }}</Button>
           <Button @click="confirmEdit">{{ $t('message.edit') }}</Button>
         </DialogFooter>
@@ -426,12 +554,14 @@ onMounted(async () => {
     </div>
 
     <!-- Messages -->
-    <ChatMessages :messages="chat.messages" :status="(chat.status as ChatStatus)" :votes="votes"
-      @branch-change="handleBranchChange" @edit="handleEdit" @regenerate="handleRegenerate" @vote="handleVote" />
+    <ChatMessages :messages="annotatedMessages" :status="(chat.status as ChatStatus)" :votes="votes"
+      @branch-change="handleBranchChange" @edit="handleEdit" @regenerate="handleRegenerate" @fork="handleFork" @vote="handleVote" />
 
     <!-- Input -->
     <ChatInput :status="chat.status" :preset="selectedPreset" :presets="presets" :web-search="chatData?.webSearch"
       :webSearchGloballyEnabled="webSearchGloballyEnabled"
+      :agents="agents" :agent-id="selectedAgentId"
+      @update:agentId="selectedAgentId = $event"
       @submit="handleSubmit" @update:preset="selectedPreset = $event" @stop="handleStop" />
   </div>
 </template>

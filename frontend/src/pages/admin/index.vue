@@ -3,8 +3,19 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "@/composables/useToast";
 import { getAuthAdapter } from "@/services/runtime";
+import { Users, Plug2, SlidersHorizontal, Sparkles } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +42,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 
 type UserRole = "admin" | "user";
 
@@ -69,6 +82,26 @@ interface CatalogModel {
   provider: string;
   displayName: string;
 }
+
+interface PromptOverrideInfo {
+  key: string;
+  prompt: string;
+  source: "embedded" | "override";
+  updatedAt?: string;
+}
+
+type AdminAgent = {
+  id: string;
+  builtinId?: string;
+  ownerId?: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  systemPrompt: string;
+  source: "builtin" | "override" | "global_custom" | "user_custom";
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 interface TitleGenerationPolicy {
   mode: "chat_model" | "custom";
@@ -139,6 +172,13 @@ const webSearchHasChanges = computed(() => {
 const adminCount = computed(
   () => users.value.filter((user) => user.role === "admin").length,
 );
+const pendingInvitationsCount = computed(
+  () => invitations.value.filter((inv) => !inv.usedAt).length,
+);
+const enabledModelsCount = computed(
+  () => models.value.filter((m) => m.enabled).length,
+);
+const activeAdminTab = ref("access");
 
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return await fetch(path, {
@@ -296,6 +336,220 @@ async function handleDeleteProviderKey(entry: ProviderKeyEntry): Promise<void> {
 }
 
 	// ---- Title generation policy handlers ----
+
+	// ---- E. Prompts & Agents ----
+
+
+const promptOverrides = ref<Record<"base" | "title", PromptOverrideInfo>>({
+  base: { key: "base", prompt: "", source: "embedded" },
+  title: { key: "title", prompt: "", source: "embedded" },
+});
+const originalPromptOverrides = ref<Record<"base" | "title", PromptOverrideInfo>>({
+  base: { key: "base", prompt: "", source: "embedded" },
+  title: { key: "title", prompt: "", source: "embedded" },
+});
+const isSavingPrompt = ref(false);
+const isResettingPrompt = ref(false);
+const resetPromptKey = ref<"base" | "title" | null>(null);
+
+function hasPromptChanges(key: "base" | "title"): boolean {
+  return promptOverrides.value[key].prompt !== originalPromptOverrides.value[key].prompt;
+}
+
+const agents = ref<AdminAgent[]>([]);
+const agentDialogOpen = ref(false);
+const agentDialogMode = ref<"create" | "edit">("create");
+const agentForm = ref<{ id: string; builtinId: string; name: string; description: string; icon: string; systemPrompt: string }>({
+  id: "", builtinId: "", name: "", description: "", icon: "", systemPrompt: "",
+});
+const isSavingAgent = ref(false);
+const deleteAgentTarget = ref<AdminAgent | null>(null);
+const isDeletingAgent = ref(false);
+
+const PROMPT_TAG_KEYS = ["{username}", "{datetime}", "{language}"] as const;
+
+async function loadPromptsAndAgents(): Promise<void> {
+  try {
+    const [promptsResponse, agentsResponse] = await Promise.all([
+      apiFetch("/api/admin/prompt-overrides"),
+      apiFetch("/api/admin/agents"),
+    ]);
+    await assertOk(promptsResponse, t("admin.shared.loadError"));
+    await assertOk(agentsResponse, t("admin.shared.loadError"));
+    const promptsData = await readPayload<Record<string, PromptOverrideInfo>>(promptsResponse);
+    if (promptsData) {
+      for (const key of ["base", "title"] as const) {
+        const entry = promptsData[key] ?? { key, prompt: "", source: "embedded" };
+        promptOverrides.value[key] = { ...entry };
+        originalPromptOverrides.value[key] = { ...entry };
+      }
+    }
+    agents.value = (await readPayload<AdminAgent[]>(agentsResponse)) ?? [];
+  } catch {
+    // Non-fatal: the section simply stays empty.
+  }
+}
+
+function insertPromptTag(key: "base" | "title", tag: string, event?: MouseEvent): void {
+  // Chips are buttons inside a form-less card; prevent focus loss side effects.
+  if (event) event.preventDefault();
+  // Insert at cursor of the matching textarea by ref id.
+  const el = document.querySelector<HTMLTextAreaElement>(`textarea[data-prompt-key="${key}"]`);
+  const current = promptOverrides.value[key];
+  if (!el) {
+    promptOverrides.value[key] = { ...current, prompt: current.prompt + tag };
+    return;
+  }
+  const start = el.selectionStart ?? current.prompt.length;
+  const end = el.selectionEnd ?? start;
+  const next = current.prompt.slice(0, start) + tag + current.prompt.slice(end);
+  promptOverrides.value[key] = { ...current, prompt: next };
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(start + tag.length, start + tag.length);
+  });
+}
+
+async function handleSavePrompt(key: "base" | "title"): Promise<void> {
+  if (isSavingPrompt.value) return;
+  isSavingPrompt.value = true;
+  try {
+    const response = await apiFetch(`/api/admin/prompt-overrides/${key}`, {
+      method: "PUT",
+      body: JSON.stringify({ prompt: promptOverrides.value[key].prompt }),
+    });
+    await assertOk(response, t("admin.prompts.saveError"));
+    const refreshed = await apiFetch("/api/admin/prompt-overrides");
+    await assertOk(refreshed, t("admin.shared.loadError"));
+    const data = await readPayload<Record<string, PromptOverrideInfo>>(refreshed);
+    if (data && data[key]) {
+      promptOverrides.value[key] = { ...data[key] };
+      originalPromptOverrides.value[key] = { ...data[key] };
+    }
+    toast(t("admin.prompts.saveSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.prompts.saveError"));
+  } finally {
+    isSavingPrompt.value = false;
+  }
+}
+
+async function handleResetPrompt(): Promise<void> {
+  const key = resetPromptKey.value;
+  if (!key || isResettingPrompt.value) return;
+  isResettingPrompt.value = true;
+  try {
+    const response = await apiFetch(`/api/admin/prompt-overrides/${key}`, { method: "DELETE" });
+    await assertOk(response, t("admin.prompts.resetError"));
+    const refreshed = await apiFetch("/api/admin/prompt-overrides");
+    await assertOk(refreshed, t("admin.shared.loadError"));
+    const data = await readPayload<Record<string, PromptOverrideInfo>>(refreshed);
+    if (data && data[key]) {
+      promptOverrides.value[key] = { ...data[key] };
+      originalPromptOverrides.value[key] = { ...data[key] };
+    }
+    resetPromptKey.value = null;
+    toast(t("admin.prompts.resetSuccess"), "success");
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.prompts.resetError"));
+  } finally {
+    isResettingPrompt.value = false;
+  }
+}
+
+function agentSourceLabel(source: AdminAgent["source"]): string {
+  if (source === "builtin") return t("admin.agents.sourceBuiltin");
+  if (source === "override") return t("admin.agents.sourceOverride");
+  return t("admin.agents.sourceCustom");
+}
+
+function insertAgentTag(tag: string, event?: MouseEvent): void {
+  if (event) event.preventDefault();
+  const el = document.querySelector<HTMLTextAreaElement>("textarea[data-agent-prompt]");
+  if (!el) {
+    agentForm.value.systemPrompt += tag;
+    return;
+  }
+  const start = el.selectionStart ?? agentForm.value.systemPrompt.length;
+  const end = el.selectionEnd ?? start;
+  const next = agentForm.value.systemPrompt.slice(0, start) + tag + agentForm.value.systemPrompt.slice(end);
+  agentForm.value.systemPrompt = next;
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(start + tag.length, start + tag.length);
+  });
+}
+
+function openCreateAgentDialog(builtinId = ""): void {
+  agentDialogMode.value = "create";
+  agentForm.value = { id: "", builtinId, name: "", description: "", icon: "", systemPrompt: "" };
+  agentDialogOpen.value = true;
+}
+
+function openEditAgentDialog(agent: AdminAgent): void {
+  agentDialogMode.value = "edit";
+  agentForm.value = {
+    id: agent.id,
+    builtinId: agent.builtinId ?? "",
+    name: agent.name,
+    description: agent.description ?? "",
+    icon: agent.icon ?? "",
+    systemPrompt: agent.systemPrompt,
+  };
+  agentDialogOpen.value = true;
+}
+
+async function handleSaveAgent(): Promise<void> {
+  if (isSavingAgent.value) return;
+  isSavingAgent.value = true;
+  try {
+    const form = agentForm.value;
+    const body = JSON.stringify({
+      name: form.name,
+      description: form.description,
+      icon: form.icon,
+      systemPrompt: form.systemPrompt,
+    });
+    let response: Response;
+    if (agentDialogMode.value === "create" && form.builtinId) {
+      response = await apiFetch("/api/admin/agents", {
+        method: "POST",
+        body: JSON.stringify({ ...JSON.parse(body), builtinId: form.builtinId }),
+      });
+    } else if (agentDialogMode.value === "create") {
+      response = await apiFetch("/api/admin/agents", { method: "POST", body });
+    } else {
+      response = await apiFetch(`/api/agents/${encodeURIComponent(form.id)}`, { method: "PUT", body });
+    }
+    await assertOk(response, t("admin.shared.loadError"));
+    agentDialogOpen.value = false;
+    await loadPromptsAndAgents();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.shared.loadError"));
+  } finally {
+    isSavingAgent.value = false;
+  }
+}
+
+async function handleDeleteAgentConfirmed(): Promise<void> {
+  const target = deleteAgentTarget.value;
+  if (!target || isDeletingAgent.value) return;
+  isDeletingAgent.value = true;
+  try {
+    const recordId = target.source === "override" || target.source === "global_custom"
+      ? target.id
+      : target.id;
+    const response = await apiFetch(`/api/admin/agents/${encodeURIComponent(recordId)}`, { method: "DELETE" });
+    await assertOk(response, t("admin.shared.loadError"));
+    deleteAgentTarget.value = null;
+    await loadPromptsAndAgents();
+  } catch (error) {
+    toast(error instanceof Error ? error.message : t("admin.shared.loadError"));
+  } finally {
+    isDeletingAgent.value = false;
+  }
+}
+
 
 const titleGenHasChanges = computed(() => {
   return titleGenPolicy.value.mode !== originalTitleGenPolicy.value.mode ||
@@ -582,417 +836,662 @@ async function handleModelToggle(model: AdminModel, event: Event): Promise<void>
 
 onMounted(() => {
   void loadData();
+  void loadPromptsAndAgents();
 });
 </script>
 
 <template>
   <div class="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-    <div class="mx-auto w-full max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
-      <div class="space-y-1 border-b border-border pb-6">
-        <h1 class="text-3xl font-semibold tracking-tight">{{ t('admin.dashboard.title') }}</h1>
-        <p class="text-sm text-muted-foreground">
-          {{ t('admin.dashboard.description') }}
-        </p>
+    <div class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <!-- Compact header + KPIs -->
+      <div class="flex flex-col gap-3 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <div class="space-y-1">
+          <h1 class="text-2xl font-semibold tracking-tight">{{ t('admin.dashboard.title') }}</h1>
+          <p class="text-sm text-muted-foreground">{{ t('admin.dashboard.description') }}</p>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <Badge variant="secondary" class="font-normal">{{ users.length }} · {{ t('admin.dashboard.users') }}</Badge>
+          <Badge variant="secondary" class="font-normal">{{ pendingInvitationsCount }} {{ t('admin.invitations.statusPending') }}</Badge>
+          <Badge variant="secondary" class="font-normal">{{ enabledModelsCount }}/{{ models.length }} {{ t('admin.dashboard.models') }}</Badge>
+        </div>
       </div>
 
-      <!-- A. Access & user management -->
-      <Card>
-        <CardHeader class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div class="space-y-1">
-            <CardTitle>{{ t('admin.users.title') }}</CardTitle>
-            <p class="text-sm text-muted-foreground">
-              {{ t('admin.users.description') }}
-            </p>
+      <Tabs v-model="activeAdminTab" class="mt-4 gap-0">
+        <div class="sticky top-0 z-10 -mx-4 border-b bg-background/80 px-4 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/60 sm:mx-0 sm:rounded-lg sm:border sm:px-1">
+          <TabsList class="h-8 w-full justify-start gap-1 bg-muted/60 p-1 sm:w-fit">
+            <TabsTrigger value="access" class="gap-1.5 data-[state=active]:bg-background">
+              <Users class="size-3.5" />
+              <span class="hidden sm:inline">{{ t('admin.dashboard.users') }}</span>
+              <span class="sm:hidden">{{ t('admin.dashboard.users') }}</span>
+            </TabsTrigger>
+            <TabsTrigger value="connections" class="gap-1.5 data-[state=active]:bg-background">
+              <Plug2 class="size-3.5" />
+              <span class="hidden sm:inline">{{ t('admin.providerKeys.title') }}</span>
+              <span class="sm:hidden">Keys</span>
+            </TabsTrigger>
+            <TabsTrigger value="models" class="gap-1.5 data-[state=active]:bg-background">
+              <SlidersHorizontal class="size-3.5" />
+              <span class="hidden sm:inline">{{ t('admin.dashboard.models') }}</span>
+              <span class="sm:hidden">{{ t('admin.dashboard.models') }}</span>
+            </TabsTrigger>
+            <TabsTrigger value="behavior" class="gap-1.5 data-[state=active]:bg-background">
+              <Sparkles class="size-3.5" />
+              <span class="hidden sm:inline">{{ t('admin.prompts.title') }} &amp; {{ t('admin.agents.title') }}</span>
+              <span class="sm:hidden">Prompts</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <!-- TAB: Access -->
+        <TabsContent value="access" class="space-y-5 pt-5 focus-visible:outline-none">
+          <Card>
+            <CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div class="space-y-1">
+                <CardTitle class="text-base">{{ t('admin.users.title') }}</CardTitle>
+                <CardDescription>{{ t('admin.users.description') }}</CardDescription>
+              </div>
+              <Button size="sm" @click="openInvitationDialog">
+                {{ t('admin.invitations.createTitle') }}
+              </Button>
+            </CardHeader>
+            <CardContent class="space-y-6">
+              <div class="rounded-md border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead class="w-[42%]">{{ t('admin.users.emailColumn') }}</TableHead>
+                      <TableHead class="w-[200px]">{{ t('admin.users.roleColumn') }}</TableHead>
+                      <TableHead class="w-[180px] whitespace-nowrap">{{ t('admin.users.createdAtColumn') }}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableEmpty v-if="!isLoading && users.length === 0" :colspan="3">
+                      {{ t('admin.users.empty') }}
+                    </TableEmpty>
+                    <TableRow v-for="user in users" :key="user.id">
+                      <TableCell class="font-medium max-w-0 whitespace-normal break-all align-middle" :title="user.email">{{ formatEmail(user.email) }}</TableCell>
+                      <TableCell class="align-middle py-1.5">
+                        <Select
+                          :model-value="user.role"
+                          :disabled="updatingUserId === user.id || (user.role === 'admin' && adminCount === 1)"
+                          @update:model-value="handleUserRoleChange(user, $event)"
+                        >
+                          <SelectTrigger size="sm" class="h-8 w-[160px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="user">{{ t('admin.shared.roleUser') }}</SelectItem>
+                            <SelectItem value="admin">{{ t('admin.shared.roleAdmin') }}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell class="whitespace-nowrap text-sm text-muted-foreground align-middle">
+                        {{ formatDateTime(user.createdAt) }}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div class="space-y-3">
+                <div>
+                  <h3 class="text-sm font-medium">{{ t('admin.invitations.existingTitle') }}</h3>
+                  <p class="text-xs text-muted-foreground">{{ t('admin.invitations.singleUseDescription') }}</p>
+                </div>
+                <div class="rounded-md border">
+                  <Table class="min-w-[640px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{{ t('admin.invitations.emailColumn') }}</TableHead>
+                        <TableHead>{{ t('admin.invitations.roleColumn') }}</TableHead>
+                        <TableHead>{{ t('admin.invitations.statusColumn') }}</TableHead>
+                        <TableHead>{{ t('admin.invitations.createdAtColumn') }}</TableHead>
+                        <TableHead class="w-[120px] text-right">{{ t('admin.invitations.actionsColumn') }}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableEmpty v-if="!isLoading && invitations.length === 0" :colspan="5">
+                        {{ t('admin.invitations.noInvitations') }}
+                      </TableEmpty>
+                      <TableRow v-for="invitation in invitations" :key="invitation.id">
+                        <TableCell class="font-medium max-w-0 break-words" :title="invitation.email">{{ formatEmail(invitation.email) }}</TableCell>
+                        <TableCell class="text-sm">{{ invitation.role === 'admin' ? t('admin.shared.roleAdmin') : t('admin.shared.roleUser') }}</TableCell>
+                        <TableCell>
+                          <Badge :variant="invitation.usedAt ? 'secondary' : 'default'" class="text-xs">
+                            {{ invitation.usedAt ? t('admin.invitations.statusUsed') : t('admin.invitations.statusPending') }}
+                          </Badge>
+                        </TableCell>
+                        <TableCell class="text-sm text-muted-foreground">
+                          {{ formatDateTime(invitation.createdAt) }}
+                        </TableCell>
+                        <TableCell class="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            :disabled="deletingInvitationId === invitation.id"
+                            @click="handleDeleteInvitation(invitation.id)"
+                          >
+                            {{ deletingInvitationId === invitation.id ? t('admin.shared.deleting') : t('app.delete') }}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <!-- TAB: Connections -->
+        <TabsContent value="connections" class="space-y-5 pt-5 focus-visible:outline-none">
+          <div class="grid items-start gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader class="pb-3">
+                <CardTitle class="text-base">{{ t('admin.providerKeys.title') }}</CardTitle>
+                <CardDescription>{{ t('admin.providerKeys.description') }}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div class="rounded-md border">
+                  <Table class="min-w-[480px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{{ t('admin.providerKeys.providerColumn') }}</TableHead>
+                        <TableHead>{{ t('admin.providerKeys.statusColumn') }}</TableHead>
+                        <TableHead class="w-[200px]">{{ t('admin.providerKeys.actionsColumn') }}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableEmpty v-if="!isLoading && providerKeys.length === 0" :colspan="3">
+                        {{ t('admin.providerKeys.noKeys') }}
+                      </TableEmpty>
+                      <TableRow v-for="entry in providerKeys" :key="entry.provider">
+                        <TableCell class="font-medium break-words">{{ entry.label }}</TableCell>
+                        <TableCell>
+                          <div class="flex items-center gap-2">
+                            <span
+                              class="inline-block size-2 rounded-full"
+                              :class="entry.configured ? 'bg-success' : 'bg-muted-foreground/30'"
+                            />
+                            <span class="text-sm">
+                              {{ entry.configured ? t('admin.providerKeys.statusConfigured') : t('admin.providerKeys.statusNotConfigured') }}
+                            </span>
+                          </div>
+                          <p
+                            v-if="entry.configured && entry.updatedAt"
+                            class="mt-1 text-xs text-muted-foreground"
+                          >
+                            {{ t('admin.providerKeys.updatedAt') }}: {{ formatDateTime(entry.updatedAt) }}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <div class="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              @click="openProviderKeyDialog(entry)"
+                            >
+                              {{ entry.configured ? t('app.save') : t('admin.providerKeys.saveButton') }}
+                            </Button>
+                            <Button
+                              v-if="entry.configured"
+                              variant="outline"
+                              size="sm"
+                              :disabled="isDeletingProviderKey"
+                              @click="handleDeleteProviderKey(entry)"
+                            >
+                              {{ t('admin.providerKeys.deleteButton') }}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader class="pb-3">
+                <CardTitle class="text-base">{{ t('admin.webSearch.title') }}</CardTitle>
+                <CardDescription>{{ t('admin.webSearch.description') }}</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span
+                    class="inline-block size-2 rounded-full"
+                    :class="webSearchConfig.configured ? 'bg-success' : 'bg-muted-foreground/30'"
+                  />
+                  <span class="text-sm">
+                    {{ webSearchConfig.configured ? t('admin.webSearch.configured') : t('admin.webSearch.notConfigured') }}
+                  </span>
+                  <span class="text-muted-foreground">·</span>
+                  <span class="text-sm">
+                    {{ webSearchConfig.enabled ? t('admin.webSearch.enabled') : t('admin.webSearch.disabled') }}
+                  </span>
+                </div>
+
+                <div class="space-y-2">
+                  <Label for="brave-api-key">{{ t('admin.webSearch.apiKeyLabel') }}</Label>
+                  <Input
+                    id="brave-api-key"
+                    v-model="webSearchApiKey"
+                    type="password"
+                    :placeholder="t('admin.webSearch.apiKeyPlaceholder')"
+                    autocomplete="off"
+                  />
+                </div>
+
+                <label class="flex items-center gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    class="size-4 accent-primary"
+                    v-model="webSearchConfig.enabled"
+                  >
+                  <span>{{ t('admin.webSearch.enabledLabel') }}</span>
+                </label>
+
+                <div class="flex justify-end">
+                  <Button
+                    size="sm"
+                    :disabled="isSavingWebSearch || !webSearchHasChanges"
+                    @click="handleSaveWebSearch"
+                  >
+                    {{ isSavingWebSearch ? t('admin.webSearch.saving') : t('admin.webSearch.saveButton') }}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          <Button @click="openInvitationDialog">
-            {{ t('admin.invitations.createTitle') }}
-          </Button>
-        </CardHeader>
-        <CardContent class="space-y-6">
-          <div class="rounded-md border">
-            <Table class="min-w-[560px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{{ t('admin.users.emailColumn') }}</TableHead>
-                  <TableHead>{{ t('admin.users.roleColumn') }}</TableHead>
-                  <TableHead>{{ t('admin.users.createdAtColumn') }}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableEmpty v-if="!isLoading && users.length === 0" :colspan="3">
-                  {{ t('admin.users.empty') }}
-                </TableEmpty>
-                <TableRow v-for="user in users" :key="user.id">
-                  <TableCell class="font-medium max-w-0 break-words" :title="user.email">{{ formatEmail(user.email) }}</TableCell>
-                  <TableCell>
-                    <Select
-                      :model-value="user.role"
-                      :disabled="updatingUserId === user.id || (user.role === 'admin' && adminCount === 1)"
-                      @update:model-value="handleUserRoleChange(user, $event)"
-                    >
-                      <SelectTrigger class="w-[160px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">{{ t('admin.shared.roleUser') }}</SelectItem>
-                        <SelectItem value="admin">{{ t('admin.shared.roleAdmin') }}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p
-                      v-if="user.role === 'admin' && adminCount === 1"
-                      class="mt-2 text-xs text-muted-foreground"
-                    >
-                      {{ t('admin.users.lastAdminHint') }}
-                    </p>
-                  </TableCell>
-                  <TableCell class="text-muted-foreground">
-                    {{ formatDateTime(user.createdAt) }}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+        </TabsContent>
+
+        <!-- TAB: Models -->
+        <TabsContent value="models" class="space-y-5 pt-5 focus-visible:outline-none">
+          <div class="grid items-start gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader class="pb-3">
+                <CardTitle class="text-base">{{ t('admin.titleGeneration.title') }}</CardTitle>
+                <CardDescription>{{ t('admin.titleGeneration.description') }}</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div class="space-y-2.5">
+                  <label class="flex items-center gap-3 text-sm">
+                    <input
+                      type="radio"
+                      name="titleGenMode"
+                      value="chat_model"
+                      class="size-4 accent-primary"
+                      :checked="titleGenPolicy.mode === 'chat_model'"
+                      @change="titleGenPolicy.mode = 'chat_model'"
+                    />
+                    <span>{{ t('admin.titleGeneration.modeChatModel') }}</span>
+                  </label>
+                  <label class="flex items-center gap-3 text-sm">
+                    <input
+                      type="radio"
+                      name="titleGenMode"
+                      value="custom"
+                      class="size-4 accent-primary"
+                      :checked="titleGenPolicy.mode === 'custom'"
+                      @change="titleGenPolicy.mode = 'custom'"
+                    />
+                    <span>{{ t('admin.titleGeneration.modeCustom') }}</span>
+                  </label>
+                </div>
+
+                <div v-if="titleGenPolicy.mode === 'custom'" class="space-y-2">
+                  <Label for="titleGenModel">{{ t('admin.titleGeneration.modelLabel') }}</Label>
+                  <Select
+                    :model-value="titleGenPolicy.modelId"
+                    @update:model-value="($event) => handleTitleGenModelChange($event)"
+                  >
+                    <SelectTrigger id="titleGenModel" class="w-full">
+                      <SelectValue :placeholder="t('admin.titleGeneration.modelPlaceholder')" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="model in catalog"
+                        :key="model.id"
+                        :value="model.id"
+                      >
+                        {{ model.displayName }}
+                        <span class="text-muted-foreground">&middot; {{ model.provider }}</span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div class="flex justify-end">
+                  <Button
+                    size="sm"
+                    :disabled="isSavingTitleGen || !titleGenHasChanges"
+                    @click="handleSaveTitleGenPolicy"
+                  >
+                    {{ isSavingTitleGen ? t('admin.titleGeneration.saving') : t('admin.titleGeneration.saveButton') }}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader class="pb-3">
+                <CardTitle class="text-base">{{ t('admin.modelPresets.title') }}</CardTitle>
+                <CardDescription>{{ t('admin.modelPresets.description') }}</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-4">
+                <div
+                  v-for="preset in modelPresets"
+                  :key="preset.presetId"
+                  class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3"
+                >
+                  <Label class="text-sm font-medium sm:w-32 sm:shrink-0">{{ preset.label }}</Label>
+                  <Select
+                    :model-value="preset.modelId"
+                    @update:model-value="(event: any) => handleModelPresetChange(preset.presetId, String(event))"
+                  >
+                    <SelectTrigger class="w-full sm:flex-1">
+                      <SelectValue :placeholder="t('admin.modelPresets.modelPlaceholder')" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        v-for="m in catalog"
+                        :key="m.id"
+                        :value="m.id"
+                      >
+                        {{ m.displayName }}
+                        <span class="text-muted-foreground">&middot; {{ m.provider }}</span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div class="flex justify-end">
+                  <Button
+                    size="sm"
+                    :disabled="isSavingModelPresets"
+                    @click="handleSaveModelPresets"
+                  >
+                    {{ isSavingModelPresets ? t('admin.modelPresets.saving') : t('admin.modelPresets.saveButton') }}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
-          <div class="space-y-2">
-            <h3 class="text-sm font-medium">{{ t('admin.invitations.existingTitle') }}</h3>
-            <p class="text-sm text-muted-foreground">
-              {{ t('admin.invitations.singleUseDescription') }}
-            </p>
-          </div>
+          <Card>
+            <CardHeader class="pb-3">
+              <CardTitle class="text-base">{{ t('admin.models.title') }}</CardTitle>
+              <CardDescription>{{ t('admin.models.description') }}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div class="rounded-md border">
+                <Table class="min-w-[420px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{{ t('admin.models.modelColumn') }}</TableHead>
+                      <TableHead class="w-[180px]">{{ t('admin.models.enabledForUserColumn') }}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableEmpty v-if="!isLoading && models.length === 0" :colspan="2">
+                      {{ t('admin.models.empty') }}
+                    </TableEmpty>
+                    <TableRow v-for="model in models" :key="model.id">
+                      <TableCell>
+                        <div class="font-medium">{{ model.displayName }}</div>
+                        <div class="text-sm text-muted-foreground break-words">
+                          {{ model.provider }} · {{ model.id }}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <label class="flex items-center gap-3 text-sm">
+                          <input
+                            role="checkbox"
+                            type="checkbox"
+                            class="size-4 accent-primary"
+                            :checked="model.enabled"
+                            :disabled="updatingModelId === model.id"
+                            @change="handleModelToggle(model, $event)"
+                          >
+                          <span>
+                            {{ model.enabled ? t('admin.models.enabledLabel') : t('admin.models.disabledLabel') }}
+                          </span>
+                        </label>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          <div class="rounded-md border">
-            <Table class="min-w-[640px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{{ t('admin.invitations.emailColumn') }}</TableHead>
-                  <TableHead>{{ t('admin.invitations.roleColumn') }}</TableHead>
-                  <TableHead>{{ t('admin.invitations.statusColumn') }}</TableHead>
-                  <TableHead>{{ t('admin.invitations.createdAtColumn') }}</TableHead>
-                  <TableHead class="w-[120px] text-right">{{ t('admin.invitations.actionsColumn') }}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableEmpty v-if="!isLoading && invitations.length === 0" :colspan="5">
-                  {{ t('admin.invitations.noInvitations') }}
-                </TableEmpty>
-                <TableRow v-for="invitation in invitations" :key="invitation.id">
-                  <TableCell class="font-medium max-w-0 break-words" :title="invitation.email">{{ formatEmail(invitation.email) }}</TableCell>
-                  <TableCell>{{ invitation.role === 'admin' ? t('admin.shared.roleAdmin') : t('admin.shared.roleUser') }}</TableCell>
-                  <TableCell>
-                    {{ invitation.usedAt ? t('admin.invitations.statusUsed') : t('admin.invitations.statusPending') }}
-                  </TableCell>
-                  <TableCell class="text-muted-foreground">
-                    {{ formatDateTime(invitation.createdAt) }}
-                  </TableCell>
-                  <TableCell class="text-right">
+        <!-- TAB: Behavior -->
+        <TabsContent value="behavior" class="space-y-5 pt-5 focus-visible:outline-none">
+          <div class="grid items-start gap-4 xl:grid-cols-2">
+            <Card>
+              <CardHeader class="pb-3">
+                <CardTitle class="text-base">{{ t('admin.prompts.title') }}</CardTitle>
+                <CardDescription>{{ t('admin.prompts.description') }}</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-6">
+                <div
+                  v-for="key in (['base', 'title'] as const)"
+                  :key="key"
+                  class="space-y-2"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <Label class="text-sm font-medium">
+                      {{ key === 'base' ? t('admin.prompts.baseLabel') : t('admin.prompts.titleLabel') }}
+                    </Label>
+                    <Badge :variant="promptOverrides[key].source === 'override' ? 'default' : 'secondary'" class="text-xs">
+                      {{
+                        promptOverrides[key].source === 'override'
+                          ? t('admin.prompts.sourceOverride')
+                          : t('admin.prompts.sourceEmbedded')
+                      }}
+                    </Badge>
+                  </div>
+                  <Textarea
+                    v-model="promptOverrides[key].prompt"
+                    :data-prompt-key="key"
+                    class="min-h-[140px] font-mono text-xs"
+                  />
+                  <div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{{ t('admin.prompts.availableTags') }}:</span>
+                    <button
+                      v-for="tag in PROMPT_TAG_KEYS"
+                      :key="tag"
+                      type="button"
+                      class="rounded-full border bg-muted px-2 py-0.5 font-mono hover:bg-accent"
+                      @click="insertPromptTag(key, tag, $event)"
+                    >
+                      {{ tag }}
+                    </button>
+                    <span class="ms-auto">{{ t('admin.prompts.charsUsed', { used: promptOverrides[key].prompt.length, max: 20000 }) }}</span>
+                  </div>
+                  <div class="flex justify-end gap-2">
                     <Button
+                      v-if="promptOverrides[key].source === 'override'"
                       variant="outline"
                       size="sm"
-                      :disabled="deletingInvitationId === invitation.id"
-                      @click="handleDeleteInvitation(invitation.id)"
+                      @click="resetPromptKey = key"
                     >
-                      {{ deletingInvitationId === invitation.id ? t('admin.shared.deleting') : t('app.delete') }}
+                      {{ t('admin.prompts.resetButton') }}
                     </Button>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+                    <Button
+                      size="sm"
+                      :disabled="!hasPromptChanges(key) || isSavingPrompt || promptOverrides[key].prompt.length === 0"
+                      @click="handleSavePrompt(key)"
+                    >
+                      {{ isSavingPrompt ? t('admin.prompts.saving') : t('admin.prompts.saveButton') }}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="space-y-1">
+                  <CardTitle class="text-base">{{ t('admin.agents.title') }}</CardTitle>
+                  <CardDescription>{{ t('admin.agents.description') }}</CardDescription>
+                </div>
+                <Button size="sm" @click="openCreateAgentDialog()">
+                  {{ t('admin.agents.createButton') }}
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div class="rounded-md border">
+                  <Table class="min-w-[420px]">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>{{ t('admin.agents.nameLabel') }}</TableHead>
+                        <TableHead class="hidden md:table-cell">{{ t('admin.agents.tableDescription') }}</TableHead>
+                        <TableHead class="w-[110px]">{{ t('admin.agents.tableOrigin') }}</TableHead>
+                        <TableHead class="w-[150px]">{{ t('admin.agents.tableActions') }}</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableEmpty v-if="agents.length === 0" :colspan="4">
+                        {{ t('admin.shared.loadError') }}
+                      </TableEmpty>
+                      <TableRow v-for="agent in agents" :key="agent.id + ':' + agent.source">
+                        <TableCell>
+                          <div class="font-medium text-sm">{{ agent.name }}</div>
+                        </TableCell>
+                        <TableCell class="hidden max-w-[220px] truncate text-sm md:table-cell">
+                          {{ agent.description }}
+                        </TableCell>
+                        <TableCell>
+                          <Badge :variant="agent.source === 'builtin' ? 'secondary' : agent.source === 'override' ? 'default' : 'outline'" class="text-xs">
+                            {{ agentSourceLabel(agent.source) }}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div class="flex flex-wrap gap-1.5">
+                            <Button
+                              v-if="agent.source === 'builtin' || agent.source === 'override' || agent.source === 'global_custom'"
+                              variant="outline" size="sm"
+                              @click="openEditAgentDialog(agent); agentForm.builtinId = agent.builtinId ?? ''"
+                            >
+                              {{ t('admin.agents.editAction') }}
+                            </Button>
+                            <Button
+                              v-if="agent.source === 'override'"
+                              variant="outline" size="sm"
+                              @click="deleteAgentTarget = agent"
+                            >
+                              {{ t('admin.agents.resetButton') }}
+                            </Button>
+                            <Button
+                              v-if="agent.source === 'global_custom' || agent.source === 'user_custom'"
+                              variant="outline" size="sm"
+                              @click="deleteAgentTarget = agent"
+                            >
+                              {{ t('admin.agents.deleteAction') }}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
 
-      <!-- B. Integrations -->
-      <div class="grid items-start gap-6 xl:grid-cols-2">
-        <!-- Provider API Keys -->
-        <Card>
-          <CardHeader>
-            <CardTitle>{{ t('admin.providerKeys.title') }}</CardTitle>
-            <p class="text-sm text-muted-foreground">
-              {{ t('admin.providerKeys.description') }}
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div class="rounded-md border">
-              <Table class="min-w-[520px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{{ t('admin.providerKeys.providerColumn') }}</TableHead>
-                    <TableHead>{{ t('admin.providerKeys.statusColumn') }}</TableHead>
-                    <TableHead class="w-[200px]">{{ t('admin.providerKeys.actionsColumn') }}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableEmpty v-if="!isLoading && providerKeys.length === 0" :colspan="3">
-                    {{ t('admin.providerKeys.noKeys') }}
-                  </TableEmpty>
-                  <TableRow v-for="entry in providerKeys" :key="entry.provider">
-                    <TableCell class="font-medium break-words">{{ entry.label }}</TableCell>
-                    <TableCell>
-                      <div class="flex items-center gap-2">
-                        <span
-                          class="inline-block size-2 rounded-full"
-                          :class="entry.configured ? 'bg-success' : 'bg-muted-foreground/30'"
-                        />
-                        <span class="break-words">
-                          {{ entry.configured ? t('admin.providerKeys.statusConfigured') : t('admin.providerKeys.statusNotConfigured') }}
-                        </span>
-                      </div>
-                      <p
-                        v-if="entry.configured && entry.updatedAt"
-                        class="mt-1 text-xs text-muted-foreground"
-                      >
-                        {{ t('admin.providerKeys.updatedAt') }}: {{ formatDateTime(entry.updatedAt) }}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <div class="flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          @click="openProviderKeyDialog(entry)"
-                        >
-                          {{ entry.configured ? t('app.save') : t('admin.providerKeys.saveButton') }}
-                        </Button>
-                        <Button
-                          v-if="entry.configured"
-                          variant="outline"
-                          size="sm"
-                          :disabled="isDeletingProviderKey"
-                          @click="handleDeleteProviderKey(entry)"
-                        >
-                          {{ t('admin.providerKeys.deleteButton') }}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
+    <!-- Dialogs (outside tabs, unchanged logic) -->
+    <Dialog v-model:open="agentDialogOpen">
+      <DialogContent class="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>
+            {{ agentDialogMode === 'create' ? t('admin.agents.createTitle') : t('admin.agents.editTitle') }}
+          </DialogTitle>
+          <DialogDescription v-if="agentDialogMode === 'edit' && agentForm.builtinId">
+            {{ t('admin.agents.builtinHint') }}
+          </DialogDescription>
+        </DialogHeader>
 
-        <!-- Web Search Config (Brave) -->
-        <Card>
-          <CardHeader>
-            <CardTitle>{{ t('admin.webSearch.title') }}</CardTitle>
-            <p class="text-sm text-muted-foreground">
-              {{ t('admin.webSearch.description') }}
-            </p>
-          </CardHeader>
-          <CardContent class="space-y-5">
-            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span
-                class="inline-block size-2 rounded-full"
-                :class="webSearchConfig.configured ? 'bg-success' : 'bg-muted-foreground/30'"
-              />
-              <span class="text-sm">
-                {{ webSearchConfig.configured ? t('admin.webSearch.configured') : t('admin.webSearch.notConfigured') }}
-              </span>
-              <span class="text-muted-foreground">·</span>
-              <span class="text-sm">
-                {{ webSearchConfig.enabled ? t('admin.webSearch.enabled') : t('admin.webSearch.disabled') }}
-              </span>
-            </div>
-
-            <div class="space-y-2">
-              <Label for="brave-api-key">{{ t('admin.webSearch.apiKeyLabel') }}</Label>
-              <Input
-                id="brave-api-key"
-                v-model="webSearchApiKey"
-                type="password"
-                :placeholder="t('admin.webSearch.apiKeyPlaceholder')"
-                autocomplete="off"
-              />
-            </div>
-
-            <label class="flex items-center gap-3 text-sm">
-              <input
-                type="checkbox"
-                class="size-4 accent-primary"
-                v-model="webSearchConfig.enabled"
-              >
-              <span>{{ t('admin.webSearch.enabledLabel') }}</span>
-            </label>
-
-            <div class="flex justify-end">
-              <Button
-                :disabled="isSavingWebSearch || !webSearchHasChanges"
-                @click="handleSaveWebSearch"
-              >
-                {{ isSavingWebSearch ? t('admin.webSearch.saving') : t('admin.webSearch.saveButton') }}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- C. Model configuration -->
-      <div class="grid items-start gap-6 xl:grid-cols-2">
-        <!-- Title Generation Policy -->
-        <Card>
-          <CardHeader>
-            <CardTitle>{{ t('admin.titleGeneration.title') }}</CardTitle>
-            <p class="text-sm text-muted-foreground">
-              {{ t('admin.titleGeneration.description') }}
-            </p>
-          </CardHeader>
-          <CardContent class="space-y-5">
-            <div class="space-y-3">
-              <label class="flex items-center gap-3 text-sm">
-                <input
-                  type="radio"
-                  name="titleGenMode"
-                  value="chat_model"
-                  class="size-4 accent-primary"
-                  :checked="titleGenPolicy.mode === 'chat_model'"
-                  @change="titleGenPolicy.mode = 'chat_model'"
-                />
-                <span>{{ t('admin.titleGeneration.modeChatModel') }}</span>
-              </label>
-              <label class="flex items-center gap-3 text-sm">
-                <input
-                  type="radio"
-                  name="titleGenMode"
-                  value="custom"
-                  class="size-4 accent-primary"
-                  :checked="titleGenPolicy.mode === 'custom'"
-                  @change="titleGenPolicy.mode = 'custom'"
-                />
-                <span>{{ t('admin.titleGeneration.modeCustom') }}</span>
-              </label>
-            </div>
-
-            <div v-if="titleGenPolicy.mode === 'custom'" class="space-y-2">
-              <Label for="titleGenModel">{{ t('admin.titleGeneration.modelLabel') }}</Label>
-              <Select
-                :model-value="titleGenPolicy.modelId"
-                @update:model-value="($event) => handleTitleGenModelChange($event)"
-              >
-                <SelectTrigger id="titleGenModel" class="w-full">
-                  <SelectValue :placeholder="t('admin.titleGeneration.modelPlaceholder')" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    v-for="model in catalog"
-                    :key="model.id"
-                    :value="model.id"
-                  >
-                    {{ model.displayName }}
-                    <span class="text-muted-foreground">&middot; {{ model.provider }}</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div class="flex justify-end">
-              <Button
-                :disabled="isSavingTitleGen || !titleGenHasChanges"
-                @click="handleSaveTitleGenPolicy"
-              >
-                {{ isSavingTitleGen ? t('admin.titleGeneration.saving') : t('admin.titleGeneration.saveButton') }}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <!-- Model Presets -->
-        <Card>
-          <CardHeader>
-            <CardTitle>{{ t('admin.modelPresets.title') }}</CardTitle>
-            <p class="text-sm text-muted-foreground">
-              {{ t('admin.modelPresets.description') }}
-            </p>
-          </CardHeader>
-          <CardContent class="space-y-5">
-            <div
-              v-for="preset in modelPresets"
-              :key="preset.presetId"
-              class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4"
-            >
-              <Label class="text-sm font-medium sm:w-40 sm:shrink-0">{{ preset.label }}</Label>
-              <Select
-                :model-value="preset.modelId"
-                @update:model-value="(event: any) => handleModelPresetChange(preset.presetId, String(event))"
-              >
-                <SelectTrigger class="w-full sm:flex-1">
-                  <SelectValue :placeholder="t('admin.modelPresets.modelPlaceholder')" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem
-                    v-for="m in catalog"
-                    :key="m.id"
-                    :value="m.id"
-                  >
-                    {{ m.displayName }}
-                    <span class="text-muted-foreground">&middot; {{ m.provider }}</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div class="flex justify-end">
-              <Button
-                :disabled="isSavingModelPresets"
-                @click="handleSaveModelPresets"
-              >
-                {{ isSavingModelPresets ? t('admin.modelPresets.saving') : t('admin.modelPresets.saveButton') }}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <!-- D. Available models -->
-      <Card>
-        <CardHeader>
-          <CardTitle>{{ t('admin.models.title') }}</CardTitle>
-          <p class="text-sm text-muted-foreground">
-            {{ t('admin.models.description') }}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div class="rounded-md border">
-            <Table class="min-w-[420px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{{ t('admin.models.modelColumn') }}</TableHead>
-                  <TableHead class="w-[180px]">{{ t('admin.models.enabledForUserColumn') }}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableEmpty v-if="!isLoading && models.length === 0" :colspan="2">
-                  {{ t('admin.models.empty') }}
-                </TableEmpty>
-                <TableRow v-for="model in models" :key="model.id">
-                  <TableCell>
-                    <div class="font-medium">{{ model.displayName }}</div>
-                    <div class="text-sm text-muted-foreground break-words">
-                      {{ model.provider }} · {{ model.id }}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <label class="flex items-center gap-3 text-sm">
-                      <input
-                        role="checkbox"
-                        type="checkbox"
-                        class="size-4 accent-primary"
-                        :checked="model.enabled"
-                        :disabled="updatingModelId === model.id"
-                        @change="handleModelToggle(model, $event)"
-                      >
-                      <span>
-                        {{ model.enabled ? t('admin.models.enabledLabel') : t('admin.models.disabledLabel') }}
-                      </span>
-                    </label>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+        <div class="space-y-4">
+          <div class="space-y-2">
+            <Label for="agent-name">{{ t('admin.agents.nameLabel') }}</Label>
+            <Input id="agent-name" v-model="agentForm.name" maxlength="80" />
           </div>
-        </CardContent>
-      </Card>
-	    </div>
-		
-	    <Dialog v-model:open="isInviteDialogOpen">
+          <div class="space-y-2">
+            <Label for="agent-description">{{ t('admin.agents.descriptionLabel') }}</Label>
+            <Input id="agent-description" v-model="agentForm.description" maxlength="300" />
+          </div>
+          <div class="space-y-2">
+            <Label for="agent-icon">{{ t('admin.agents.iconLabel') }}</Label>
+            <Input id="agent-icon" v-model="agentForm.icon" maxlength="40" placeholder="bot" />
+          </div>
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <span>{{ t('admin.prompts.availableTags') }}:</span>
+              <button
+                v-for="tag in PROMPT_TAG_KEYS"
+                :key="tag"
+                type="button"
+                class="rounded-full border bg-muted px-2 py-0.5 font-mono hover:bg-accent"
+                @click="insertAgentTag(tag, $event)"
+              >
+                {{ tag }}
+              </button>
+            </div>
+            <Label for="agent-prompt">{{ t('admin.agents.promptLabel') }}</Label>
+            <Textarea
+              id="agent-prompt"
+              v-model="agentForm.systemPrompt"
+              data-agent-prompt
+              class="min-h-[180px] font-mono text-xs"
+              :placeholder="t('admin.agents.promptPlaceholder')"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" @click="agentDialogOpen = false">{{ t('app.cancel') }}</Button>
+          <Button :disabled="isSavingAgent || !agentForm.name || !agentForm.systemPrompt" @click="handleSaveAgent">
+            {{ isSavingAgent ? t('admin.prompts.saving') : t('admin.prompts.saveButton') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <AlertDialog :open="resetPromptKey !== null" @update:open="(v: boolean) => { if (!v) resetPromptKey = null }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ t('admin.prompts.resetButton') }}</AlertDialogTitle>
+          <AlertDialogDescription>{{ t('admin.prompts.resetConfirm') }}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction @click="resetPromptKey = null">{{ t('app.cancel') }}</AlertDialogAction>
+          <AlertDialogAction :disabled="isResettingPrompt" @click="handleResetPrompt()">
+            {{ t('admin.prompts.resetButton') }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog :open="deleteAgentTarget !== null" @update:open="(v: boolean) => { if (!v) deleteAgentTarget = null }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{{ deleteAgentTarget?.source === 'override' ? t('admin.agents.resetButton') : t('admin.agents.deleteAction') }}</AlertDialogTitle>
+          <AlertDialogDescription>{{ t('admin.agents.deleteConfirm') }}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction @click="deleteAgentTarget = null">{{ t('app.cancel') }}</AlertDialogAction>
+          <AlertDialogAction :disabled="isDeletingAgent" @click="handleDeleteAgentConfirmed()">
+            {{ deleteAgentTarget?.source === 'override' ? t('admin.agents.resetButton') : t('admin.agents.deleteAction') }}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <Dialog v-model:open="isInviteDialogOpen">
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{{ t('admin.invitations.createTitle') }}</DialogTitle>
