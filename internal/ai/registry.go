@@ -136,6 +136,7 @@ var knownProviders = []ProviderInfo{
 			{ID: "openrouter/nvidia/nemotron-3.5-lightning", UpstreamID: "nvidia/nemotron-3.5-lightning", Provider: "openrouter", DisplayName: "Nemotron 3.5 Lightning", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/meta/muse-glimmer-30b", UpstreamID: "meta/muse-glimmer-30b", Provider: "openrouter", DisplayName: "Muse Glimmer", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/inclusionai/ling-3.0-flash", UpstreamID: "inclusionai/ling-3.0-flash", Provider: "openrouter", DisplayName: "Ling 3.0 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/z-ai/glm-5.3-flash", UpstreamID: "z-ai/glm-5.3-flash", Provider: "openrouter", DisplayName: "GLM 5.3 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/mistralai/ministral-3b-2512", UpstreamID: "mistralai/ministral-3b-2512", Provider: "openrouter", DisplayName: "Mistral Ministral 3B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/mistralai/mistral-small-2603", UpstreamID: "mistralai/mistral-small-2603", Provider: "openrouter", DisplayName: "Mistral Small 4", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			// The reasoning effort is exposed as a distinct model per level

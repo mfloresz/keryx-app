@@ -29,6 +29,7 @@ func TestResolveModel(t *testing.T) {
 		{name: "openrouter glimmer image model", modelID: "openrouter/meta/muse-glimmer-30b", wantProvider: "openrouter", wantUpstream: "meta/muse-glimmer-30b"},
 		{name: "openrouter ministral model", modelID: "openrouter/mistralai/ministral-3b-2512", wantProvider: "openrouter", wantUpstream: "mistralai/ministral-3b-2512"},
 		{name: "openrouter mistral small model", modelID: "openrouter/mistralai/mistral-small-2603", wantProvider: "openrouter", wantUpstream: "mistralai/mistral-small-2603"},
+		{name: "openrouter glm flash model", modelID: "openrouter/z-ai/glm-5.3-flash", wantProvider: "openrouter", wantUpstream: "z-ai/glm-5.3-flash"},
 		{name: "openrouter reasoning variant keeps effort", modelID: "openrouter/openai/gpt-5.6-luna (reasoning: medium)", wantProvider: "openrouter", wantUpstream: "openai/gpt-5.6-luna (reasoning: medium)"},
 		{name: "unknown prefix errors", modelID: "unknown/model-x", wantErr: true},
 		{name: "unprefixed errors (no gateway)", modelID: "gpt-5.4-nano", wantErr: true},
@@ -72,8 +73,8 @@ func TestProviderByID(t *testing.T) {
 
 func TestModelCatalogCoversSeeds(t *testing.T) {
 	catalog := ModelCatalog()
-	if len(catalog) != 36 {
-		t.Fatalf("catalog len = %d, want 36", len(catalog))
+	if len(catalog) != 37 {
+		t.Fatalf("catalog len = %d, want 37", len(catalog))
 	}
 	for _, m := range catalog {
 		if info, ok := ProviderByID(m.Provider); !ok {
@@ -153,6 +154,7 @@ func TestOpenRouterCatalogMetadata(t *testing.T) {
 	for _, id := range []string{
 		"openrouter/nvidia/nemotron-3.5-lightning",
 		"openrouter/inclusionai/ling-3.0-flash",
+		"openrouter/z-ai/glm-5.3-flash",
 	} {
 		if m := byID[id]; m.SupportsImages {
 			t.Errorf("%s should not support images", id)
