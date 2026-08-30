@@ -14,6 +14,14 @@ const routes = [
     component: () => import("@/pages/chat/[id].vue"),
   },
   {
+    path: "/agents",
+    component: () => import("@/pages/agents/index.vue"),
+  },
+  {
+    path: "/agents/:id",
+    component: () => import("@/pages/agents/[id].vue"),
+  },
+  {
     path: "/favorites",
     component: () => import("@/pages/favorites.vue"),
   },

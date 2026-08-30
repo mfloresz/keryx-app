@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
@@ -15,6 +15,7 @@ import type { ModelPreset, ChatAgent } from '@/components/chat/ChatInput.vue'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 const chatStore = useChatStore()
 const { toast } = useToast()
@@ -42,6 +43,17 @@ onMounted(async () => {
     if (res.ok) agents.value = await res.json()
   } catch {
     agents.value = []
+  }
+  // Preselect agent from query string (e.g. coming from Agents preview → Chat)
+  const qAgent = route.query.agentId
+  if (typeof qAgent === 'string' && qAgent && agents.value.some(a => a.id === qAgent)) {
+    selectedAgentId.value = qAgent
+  }
+})
+
+watch(() => route.query.agentId, (val) => {
+  if (typeof val === 'string' && val && agents.value.some(a => a.id === val)) {
+    selectedAgentId.value = val
   }
 })
 
