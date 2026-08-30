@@ -33,6 +33,9 @@ func (s *Store) EnsureSchema() error {
 	if _, err := s.ensureUserModelAccessCollection(users); err != nil {
 		return fmt.Errorf("ensure user_model_access: %w", err)
 	}
+	if _, err := s.ensureInvitationsCollection(users); err != nil {
+		return fmt.Errorf("ensure invitations: %w", err)
+	}
 	if _, err := s.ensureAgentsCollection(users); err != nil {
 		return fmt.Errorf("ensure agents: %w", err)
 	}
@@ -68,9 +71,6 @@ func (s *Store) EnsureSchema() error {
 	}
 	if err := s.ensurePromptOverridesCollection(); err != nil {
 		return fmt.Errorf("ensure prompt overrides: %w", err)
-	}
-	if _, err := s.ensureAgentsCollection(users); err != nil {
-		return fmt.Errorf("ensure agents: %w", err)
 	}
 	// NOTE: no admin user is seeded here. On a fresh install the first user
 	// registers via the browser and is promoted to admin by handleRegister.

@@ -74,6 +74,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Bot,
 } from 'lucide-vue-next'
 import { useTheme, type Theme } from '@/composables/useTheme'
 
@@ -216,6 +217,10 @@ function isFavoritesRoute() {
   return route.path === '/favorites'
 }
 
+function isAgentsRoute() {
+  return route.path.startsWith('/agents')
+}
+
 async function handleLogout() {
   closeMobile()
   await authStore.logout()
@@ -344,6 +349,32 @@ function onKeyDown(e: KeyboardEvent) {
             <kbd class="ml-auto inline-flex h-5 select-none items-center gap-1 rounded border border-sidebar-border bg-sidebar px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
               <span class="text-xs">Ctrl</span>K
             </kbd>
+          </Button>
+
+          <Tooltip v-if="collapsed && !isDrawer">
+            <TooltipTrigger as-child>
+              <Button
+                :variant="isAgentsRoute() ? 'secondary' : 'ghost'"
+                class="w-full justify-center"
+                size="sm"
+                @click="router.push('/agents'); closeMobile()"
+              >
+                <Bot class="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{{ $t('sidebar.agents') }}</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            v-else
+            :variant="isAgentsRoute() ? 'secondary' : 'ghost'"
+            class="w-full justify-start gap-2 font-normal"
+            size="sm"
+            @click="router.push('/agents'); closeMobile()"
+          >
+            <Bot class="h-4 w-4 opacity-70" />
+            {{ $t('sidebar.agents') }}
           </Button>
 
           <Tooltip v-if="collapsed && !isDrawer">

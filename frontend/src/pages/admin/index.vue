@@ -207,63 +207,85 @@ async function loadData(): Promise<void> {
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 
   try {
-	const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse, titleGenResponse, modelPresetsResponse, webSearchResponse] = await Promise.all([
-	      apiFetch("/api/admin/users", { signal: controller.signal }),
-	      apiFetch("/api/admin/invitations", { signal: controller.signal }),
-	      apiFetch("/api/admin/models", { signal: controller.signal }),
-	      apiFetch("/api/admin/provider-keys", { signal: controller.signal }),
-	      apiFetch("/api/admin/title-generation-policy", { signal: controller.signal }),
-	      apiFetch("/api/admin/model-presets", { signal: controller.signal }),
-	      apiFetch("/api/admin/web-search-config", { signal: controller.signal }),
-	    ]);
-			
-	    await assertOk(usersResponse, t("admin.shared.loadError"));
-	    await assertOk(invitationsResponse, t("admin.shared.loadError"));
-	    await assertOk(modelsResponse, t("admin.shared.loadError"));
-	    await assertOk(providerKeysResponse, t("admin.shared.loadError"));
-	    await assertOk(titleGenResponse, t("admin.shared.loadError"));
-	    await assertOk(modelPresetsResponse, t("admin.shared.loadError"));
-	    await assertOk(webSearchResponse, t("admin.shared.loadError"));
+    const [usersResponse, invitationsResponse, modelsResponse, providerKeysResponse, titleGenResponse, modelPresetsResponse, webSearchResponse] = await Promise.all([
+      apiFetch("/api/admin/users", { signal: controller.signal }),
+      apiFetch("/api/admin/invitations", { signal: controller.signal }),
+      apiFetch("/api/admin/models", { signal: controller.signal }),
+      apiFetch("/api/admin/provider-keys", { signal: controller.signal }),
+      apiFetch("/api/admin/title-generation-policy", { signal: controller.signal }),
+      apiFetch("/api/admin/model-presets", { signal: controller.signal }),
+      apiFetch("/api/admin/web-search-config", { signal: controller.signal }),
+    ]);
 
-	    users.value = (await readPayload<AdminUser[]>(usersResponse)) ?? [];
-	    invitations.value =
-	      (await readPayload<AdminInvitation[]>(invitationsResponse)) ?? [];
-	    models.value = (await readPayload<AdminModel[]>(modelsResponse)) ?? [];
-	    providerKeys.value =
-	      (await readPayload<ProviderKeyEntry[]>(providerKeysResponse)) ?? [];
+    // Handle each response independently so a single failing endpoint
+    // doesn't hide all admin data (regression seen when invitations 500'd).
+    let hasError = false
+    async function tryParse<T>(res: Response, setter: (v: T) => void, fallback: T) {
+      if (!res.ok) {
+        hasError = true
+        if (import.meta.env.DEV) console.warn("[admin] load failed", res.url, res.status)
+        return
+      }
+      try {
+        const data = await readPayload<T>(res)
+        setter(data ?? fallback)
+      } catch {
+        hasError = true
+      }
+    }
 
-	    const titleGenData = await readPayload<{ policy: TitleGenerationPolicy; catalog: CatalogModel[] }>(titleGenResponse);
-	    if (titleGenData) {
-	      titleGenPolicy.value = { ...titleGenData.policy };
-	      originalTitleGenPolicy.value = { ...titleGenData.policy };
-	      catalog.value = titleGenData.catalog ?? [];
-	    }
+    await tryParse<AdminUser[]>(usersResponse, v => users.value = v, [])
+    await tryParse<AdminInvitation[]>(invitationsResponse, v => invitations.value = v, [])
+    await tryParse<AdminModel[]>(modelsResponse, v => models.value = v, [])
+    await tryParse<ProviderKeyEntry[]>(providerKeysResponse, v => providerKeys.value = v, [])
 
-	const modelPresetsData = await readPayload<{ presets: AdminModelPreset[]; catalog: CatalogModel[] }>(modelPresetsResponse);
-	    if (modelPresetsData) {
-	      modelPresets.value = modelPresetsData.presets.map(p => ({ ...p }));
-	      // Merge catalog if title gen didn't already populate it
-	      if (modelPresetsData.catalog && catalog.value.length === 0) {
-	        catalog.value = modelPresetsData.catalog;
-	      }
-	    }
+    if (titleGenResponse.ok) {
+      const titleGenData = await readPayload<{ policy: TitleGenerationPolicy; catalog: CatalogModel[] }>(titleGenResponse)
+      if (titleGenData) {
+        titleGenPolicy.value = { ...titleGenData.policy }
+        originalTitleGenPolicy.value = { ...titleGenData.policy }
+        catalog.value = titleGenData.catalog ?? []
+      }
+    } else {
+      hasError = true
+    }
 
-	    const webSearchData = await readPayload<WebSearchConfig>(webSearchResponse);
-	    if (webSearchData) {
-	      webSearchConfig.value = { enabled: webSearchData.enabled, configured: webSearchData.configured };
-	      originalWebSearchConfig.value = { enabled: webSearchData.enabled, configured: webSearchData.configured };
-	    }
+    if (modelPresetsResponse.ok) {
+      const modelPresetsData = await readPayload<{ presets: AdminModelPreset[]; catalog: CatalogModel[] }>(modelPresetsResponse)
+      if (modelPresetsData) {
+        modelPresets.value = modelPresetsData.presets.map(p => ({ ...p }))
+        if (modelPresetsData.catalog && catalog.value.length === 0) {
+          catalog.value = modelPresetsData.catalog
+        }
+      }
+    } else {
+      hasError = true
+    }
+
+    if (webSearchResponse.ok) {
+      const webSearchData = await readPayload<WebSearchConfig>(webSearchResponse)
+      if (webSearchData) {
+        webSearchConfig.value = { enabled: webSearchData.enabled, configured: webSearchData.configured }
+        originalWebSearchConfig.value = { enabled: webSearchData.enabled, configured: webSearchData.configured }
+      }
+    } else {
+      hasError = true
+    }
+
+    if (hasError) {
+      toast(t("admin.shared.loadError"))
+    }
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      toast(t("admin.shared.loadError"));
+      toast(t("admin.shared.loadError"))
     } else {
       toast(
         error instanceof Error ? error.message : t("admin.shared.loadError"),
-      );
+      )
     }
   } finally {
-    clearTimeout(timeoutId);
-    isLoading.value = false;
+    clearTimeout(timeoutId)
+    isLoading.value = false
   }
 }
 
