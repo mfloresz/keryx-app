@@ -7,6 +7,7 @@ import (
 	_ "image/gif"
 	_ "image/png"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -165,9 +166,17 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, result, http.StatusCreated)
 }
 
-// handleLogout clears the session cookie. The token itself remains valid
-// until its natural expiry; the cookie is what the browser holds.
+// handleLogout clears the session cookie and rotates the user's auth
+// tokenKey, invalidating every outstanding token for the account. JWTs are
+// stateless, so per-session revocation isn't possible: logout ends them all.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if token := getBearerToken(r); token != "" {
+		if record, err := s.Store.FindAuthRecord(token); err == nil && record != nil {
+			if err := s.Store.RevokeSessions(record.Id); err != nil {
+				slog.Error("failed to revoke sessions on logout", "error", err, "user", record.Id)
+			}
+		}
+	}
 	clearAuthCookie(w, r)
 	jsonResponse(w, map[string]bool{"ok": true}, http.StatusOK)
 }
@@ -316,7 +325,8 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.Store.ChangePassword(userID, req.CurrentPassword, req.NewPassword); err != nil {
+	token, err := s.Store.ChangePassword(userID, req.CurrentPassword, req.NewPassword)
+	if err != nil {
 		if err == store.ErrForbidden {
 			errorResponse(w, "Current password is incorrect", http.StatusForbidden)
 			return
@@ -325,6 +335,10 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The tokenKey rotation revoked every existing session, including this
+	// one; re-issue a fresh token in the session cookie so the current device
+	// stays logged in (tokens never travel in JSON bodies).
+	setAuthCookie(w, r, token)
 	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
 }
 
