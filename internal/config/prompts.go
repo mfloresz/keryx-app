@@ -79,7 +79,7 @@ var defaultBaseSystemPrompt = strings.ReplaceAll(defaultBaseSystemPromptTemplate
 
 // defaultTitleGenerationSystemPrompt is the default system prompt for generating chat titles.
 const defaultTitleGenerationSystemPrompt = `You are a title generator for a chat:
-- Generate a short title from the user's first message
+- Generate a short title from the user's first message and any attached files
 - Your response should ONLY include the title.
 - You NEVER respond to the user's request; simply create a title that summarizes their request.
 - Max 13 words

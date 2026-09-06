@@ -757,14 +757,18 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	// Generate title if chat has no title, then save both title and messages.
 	if chat.Title == "" && len(req.Messages) > 0 && provider != nil {
-		firstUserMsg := ""
-		for _, m := range req.Messages {
-			if m.Role == "user" {
-				firstUserMsg = m.Content
+		var firstUserMsg *ai.ChatMessage
+		for i := range req.Messages {
+			if req.Messages[i].Role == "user" {
+				firstUserMsg = &req.Messages[i]
 				break
 			}
 		}
-		if firstUserMsg != "" {
+		titleMsg := ""
+		if firstUserMsg != nil {
+			titleMsg = ai.TitleUserMessage(*firstUserMsg, ai.TextAttachmentBudget)
+		}
+		if titleMsg != "" {
 			lang := req.Language
 			if lang == "" {
 				lang = "en"
@@ -807,7 +811,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			titlePrompt := s.Store.GetEffectiveTitlePrompt(s.Cfg.TitleGenerationSystemPrompt).Prompt
 			titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
-			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, firstUserMsg, lang)
+			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, titleMsg, lang)
 			cancel()
 			if err == nil && title != "" {
 				chat.Title = title

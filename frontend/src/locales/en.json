@@ -255,7 +255,10 @@
     "previousBranch": "Previous branch",
     "nextBranch": "Next branch",
     "fork": "New chat from here",
-    "forkTooltip": "Start a new chat from this message"
+    "forkTooltip": "Start a new chat from this message",
+    "preview": "Preview",
+    "codePreview": "HTML preview",
+    "codePreviewDescription": "Rendered from the code block in an isolated iframe."
   },
   "reasoning": {
     "thinking": "Thinking...",
