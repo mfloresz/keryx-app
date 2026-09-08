@@ -364,6 +364,11 @@ func (s *Server) apiKeyForProvider(providerID string) (string, error) {
 			return "", fmt.Errorf("OpenRouter API key not configured (set OPENROUTER_API_KEY or configure via admin UI)")
 		}
 		return s.Cfg.OpenRouterAPIKey, nil
+	case "inferx":
+		if s.Cfg.InferXAPIKey == "" {
+			return "", fmt.Errorf("InferX API key not configured (set INFERX_API_KEY or configure via admin UI)")
+		}
+		return s.Cfg.InferXAPIKey, nil
 	case "lmstudio":
 		return "", nil // local, no API key needed
 	default:
