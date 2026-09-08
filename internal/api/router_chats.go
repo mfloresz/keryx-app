@@ -593,7 +593,10 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	userMessageID := s.persistUserMessage(chatID, userID, req.UserMessage, req.WebSearch)
 	assistantMessageID := generateID()
 
-	provider, resolvedModel, err := s.getProviderForModel(req.Model)
+	// The OpenCode session groups a chat's requests for prompt-cache
+	// optimization. Stable per chat (including retries); a fork gets a fresh
+	// session via its new chat ID. Restarts must create a new chat.
+	provider, resolvedModel, err := s.getProviderForModel(req.Model, ai.SessionForChat(chatID))
 	if err != nil {
 		// getProviderForModel errors are operator-facing configuration issues
 		// (e.g. missing API key), so they're safe and useful to surface.
@@ -795,6 +798,12 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 							for _, m := range info.ResponsesAPIModels {
 								responsesAPIModels[m] = true
 							}
+							// Titles share the chat's OpenCode session so they
+							// hit the same prompt-cache grouping.
+							session := ""
+							if ai.IsOpencodeProvider(info.ID) {
+								session = ai.SessionForChat(chatID)
+							}
 							titleProvider = &ai.OpenAIProvider{
 								APIKey:             apiKey,
 								BaseURL:            info.BaseURL,
@@ -802,6 +811,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 								Timeout:            120 * time.Second,
 								GoAIOptions:        info.GoAIOptions,
 								ResponsesAPIModels: responsesAPIModels,
+								SessionID:          session,
 							}
 						}
 					}

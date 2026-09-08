@@ -270,14 +270,21 @@ func userKey(r *http.Request) string {
 // Known provider prefixes resolve directly (e.g. "venice/e2ee-deepseek-v4-flash"
 // sends "e2ee-deepseek-v4-flash" to the Venice API, "google/gemma-4-31b-it"
 // sends "gemma-4-31b-it" to the Google API).
-func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error) {
+//
+// sessionID carries the opaque OpenCode session for cache grouping (see
+// ai.SessionForChat). Only opencode-go/opencode-zen consume it; it is ignored
+// for every other provider. Opencode providers always get a fresh instance
+// (never the shared cache) so concurrent chats can't share a session.
+func (s *Server) getProviderForModel(modelID, sessionID string) (ai.Provider, string, error) {
 	info, upstreamModel, err := ai.ResolveModel(modelID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	if p, ok := s.AIProviders[info.ID]; ok {
-		return p, upstreamModel, nil
+	if !ai.IsOpencodeProvider(info.ID) {
+		if p, ok := s.AIProviders[info.ID]; ok {
+			return p, upstreamModel, nil
+		}
 	}
 
 	apiKey, err := s.apiKeyForProvider(info.ID)
@@ -297,6 +304,12 @@ func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error
 		for _, m := range info.ResponsesAPIModels {
 			responsesAPIModels[m] = true
 		}
+		// The OpenCode session groups a chat's requests for prompt-cache
+		// optimization. Only opencode-go/opencode-zen consume it.
+		session := ""
+		if ai.IsOpencodeProvider(info.ID) {
+			session = sessionID
+		}
 		p = &ai.OpenAIProvider{
 			APIKey:             apiKey,
 			BaseURL:            info.BaseURL,
@@ -304,9 +317,12 @@ func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error
 			Timeout:            120 * time.Second,
 			GoAIOptions:        info.GoAIOptions,
 			ResponsesAPIModels: responsesAPIModels,
+			SessionID:          session,
 		}
 	}
-	s.AIProviders[info.ID] = p
+	if !ai.IsOpencodeProvider(info.ID) {
+		s.AIProviders[info.ID] = p
+	}
 	return p, upstreamModel, nil
 }
 

@@ -29,6 +29,9 @@ type OpenAIProvider struct {
 	// Completions. Some gateways (e.g. opencode-go) only stream these models
 	// in real time over /responses.
 	ResponsesAPIModels map[string]bool
+	// SessionID carries the opaque OpenCode session for cache grouping.
+	// Only set for opencode-go/opencode-zen; empty for every other provider.
+	SessionID string
 }
 
 // reasoningEffort extracts the reasoning effort from a model variant string
@@ -63,11 +66,25 @@ func (p *OpenAIProvider) model() (provider.LanguageModel, error) {
 	if p == nil || p.APIKey == "" {
 		return nil, fmt.Errorf("openai-compatible provider not configured: missing API key")
 	}
-	opts := []openai.Option{openai.WithAPIKey(p.APIKey)}
+	return p.buildModel(reasoningBaseModel(p.Model)), nil
+}
+
+// headers identifies the app and, when SessionID is set, the chat conversation.
+// User-Agent is always keryx so OpenCode does not see a generic Go HTTP client.
+func (p *OpenAIProvider) headers() map[string]string {
+	h := map[string]string{"User-Agent": keryxUserAgent}
+	if trimmed := strings.TrimSpace(p.SessionID); trimmed != "" {
+		h[opencodeSessionHeader] = trimmed
+	}
+	return h
+}
+
+func (p *OpenAIProvider) buildModel(modelID string) provider.LanguageModel {
+	opts := []openai.Option{openai.WithAPIKey(p.APIKey), openai.WithHeaders(p.headers())}
 	if p.BaseURL != "" {
 		opts = append(opts, openai.WithBaseURL(p.BaseURL))
 	}
-	return openai.Chat(reasoningBaseModel(p.Model), opts...), nil
+	return openai.Chat(modelID, opts...)
 }
 
 // mergedOptions merges static GoAIOptions with per-call ProviderOptions.
@@ -195,11 +212,7 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (string, err
 
 	// Override model from request if provided
 	if req.Model != "" {
-		opts := []openai.Option{openai.WithAPIKey(p.APIKey)}
-		if p.BaseURL != "" {
-			opts = append(opts, openai.WithBaseURL(p.BaseURL))
-		}
-		model = openai.Chat(reasoningBaseModel(req.Model), opts...)
+		model = p.buildModel(reasoningBaseModel(req.Model))
 	}
 
 	result, err := goai.GenerateText(ctx, model, p.goaiOpts(req)...)
@@ -225,11 +238,7 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	// Override model from request if provided
 	if req.Model != "" {
-		opts := []openai.Option{openai.WithAPIKey(p.APIKey)}
-		if p.BaseURL != "" {
-			opts = append(opts, openai.WithBaseURL(p.BaseURL))
-		}
-		model = openai.Chat(reasoningBaseModel(req.Model), opts...)
+		model = p.buildModel(reasoningBaseModel(req.Model))
 	}
 
 	stream, err := goai.StreamText(ctx, model, p.goaiOpts(req)...)
