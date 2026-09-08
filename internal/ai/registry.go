@@ -148,6 +148,23 @@ var knownProviders = []ProviderInfo{
 		},
 	},
 	{
+		ID:           "inferx",
+		Name:         "InferX",
+		BaseURL:      "https://model.inferx.net/endpoints/v1",
+		OpenAICompat: true,
+		DefaultModel: "deepseek-v4-flash-0731",
+		GoAIOptions: map[string]any{
+			"useResponsesAPI": false,
+		},
+		Models: []ModelInfo{
+			{ID: "inferx/deepseek-v4-flash-0731", UpstreamID: "deepseek-v4-flash-0731", Provider: "inferx", DisplayName: "DeepSeek V4 Flash 0731", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/gemma-4-31B-it-fp8", UpstreamID: "gemma-4-31B-it-fp8", Provider: "inferx", DisplayName: "Gemma 4 31B IT FP8", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/Qwen3.6-35B-A3B-FP8", UpstreamID: "Qwen3.6-35B-A3B-FP8", Provider: "inferx", DisplayName: "Qwen 3.6 35B A3B FP8", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/qwen38-flash-next", UpstreamID: "qwen38-flash-next", Provider: "inferx", DisplayName: "Qwen 38 Flash Next", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/glm-5.3-flash", UpstreamID: "glm-5.3-flash", Provider: "inferx", DisplayName: "GLM 5.3 Flash", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+		},
+	},
+	{
 		ID:           "google",
 		Name:         "Google Gemma",
 		BaseURL:      "https://generativelanguage.googleapis.com",

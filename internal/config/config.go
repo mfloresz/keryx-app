@@ -26,6 +26,8 @@ type Config struct {
 	ChutesAPIKey string
 	// OpenRouter API Key (env fallback)
 	OpenRouterAPIKey string
+	// InferX API Key (env fallback)
+	InferXAPIKey string
 	// App base URL (for invitation links)
 	AppBaseURL string
 
@@ -111,6 +113,7 @@ func Load() (*Config, error) {
 	cfg.GoogleAPIKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
 	cfg.ChutesAPIKey = strings.TrimSpace(os.Getenv("CHUTES_API_KEY"))
 	cfg.OpenRouterAPIKey = strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+	cfg.InferXAPIKey = strings.TrimSpace(os.Getenv("INFERX_API_KEY"))
 	cfg.AppBaseURL = strings.TrimSpace(os.Getenv("APP_BASE_URL"))
 
 	// System prompts — env var > file path > default
