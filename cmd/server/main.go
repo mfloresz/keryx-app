@@ -13,7 +13,7 @@ import (
 	"keryx-server/internal/store"
 )
 
-var Version = "0.7.1"
+var Version = "0.8.0"
 
 func main() {
 	showVersion := flag.Bool("version", false, "print version and exit")
