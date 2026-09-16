@@ -9,6 +9,10 @@ export interface PromptInputMessage {
 export interface AttachmentFile extends FileUIPart {
   id: string
   file?: File
+  /** True while the document is being converted to Markdown in the worker. */
+  converting?: boolean
+  /** Markdown conversion of the document, produced client-side at attach time. */
+  convertedMarkdown?: string
 }
 
 export interface PromptInputContext {

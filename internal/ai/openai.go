@@ -11,6 +11,7 @@ import (
 	"github.com/zendev-sh/goai"
 	"github.com/zendev-sh/goai/provider"
 	"github.com/zendev-sh/goai/provider/openai"
+	"github.com/zendev-sh/goai/provider/openrouter"
 )
 
 // OpenAIProvider implements Provider for OpenAI-compatible APIs using goai.
@@ -29,6 +30,10 @@ type OpenAIProvider struct {
 	// Completions. Some gateways (e.g. opencode-go) only stream these models
 	// in real time over /responses.
 	ResponsesAPIModels map[string]bool
+	// OpenRouter selects goai's native OpenRouter provider, which adds the
+	// gateway's recommended headers (HTTP-Referer/X-Title -> "goai") and
+	// usage reporting. Without it OpenRouter shows the app as Unknown.
+	OpenRouter bool
 	// SessionID carries the opaque OpenCode session for cache grouping.
 	// Only set for opencode-go/opencode-zen; empty for every other provider.
 	SessionID string
@@ -79,7 +84,27 @@ func (p *OpenAIProvider) headers() map[string]string {
 	return h
 }
 
+// isOpenRouter reports whether this instance targets OpenRouter, either via
+// the explicit flag or by BaseURL. The flag covers tests with a mock URL;
+// the BaseURL check is a safety net for providers built without the flag.
+func (p *OpenAIProvider) isOpenRouter() bool {
+	if p == nil {
+		return false
+	}
+	if p.OpenRouter {
+		return true
+	}
+	return strings.Contains(p.BaseURL, "openrouter.ai")
+}
+
 func (p *OpenAIProvider) buildModel(modelID string) provider.LanguageModel {
+	if p.isOpenRouter() {
+		opts := []openrouter.Option{openrouter.WithAPIKey(p.APIKey), openrouter.WithHeaders(p.headers())}
+		if p.BaseURL != "" {
+			opts = append(opts, openrouter.WithBaseURL(p.BaseURL))
+		}
+		return openrouter.Chat(modelID, opts...)
+	}
 	opts := []openai.Option{openai.WithAPIKey(p.APIKey), openai.WithHeaders(p.headers())}
 	if p.BaseURL != "" {
 		opts = append(opts, openai.WithBaseURL(p.BaseURL))

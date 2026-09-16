@@ -33,6 +33,8 @@ export interface ChatRepository {
     request: BranchSelectionRequest,
   ): Promise<ChatRecord>;
   forkChat(chatId: string, messageId: string): Promise<ChatRecord>;
+  updatePreset(chatId: string, preset: string): Promise<ChatRecord>;
+  updateAgent(chatId: string, agentId: string | null): Promise<ChatRecord>;
   listFavorites(): Promise<FavoriteMessageEntry[]>;
   getVotes(chatId: string): Promise<Array<Record<string, any>>>;
   saveVote(chatId: string, request: VoteRequest): Promise<Record<string, any>>;

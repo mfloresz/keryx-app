@@ -73,8 +73,8 @@ func TestProviderByID(t *testing.T) {
 
 func TestModelCatalogCoversSeeds(t *testing.T) {
 	catalog := ModelCatalog()
-	if len(catalog) != 42 {
-		t.Fatalf("catalog len = %d, want 42", len(catalog))
+	if len(catalog) != 45 {
+		t.Fatalf("catalog len = %d, want 45", len(catalog))
 	}
 	for _, m := range catalog {
 		if info, ok := ProviderByID(m.Provider); !ok {
@@ -151,10 +151,12 @@ func TestOpenRouterCatalogMetadata(t *testing.T) {
 	if m := byID["openrouter/mistralai/mistral-small-2603"]; !m.SupportsImages {
 		t.Error("mistralai/mistral-small-2603 should support images")
 	}
+	if m := byID["openrouter/z-ai/glm-5.3-flash"]; !m.SupportsImages {
+		t.Error("z-ai/glm-5.3-flash should support images")
+	}
 	for _, id := range []string{
 		"openrouter/nvidia/nemotron-3.5-lightning",
 		"openrouter/inclusionai/ling-3.0-flash",
-		"openrouter/z-ai/glm-5.3-flash",
 	} {
 		if m := byID[id]; m.SupportsImages {
 			t.Errorf("%s should not support images", id)

@@ -105,6 +105,24 @@ export const apiChatRepository: ChatRepository = {
     );
   },
 
+  async updatePreset(chatId, preset) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/preset`, {
+        method: "PATCH",
+        body: JSON.stringify({ preset }),
+      }),
+    );
+  },
+
+  async updateAgent(chatId, agentId) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/agent`, {
+        method: "PATCH",
+        body: JSON.stringify({ agentId }),
+      }),
+    );
+  },
+
   async listFavorites() {
     return readJson(await apiFetch("/api/favorites"));
   },

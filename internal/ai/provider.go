@@ -53,16 +53,24 @@ type ChatMessage struct {
 }
 
 // ChatAttachment is a file attached to a message, already resolved to bytes.
+// Markdown, when set, is a text conversion of the document used as LLM
+// context in place of the raw bytes; it is resolved server-side and never
+// persisted with the message.
 type ChatAttachment struct {
 	ID        string `json:"id"`
 	Filename  string `json:"filename"`
 	MediaType string `json:"mediaType"`
 	Data      []byte `json:"-"`
+	Markdown  string `json:"-"`
 }
 
 // TextAttachmentBudget caps the total characters of text attachments inlined
 // into a title prompt (~2000 tokens at ~4 chars/token).
 const TextAttachmentBudget = 8000
+
+// MarkdownAttachmentBudget caps the characters of a document's Markdown
+// conversion inlined into a chat prompt (~50k tokens at ~4 chars/token).
+const MarkdownAttachmentBudget = 200_000
 
 // formatFileBlock renders a text attachment as a labeled file block for prompts.
 func formatFileBlock(filename, mediaType, text string) string {
@@ -78,17 +86,22 @@ func TitleUserMessage(m ChatMessage, maxAttachmentChars int) string {
 	b.WriteString(m.Content)
 	remaining := maxAttachmentChars
 	for _, a := range m.Attachments {
-		if remaining <= 0 || len(a.Data) == 0 || !isTextMedia(a.MediaType) {
+		var text, media string
+		if a.Markdown != "" {
+			text, media = a.Markdown, "text/markdown"
+		} else if len(a.Data) > 0 && isTextMedia(a.MediaType) {
+			text, media = string(a.Data), a.MediaType
+		}
+		if remaining <= 0 || text == "" {
 			continue
 		}
-		text := string(a.Data)
 		n := utf8.RuneCountInString(text)
 		if n > remaining {
 			text = TruncateText(text, remaining)
 			n = remaining
 		}
 		remaining -= n
-		b.WriteString("\n\n" + formatFileBlock(a.Filename, a.MediaType, text))
+		b.WriteString("\n\n" + formatFileBlock(a.Filename, media, text))
 	}
 	return b.String()
 }
@@ -115,14 +128,22 @@ func TruncateText(s string, maxChars int) string {
 }
 
 // messageParts converts a ChatMessage into goai provider parts.
-// Text-like attachments are inlined as labeled text; images go as image parts;
-// other binaries go as file parts with a data URL.
+// Attachments with a Markdown conversion are inlined as labeled text so any
+// provider can read them; text-like attachments are inlined as labeled text;
+// images go as image parts; other binaries go as file parts with a data URL.
 func messageParts(m ChatMessage) []provider.Part {
 	var parts []provider.Part
 	if m.Content != "" {
 		parts = append(parts, provider.Part{Type: provider.PartText, Text: m.Content})
 	}
 	for _, a := range m.Attachments {
+		if a.Markdown != "" {
+			parts = append(parts, provider.Part{
+				Type: provider.PartText,
+				Text: formatFileBlock(a.Filename, "text/markdown", a.Markdown),
+			})
+			continue
+		}
 		if len(a.Data) == 0 {
 			continue
 		}

@@ -21,6 +21,7 @@
     "@ai-sdk/openai-compatible": "^2.0.47",
     "@ai-sdk/vue": "^3.0.168",
     "@comark/vue": "^0.5.1",
+    "@firecrawl/anydoc-wasm": "^0.2.4",
     "@fontsource-variable/geist": "^5.2.9",
     "@fontsource-variable/ibm-plex-sans": "^5.2.8",
     "@fontsource-variable/manrope": "^5.2.8",

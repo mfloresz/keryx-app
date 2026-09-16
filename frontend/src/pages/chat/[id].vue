@@ -15,6 +15,9 @@ import { KeryxChatTransport } from '@/services/keryxChatTransport'
 import { getChatStreamApi, getChatTransportHeaders } from '@/services/chatTransport'
 import { watchChatTitle } from '@/services/titleWatcher'
 import { annotateBranchMetadata } from '@/shared/chatCore'
+import { extractHtmlArtifacts } from '@/utils/htmlArtifacts'
+import { useArtifactStore } from '@/stores/artifact'
+import ArtifactPanel from '@/components/artifacts/ArtifactPanel.vue'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import type { ModelPreset, ChatAgent } from '@/components/chat/ChatInput.vue'
@@ -74,14 +77,14 @@ const annotatedMessages = computed<UIMessage[]>(() => {
   }
 })
 
-// Presets state
-const selectedPreset = ref(
-  typeof route.query.preset === 'string' && route.query.preset
-    ? route.query.preset
-    : 'fast',
-)
+// Presets state: query wins on fresh navigation (new chat), otherwise the
+// persisted chat.preset restored after loadChat() below.
+const queryPreset = typeof route.query.preset === 'string' && route.query.preset ? route.query.preset : null
+const selectedPreset = ref(queryPreset ?? 'fast')
 const presets = ref<ModelPreset[]>([])
 const webSearchGloballyEnabled = ref(false)
+const chatLoaded = ref(false)
+const agentsLoaded = ref(false)
 
 function buildFallbackPresets(): ModelPreset[] {
   return [
@@ -123,22 +126,26 @@ function buildSearchRequestBody(webSearch: boolean) {
   }
 }
 
-// ---- Agents ----
+// ---- Agents: query wins on fresh navigation, otherwise chat.agentId ----
 const agents = ref<ChatAgent[]>([])
-const selectedAgentId = ref<string | null>(
-  typeof route.query.agentId === 'string' && route.query.agentId ? route.query.agentId : null,
-)
+const queryAgentId =
+  typeof route.query.agentId === 'string' && route.query.agentId ? route.query.agentId : null
+const selectedAgentId = ref<string | null>(queryAgentId)
 
 const selectedAgentExists = computed(() =>
   !selectedAgentId.value || agents.value.some(a => a.id === selectedAgentId.value),
 )
 
-watch(selectedAgentExists, (exists) => {
-  if (!exists && selectedAgentId.value) {
+function maybeClearMissingAgent() {
+  if (!chatLoaded.value || !agentsLoaded.value) return
+  if (!selectedAgentExists.value && selectedAgentId.value) {
     toast(t('chat.agent.missing'))
     selectedAgentId.value = null
   }
-})
+}
+
+watch(selectedAgentExists, () => { maybeClearMissingAgent() })
+watch([chatLoaded, agentsLoaded], () => { maybeClearMissingAgent() })
 
 async function fetchAgents() {
   try {
@@ -146,25 +153,35 @@ async function fetchAgents() {
     if (res.ok) agents.value = await res.json()
   } catch {
     agents.value = []
+  } finally {
+    agentsLoaded.value = true
   }
 }
 
 async function persistChatAgent(agentId: string | null) {
-  if (!chatId.value) return
+  if (!chatId.value || !chatLoaded.value) return
   if ((chatData.value?.agentId ?? null) === (agentId ?? null)) return
   try {
-    const headers = await (await getAuthAdapter()).getAuthorizationHeaders()
-    await fetch(`/api/chats/${chatId.value}/agent`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json', ...headers },
-      body: JSON.stringify({ agentId }),
-    })
+    const updated = await chatRepository.updateAgent(chatId.value, agentId)
+    if (chatData.value) chatData.value = { ...chatData.value, agentId: updated?.agentId ?? agentId }
+  } catch {
+    // Non-fatal: selection stays local for this session.
+  }
+}
+
+async function persistChatPreset(preset: string) {
+  if (!chatId.value || !chatLoaded.value || !preset) return
+  if ((chatData.value?.preset ?? 'fast') === preset) return
+  try {
+    const updated = await chatRepository.updatePreset(chatId.value, preset)
+    if (chatData.value) chatData.value = { ...chatData.value, preset: (updated as any)?.preset ?? preset }
   } catch {
     // Non-fatal: selection stays local for this session.
   }
 }
 
 watch(selectedAgentId, (value) => { void persistChatAgent(value) })
+watch(selectedPreset, (value) => { void persistChatPreset(value) })
 
 async function loadChat() {
   isLoading.value = true
@@ -184,6 +201,16 @@ async function loadChat() {
     ])
     if (!loadedChat) throw new Error('Chat not found')
     chatData.value = loadedChat
+    // Hydrate selectors from persisted state when the URL carries none.
+    // Query wins so a fresh navigation (index.vue push) applies immediately;
+    // the watchers persist it via PATCH since it differs from stored state.
+    if (!queryPreset && typeof (loadedChat as any).preset === 'string' && (loadedChat as any).preset) {
+      selectedPreset.value = (loadedChat as any).preset
+    }
+    if (!queryAgentId && (loadedChat as any).agentId) {
+      selectedAgentId.value = (loadedChat as any).agentId
+    }
+    chatLoaded.value = true
   } catch (err: any) {
     loadError.value = err instanceof Error ? getUserFacingChatError(err.message, t) : t('chat.errors.unexpected')
   } finally {
@@ -273,11 +300,19 @@ const chat = new Chat({
   }
 })
 
+// HTML artifacts panel state. Declared AFTER `chat` (and `annotatedMessages`)
+// so the immediate sync below never evaluates them while in TDZ.
+const artifactStore = useArtifactStore()
+
+const htmlArtifacts = computed(() => extractHtmlArtifacts(annotatedMessages.value as unknown as Array<{ id: string, parts: unknown }>))
+
+watch(htmlArtifacts, (next) => { artifactStore.syncItems(next) }, { immediate: true })
+
+watch(chatId, () => { artifactStore.reset() })
 // Watch for streaming completion. Only lightweight metadata (title, usage)
 // is refreshed — chat.messages is NOT re-hydrated here so the rendered
 // conversation never flickers when a stream ends.
-watch(() => chat.status, async (status, prevStatus) => {
-  if ((prevStatus === 'streaming' || prevStatus === 'submitted') && status === 'ready') {
+watch(() => chat.status, async (status, prevStatus) => {  if ((prevStatus === 'streaming' || prevStatus === 'submitted') && status === 'ready') {
     await nextTick()
     setTimeout(async () => {
       try {
@@ -528,7 +563,8 @@ onMounted(async () => {
     </div>
   </div>
 
-  <div v-else class="flex flex-col h-full">
+  <div v-else class="flex h-full min-h-0">
+    <div class="flex min-w-0 flex-1 flex-col h-full">
     <!-- Edit message dialog -->
     <Dialog :open="isEditDialogOpen" @update:open="(v: boolean) => { if (!v) cancelEdit() }">
       <DialogContent class="sm:max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
@@ -549,8 +585,11 @@ onMounted(async () => {
     </Dialog>
 
     <!-- Chat header -->
-    <div class="hidden lg:block px-4 py-3">
-      <h2 class="font-semibold truncate">{{ chatTitle }}</h2>
+    <div class="hidden lg:flex items-center gap-2 px-4 py-3">
+      <h2 class="font-semibold truncate flex-1">{{ chatTitle }}</h2>
+      <Button v-if="htmlArtifacts.length" variant="outline" size="sm" class="h-7 text-xs" @click="artifactStore.open()">
+        {{ $t('artifact.openPanel', { count: htmlArtifacts.length }) }}
+      </Button>
     </div>
 
     <!-- Messages -->
@@ -563,5 +602,8 @@ onMounted(async () => {
       :agents="agents" :agent-id="selectedAgentId"
       @update:agentId="selectedAgentId = $event"
       @submit="handleSubmit" @update:preset="selectedPreset = $event" @stop="handleStop" />
+    </div>
+
+    <ArtifactPanel v-if="artifactStore.isOpen && (htmlArtifacts.length || artifactStore.all.length)" class="fixed inset-0 z-50 lg:static" />
   </div>
 </template>

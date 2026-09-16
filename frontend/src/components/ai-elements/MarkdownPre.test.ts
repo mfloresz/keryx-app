@@ -1,7 +1,9 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { createApp, defineComponent, h, Suspense } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
 import i18n from '@/i18n'
 import { AppComark } from '@/components/ai-elements/comark'
+import { useArtifactStore } from '@/stores/artifact'
 
 function mountMarkdown(md: string): HTMLElement {
   const host = document.createElement('div')
@@ -11,6 +13,7 @@ function mountMarkdown(md: string): HTMLElement {
       h(Suspense, null, { default: () => h(AppComark, { markdown: md }) }),
   })
   const app = createApp(Root)
+  app.use(createPinia())
   app.use(i18n)
   app.mount(host)
   return host
@@ -28,6 +31,16 @@ async function waitFor(
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
 }
+
+beforeEach(() => {
+  setActivePinia(createPinia())
+  if (!URL.createObjectURL) {
+    URL.createObjectURL = () => 'blob:mock-url'
+  }
+  if (!URL.revokeObjectURL) {
+    URL.revokeObjectURL = () => {}
+  }
+})
 
 afterEach(() => {
   document.body.innerHTML = ''
@@ -55,17 +68,19 @@ describe('MarkdownPre', () => {
     expect(host.querySelectorAll('[aria-label="Preview"]').length).toBe(1)
   })
 
-  it('renders the html fence in a sandboxed iframe when preview is clicked', async () => {
+  it('opens the isolated artifacts panel (no srcdoc iframe) when preview is clicked', async () => {
     const host = mountMarkdown('```html\n<p>hello artifact</p>\n```\n')
     const previewButton = (await waitFor(() =>
       host.querySelector('[aria-label="Preview"]'),
     )) as HTMLButtonElement | null
     expect(previewButton).not.toBeNull()
     previewButton!.click()
-    const iframe = (await waitFor(() =>
-      document.body.querySelector('iframe[sandbox="allow-scripts"]'),
-    )) as HTMLIFrameElement | null
-    expect(iframe).not.toBeNull()
-    expect(iframe!.getAttribute('srcdoc')).toContain('<p>hello artifact</p>')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    const store = useArtifactStore()
+    expect(store.isOpen).toBe(true)
+    expect(store.active?.code).toContain('<p>hello artifact</p>')
+    // The inline chat must not render a srcdoc iframe (it inherits the app
+    // CSP and blocks inline scripts); preview lives in ArtifactPanel via blob:.
+    expect(host.querySelector('iframe[srcdoc]')).toBeNull()
   })
 })

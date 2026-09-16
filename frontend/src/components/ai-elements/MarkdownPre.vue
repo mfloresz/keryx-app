@@ -1,21 +1,15 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { CodeBlockCopyButton } from '@/components/ai-elements/code-block'
 import { CodeBlockKey } from '@/components/ai-elements/code-block/context'
+import { useArtifactStore } from '@/stores/artifact'
 import { EyeIcon } from 'lucide-vue-next'
 import { computed, onUpdated, provide, ref } from 'vue'
 
 /**
  * Replacement renderer for <pre> elements in markdown (code fences).
  * Adds a hover toolbar with a copy button and, for HTML fences,
- * a sandboxed iframe preview.
+ * opens the isolated artifacts panel (blob: URL, opaque origin).
  */
 defineOptions({ inheritAttrs: false })
 
@@ -24,7 +18,7 @@ const props = defineProps<{
 }>()
 
 const preRef = ref<HTMLElement | null>(null)
-const showPreview = ref(false)
+const artifactStore = useArtifactStore()
 // The slot content re-renders while streaming without swapping the <pre>
 // element, so track updates to invalidate the cached text.
 const renderVersion = ref(0)
@@ -41,6 +35,10 @@ const code = computed(() => {
 provide(CodeBlockKey, { code })
 
 const isHtml = computed(() => props.language === 'html')
+
+function openArtifact() {
+  artifactStore.openFromCodeBlock(code.value)
+}
 </script>
 
 <template>
@@ -56,25 +54,11 @@ const isHtml = computed(() => props.language === 'html')
         class="size-7"
         :aria-label="$t('message.preview')"
         :title="$t('message.preview')"
-        @click="showPreview = true"
+        @click="openArtifact"
       >
         <EyeIcon :size="14" />
       </Button>
       <CodeBlockCopyButton class="size-7" :aria-label="$t('message.copy')" :title="$t('message.copy')" />
     </div>
-    <Dialog v-model:open="showPreview">
-      <DialogContent class="max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>{{ $t('message.codePreview') }}</DialogTitle>
-          <DialogDescription>{{ $t('message.codePreviewDescription') }}</DialogDescription>
-        </DialogHeader>
-        <iframe
-          v-if="showPreview"
-          sandbox="allow-scripts"
-          :srcdoc="code"
-          class="h-[70vh] w-full rounded-md border bg-white"
-        />
-      </DialogContent>
-    </Dialog>
   </div>
 </template>

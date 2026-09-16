@@ -40,3 +40,28 @@ func (s *Server) handleUpdateChatAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	jsonResponse(w, map[string]any{"success": true, "agentId": chat.AgentID}, http.StatusOK)
 }
+
+// handleUpdateChatPreset persists the model preset selection for a chat.
+// Body: {"preset": string}. Owner-only, same pattern as agent/title.
+func (s *Server) handleUpdateChatPreset(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	chatID := r.PathValue("id")
+
+	var req struct {
+		Preset string `json:"preset"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
+	chat, err := s.Store.UpdateChatPreset(chatID, userID, req.Preset)
+	if err != nil {
+		errorResponse(w, "Chat not found", http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, map[string]any{"success": true, "preset": chat.Preset}, http.StatusOK)
+}
