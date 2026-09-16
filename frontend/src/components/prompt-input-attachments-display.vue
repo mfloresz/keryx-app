@@ -7,6 +7,7 @@ import {
   Attachments,
 } from '@/components/ai-elements/attachments'
 import { usePromptInput } from '@/components/ai-elements/prompt-input'
+import { Loader2Icon } from 'lucide-vue-next'
 
 const { files, removeFile } = usePromptInput()
 </script>
@@ -24,6 +25,11 @@ const { files, removeFile } = usePromptInput()
     >
       <AttachmentPreview />
       <AttachmentInfo />
+      <Loader2Icon
+        v-if="attachment.converting"
+        class="size-3 animate-spin text-muted-foreground"
+        aria-hidden="true"
+      />
       <AttachmentRemove />
     </Attachment>
   </Attachments>

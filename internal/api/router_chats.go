@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"keryx-server/internal/ai"
 	"keryx-server/internal/store"
@@ -589,11 +590,15 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	// Persist the new user message and the web-search flag BEFORE streaming,
 	// so the user's input is durable even if the stream fails or the client
 	// disconnects mid-response. Upsert by message id keeps edit/regenerate
-	// flows from duplicating the message.
-	userMessageID := s.persistUserMessage(chatID, userID, req.UserMessage, req.WebSearch)
+	// flows from duplicating the message. Preset and agent selection travel
+	// with every stream so closing/reopening a chat restores them.
+	userMessageID := s.persistUserMessage(chatID, userID, req.UserMessage, req.WebSearch, req.Preset, req.AgentID)
 	assistantMessageID := generateID()
 
-	provider, resolvedModel, err := s.getProviderForModel(req.Model)
+	// The OpenCode session groups a chat's requests for prompt-cache
+	// optimization. Stable per chat (including retries); a fork gets a fresh
+	// session via its new chat ID. Restarts must create a new chat.
+	provider, resolvedModel, err := s.getProviderForModel(req.Model, ai.SessionForChat(chatID))
 	if err != nil {
 		// getProviderForModel errors are operator-facing configuration issues
 		// (e.g. missing API key), so they're safe and useful to surface.
@@ -757,14 +762,18 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	// Generate title if chat has no title, then save both title and messages.
 	if chat.Title == "" && len(req.Messages) > 0 && provider != nil {
-		firstUserMsg := ""
-		for _, m := range req.Messages {
-			if m.Role == "user" {
-				firstUserMsg = m.Content
+		var firstUserMsg *ai.ChatMessage
+		for i := range req.Messages {
+			if req.Messages[i].Role == "user" {
+				firstUserMsg = &req.Messages[i]
 				break
 			}
 		}
-		if firstUserMsg != "" {
+		titleMsg := ""
+		if firstUserMsg != nil {
+			titleMsg = ai.TitleUserMessage(*firstUserMsg, ai.TextAttachmentBudget)
+		}
+		if titleMsg != "" {
 			lang := req.Language
 			if lang == "" {
 				lang = "en"
@@ -791,6 +800,12 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 							for _, m := range info.ResponsesAPIModels {
 								responsesAPIModels[m] = true
 							}
+							// Titles share the chat's OpenCode session so they
+							// hit the same prompt-cache grouping.
+							session := ""
+							if ai.IsOpencodeProvider(info.ID) {
+								session = ai.SessionForChat(chatID)
+							}
 							titleProvider = &ai.OpenAIProvider{
 								APIKey:             apiKey,
 								BaseURL:            info.BaseURL,
@@ -798,6 +813,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 								Timeout:            120 * time.Second,
 								GoAIOptions:        info.GoAIOptions,
 								ResponsesAPIModels: responsesAPIModels,
+								SessionID:          session,
+								OpenRouter:         info.ID == "openrouter",
 							}
 						}
 					}
@@ -807,7 +824,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			titlePrompt := s.Store.GetEffectiveTitlePrompt(s.Cfg.TitleGenerationSystemPrompt).Prompt
 			titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
-			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, firstUserMsg, lang)
+			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, titleMsg, lang)
 			cancel()
 			if err == nil && title != "" {
 				chat.Title = title
@@ -884,9 +901,10 @@ func languageName(lang string) string {
 }
 
 // persistUserMessage upserts the client-provided user message into the chat
-// and records the web-search flag. Returns the persisted message id (empty
-// when nothing was persisted). Serialized per chat via the chat lock.
-func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, webSearch bool) string {
+// and records the web-search flag, model preset and agent selection. Returns
+// the persisted message id (empty when nothing was persisted). Serialized per
+// chat via the chat lock.
+func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, webSearch bool, preset, agentID string) string {
 	unlock := s.lockChat(chatID)
 	defer unlock()
 
@@ -895,6 +913,20 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 		return ""
 	}
 	chat.WebSearch = webSearch
+	if preset != "" {
+		chat.Preset = preset
+	}
+	// Persist the agent only when it is visible to the owner; a deleted or
+	// foreign agent falls back to the base prompt for this stream without
+	// overwriting the stored selection (the UI clears it explicitly via
+	// PATCH /api/chats/{id}/agent once it detects the missing agent).
+	if agentID != "" {
+		if _, err := s.Store.GetAgentForStream(agentID, userID); err == nil {
+			chat.AgentID = agentID
+		}
+	} else {
+		chat.AgentID = ""
+	}
 
 	messageID := ""
 	if len(raw) > 0 {
@@ -1118,7 +1150,10 @@ func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
 
 // resolveAttachments loads attachment bytes for any message whose attachment
 // refs carry an ID. Metadata sent by the client is trusted only for display;
-// server-side data always wins for filename/mediaType.
+// server-side data always wins for filename/mediaType. When the attachment
+// has a stored Markdown conversion, up to ai.MarkdownAttachmentBudget chars
+// are loaded for LLM context; a missing or unreadable conversion degrades to
+// the raw-bytes behavior.
 func (s *Server) resolveAttachments(userID string, m ai.ChatMessage) (ai.ChatMessage, error) {
 	for i, a := range m.Attachments {
 		if a.ID == "" || a.Data != nil {
@@ -1131,6 +1166,9 @@ func (s *Server) resolveAttachments(userID string, m ai.ChatMessage) (ai.ChatMes
 		m.Attachments[i].Data = data
 		m.Attachments[i].Filename = info.Filename
 		m.Attachments[i].MediaType = info.MediaType
+		if md, err := s.Store.GetAttachmentMarkdown(a.ID, userID, ai.MarkdownAttachmentBudget*utf8.UTFMax); err == nil {
+			m.Attachments[i].Markdown = ai.TruncateText(md, ai.MarkdownAttachmentBudget)
+		}
 	}
 	return m, nil
 }
@@ -1277,6 +1315,8 @@ func (s *Server) handleForkChat(w http.ResponseWriter, r *http.Request) {
 		Title:      srcChat.Title,
 		Visibility: store.VisibilityPrivate,
 		WebSearch:  srcChat.WebSearch,
+		AgentID:    srcChat.AgentID,
+		Preset:     srcChat.Preset,
 		Messages:   newMessagesJSON,
 		Votes:      json.RawMessage("[]"),
 		Branches:   json.RawMessage("{}"),

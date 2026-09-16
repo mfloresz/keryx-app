@@ -17,8 +17,10 @@ type AttachmentInfo struct {
 }
 
 // SaveAttachment stores a single file in the attachments collection,
-// linked to the given chat and owned by the given user.
-func (s *Store) SaveAttachment(chatID, ownerID, filename, mediaType string, data []byte) (*AttachmentInfo, error) {
+// linked to the given chat and owned by the given user. converted, when
+// non-empty, is the Markdown conversion of the document stored alongside
+// the original blob and used only as LLM context.
+func (s *Store) SaveAttachment(chatID, ownerID, filename, mediaType string, data []byte, convertedName string, converted []byte) (*AttachmentInfo, error) {
 	collection, err := s.App.FindCollectionByNameOrId(AttachmentsCollection)
 	if err != nil {
 		return nil, err
@@ -36,6 +38,14 @@ func (s *Store) SaveAttachment(chatID, ownerID, filename, mediaType string, data
 	record.Set("media_type", mediaType)
 	record.Set("size", len(data))
 	record.Set("file", file)
+
+	if len(converted) > 0 {
+		convertedFile, err := filesystem.NewFileFromBytes(converted, convertedName)
+		if err != nil {
+			return nil, err
+		}
+		record.Set("converted_file", convertedFile)
+	}
 
 	if err := s.App.Save(record); err != nil {
 		return nil, err
@@ -71,6 +81,40 @@ func (s *Store) GetAttachmentData(attachmentID, ownerID string) (*AttachmentInfo
 	}
 
 	return attachmentInfoFromRecord(record), data, nil
+}
+
+// GetAttachmentMarkdown returns up to maxBytes of the Markdown conversion
+// stored with an attachment, owned by the user. Returns ErrNotFound when the
+// attachment or its conversion does not exist.
+func (s *Store) GetAttachmentMarkdown(attachmentID, ownerID string, maxBytes int) (string, error) {
+	record, err := s.findOwnedAttachment(attachmentID, ownerID)
+	if err != nil {
+		return "", err
+	}
+
+	convertedName := record.GetString("converted_file")
+	if convertedName == "" {
+		return "", ErrNotFound
+	}
+
+	fsys, err := s.App.NewFilesystem()
+	if err != nil {
+		return "", err
+	}
+	defer fsys.Close()
+
+	reader, err := fsys.GetReader(record.BaseFilesPath() + "/" + convertedName)
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+
+	data, err := io.ReadAll(io.LimitReader(reader, int64(maxBytes)))
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
 }
 
 // DeleteChatAttachments removes all attachments linked to a chat.

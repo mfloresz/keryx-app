@@ -38,7 +38,13 @@ func (s *Store) ensureAgentsCollection(users *core.Collection) (*core.Collection
 	return c, nil
 }
 
-// migrateChatsCollectionForAgents adds agent_id to an existing chats collection.
+// migrateChatsCollectionForAgents adds agent_id and preset to an existing
+// chats collection. agent_id stays TextField (not Relation) so deleting an
+// agent never breaks existing chats — the stream falls back to base prompt
+// and the UI clears the selection.
 func (s *Store) migrateChatsCollectionForAgents(c *core.Collection) error {
-	return s.ensureField(c, &core.TextField{Name: "agent_id", Max: 80})
+	if err := s.ensureField(c, &core.TextField{Name: "agent_id", Max: 80}); err != nil {
+		return err
+	}
+	return s.ensureField(c, &core.TextField{Name: "preset", Max: 30})
 }

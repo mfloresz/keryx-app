@@ -127,6 +127,8 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
       messages: [{ id: randomUUID(), role: 'user', parts: [{ type: 'text', text }], createdAt: new Date().toISOString() }],
       votes: [],
       webSearch: Boolean(webSearch),
+      preset: selectedPreset.value,
+      agentId: selectedAgentId.value,
     }
     const saved = await chatRepository.createChat(baseChat)
     const chatId = saved.id

@@ -217,6 +217,8 @@
     "unsupportedImageTitle": "Imagen no soportada",
     "unsupportedImageDescription": "El modelo seleccionado no soporta imagenes. Solo se permiten documentos de texto.",
     "unsupportedCloudAttachmentDescription": "En modo cloud, los adjuntos deben cargarse como archivos locales integrados. Vuelve a adjuntar el archivo e intentalo de nuevo.",
+    "attachmentNoTextLayer": "Este PDF no contiene texto extraible (puede estar escaneado). Adjunta un PDF con capa de texto.",
+    "attachmentConvertError": "No se pudo convertir el documento a texto, por lo que no se adjuntó.",
     "thinking": "Pensando...",
     "stop": "Detener",
     "errors": {
@@ -255,7 +257,25 @@
     "previousBranch": "Rama anterior",
     "nextBranch": "Siguiente rama",
     "fork": "Nuevo chat desde aquí",
-    "forkTooltip": "Iniciar un nuevo chat desde este mensaje"
+    "forkTooltip": "Iniciar un nuevo chat desde este mensaje",
+    "preview": "Vista previa",
+    "codePreview": "Vista previa HTML",
+    "codePreviewDescription": "Renderizado del bloque de código en un iframe aislado."
+  },
+  "artifact": {
+    "openPanel": "Artefactos ({count})",
+    "version": "Versión del artefacto",
+    "previous": "Artefacto anterior",
+    "next": "Artefacto siguiente",
+    "code": "Código",
+    "download": "Descargar HTML",
+    "openNewTab": "Abrir en pestaña nueva",
+    "reload": "Recargar vista previa",
+    "empty": "Ningún artefacto HTML seleccionado.",
+    "isolatedNote": "Iframe aislado · red permitida",
+    "publishing": "Publicando vista previa…",
+    "publishError": "No se pudo publicar la vista previa.",
+    "retry": "Reintentar"
   },
   "reasoning": {
     "thinking": "Pensando...",

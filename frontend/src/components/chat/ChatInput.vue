@@ -43,6 +43,7 @@ import {
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
 import { GlobeIcon, XIcon, BotIcon, CheckIcon } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -73,7 +74,7 @@ const PRESET_DESCRIPTION_KEYS: Record<string, { title: string; subtitle: string 
   extended_context: { title: 'chat.presetExtended', subtitle: 'chat.presetExtendedDesc' },
 }
 
-const DOCUMENT_ACCEPT = '.pdf,.txt,.md,.doc,.docx,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.cpp,.go,.rs'
+const DOCUMENT_ACCEPT = '.pdf,.txt,.md,.doc,.docx,.docm,.odt,.ods,.odp,.ppt,.pptx,.pptm,.ppsx,.ppsm,.xls,.xlsx,.xlsm,.rtf,.epub,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.cpp,.go,.rs'
 
 const props = defineProps<{
   status?: ChatStatus
@@ -122,6 +123,14 @@ function presetSubtitle(presetId: string) {
 function handleAttachmentError(err: { code: string, message: string }) {
   if (err.code === 'accept' && !modelSupportsImages.value) {
     unsupportedImageDialogOpen.value = true
+    return
+  }
+  if (err.code === 'no_text_layer') {
+    toast.error(t('chat.attachmentNoTextLayer'))
+    return
+  }
+  if (err.code === 'convert_error') {
+    toast.error(t('chat.attachmentConvertError'))
     return
   }
   // Other errors are silently ignored; the filepicker already filters correctly

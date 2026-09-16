@@ -49,6 +49,10 @@ type Server struct {
 	streamLimiter     *rateLimiter
 	accountLimiter    *rateLimiter
 	adminLimiter      *rateLimiter
+
+	// artifacts holds published HTML preview documents (short-lived,
+	// capability-URL addressed; see artifacts.go).
+	artifacts *artifactStore
 }
 
 func New(st *store.Store, cfg *config.Config) *Server {
@@ -62,6 +66,7 @@ func New(st *store.Store, cfg *config.Config) *Server {
 		streamLimiter:     newRateLimiter(10), // 10 stream starts/min per user
 		accountLimiter:    newRateLimiter(10), // 10 account changes/min per user
 		adminLimiter:      newRateLimiter(30), // 30 admin ops/min per user
+		artifacts:         newArtifactStore(),
 	}
 }
 
@@ -121,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/chats/{id}/votes", s.withAuth(s.handleSaveVote))
 	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.withRateLimit(s.streamLimiter, userKey, s.handleChatStream)))
 	mux.HandleFunc("PATCH /api/chats/{id}/agent", s.withAuth(s.handleUpdateChatAgent))
+	mux.HandleFunc("PATCH /api/chats/{id}/preset", s.withAuth(s.handleUpdateChatPreset))
 	mux.HandleFunc("GET /api/chats/{id}/stream", s.withAuth(s.handleReconnectStream))
 	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
@@ -171,6 +177,12 @@ func (s *Server) Handler() http.Handler {
 	// boolean feature flag, and chat pages fetch it without auth headers)
 	mux.HandleFunc("GET /api/web-search/config", s.handleWebSearchConfig)
 
+	// HTML artifact previews: POST requires auth; GET is addressed by an
+	// unguessable capability token and served with framing-friendly headers
+	// (see artifacts.go).
+	mux.HandleFunc("POST /api/artifacts", s.withAuth(s.handlePublishArtifact))
+	mux.HandleFunc("GET /api/artifacts/{token}", s.handleGetArtifact)
+
 	// SPA static files (catch-all)
 	mux.HandleFunc("/", StaticHandler(s.Cfg.StaticDir))
 
@@ -193,7 +205,8 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; "+
+			"default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; "+
+				"frame-src 'self' blob: data:; child-src 'self' blob: data:; "+
 				"img-src 'self' blob: data: attachment: https://models.dev; font-src 'self' data:; "+
 				"media-src 'self' blob: data: attachment:; "+
 				"connect-src 'self' https://ai-gateway.vercel.sh https://*.supabase.co ws: wss: blob: data:; "+
@@ -270,14 +283,21 @@ func userKey(r *http.Request) string {
 // Known provider prefixes resolve directly (e.g. "venice/e2ee-deepseek-v4-flash"
 // sends "e2ee-deepseek-v4-flash" to the Venice API, "google/gemma-4-31b-it"
 // sends "gemma-4-31b-it" to the Google API).
-func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error) {
+//
+// sessionID carries the opaque OpenCode session for cache grouping (see
+// ai.SessionForChat). Only opencode-go/opencode-zen consume it; it is ignored
+// for every other provider. Opencode providers always get a fresh instance
+// (never the shared cache) so concurrent chats can't share a session.
+func (s *Server) getProviderForModel(modelID, sessionID string) (ai.Provider, string, error) {
 	info, upstreamModel, err := ai.ResolveModel(modelID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	if p, ok := s.AIProviders[info.ID]; ok {
-		return p, upstreamModel, nil
+	if !ai.IsOpencodeProvider(info.ID) {
+		if p, ok := s.AIProviders[info.ID]; ok {
+			return p, upstreamModel, nil
+		}
 	}
 
 	apiKey, err := s.apiKeyForProvider(info.ID)
@@ -297,6 +317,12 @@ func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error
 		for _, m := range info.ResponsesAPIModels {
 			responsesAPIModels[m] = true
 		}
+		// The OpenCode session groups a chat's requests for prompt-cache
+		// optimization. Only opencode-go/opencode-zen consume it.
+		session := ""
+		if ai.IsOpencodeProvider(info.ID) {
+			session = sessionID
+		}
 		p = &ai.OpenAIProvider{
 			APIKey:             apiKey,
 			BaseURL:            info.BaseURL,
@@ -304,9 +330,13 @@ func (s *Server) getProviderForModel(modelID string) (ai.Provider, string, error
 			Timeout:            120 * time.Second,
 			GoAIOptions:        info.GoAIOptions,
 			ResponsesAPIModels: responsesAPIModels,
+			SessionID:          session,
+			OpenRouter:         info.ID == "openrouter",
 		}
 	}
-	s.AIProviders[info.ID] = p
+	if !ai.IsOpencodeProvider(info.ID) {
+		s.AIProviders[info.ID] = p
+	}
 	return p, upstreamModel, nil
 }
 
@@ -348,6 +378,11 @@ func (s *Server) apiKeyForProvider(providerID string) (string, error) {
 			return "", fmt.Errorf("OpenRouter API key not configured (set OPENROUTER_API_KEY or configure via admin UI)")
 		}
 		return s.Cfg.OpenRouterAPIKey, nil
+	case "inferx":
+		if s.Cfg.InferXAPIKey == "" {
+			return "", fmt.Errorf("InferX API key not configured (set INFERX_API_KEY or configure via admin UI)")
+		}
+		return s.Cfg.InferXAPIKey, nil
 	case "lmstudio":
 		return "", nil // local, no API key needed
 	default:

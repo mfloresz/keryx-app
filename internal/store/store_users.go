@@ -48,12 +48,30 @@ func (s *Store) ListUsers() ([]User, error) {
 	return out, nil
 }
 
+// UpdateUserRole changes a user's role. Only admin and user are accepted —
+// promotion to admin is an explicit operation, never something a request
+// payload can slip past validation.
 func (s *Store) UpdateUserRole(userID, role string) error {
+	if role != RoleAdmin && role != RoleUser {
+		return ErrInvalid
+	}
 	record, err := s.App.FindRecordById(UsersCollection, userID)
 	if err != nil {
 		return ErrNotFound
 	}
 	record.Set("role", role)
+	return s.App.Save(record)
+}
+
+// RevokeSessions rotates the user's auth tokenKey so every previously issued
+// session token stops validating (PocketBase checks the tokenKey claim on
+// each auth token).
+func (s *Store) RevokeSessions(userID string) error {
+	record, err := s.App.FindRecordById(UsersCollection, userID)
+	if err != nil {
+		return ErrNotFound
+	}
+	record.RefreshTokenKey()
 	return s.App.Save(record)
 }
 
@@ -157,17 +175,29 @@ func (s *Store) GetUserAvatarData(userID string) ([]byte, string, error) {
 	return data, mediaType, nil
 }
 
-func (s *Store) ChangePassword(userID, currentPassword, newPassword string) error {
+// ChangePassword validates the current password and sets the new one,
+// rotating the auth tokenKey in the same save so every outstanding session
+// token is invalidated. It returns a fresh token for the calling session;
+// all other devices must log in again.
+func (s *Store) ChangePassword(userID, currentPassword, newPassword string) (string, error) {
 	record, err := s.App.FindRecordById(UsersCollection, userID)
 	if err != nil {
-		return ErrNotFound
+		return "", ErrNotFound
 	}
 	if !record.ValidatePassword(currentPassword) {
-		return ErrForbidden
+		return "", ErrForbidden
 	}
 	if len(newPassword) < 8 {
-		return fmt.Errorf("password must be at least 8 characters")
+		return "", fmt.Errorf("password must be at least 8 characters")
 	}
 	record.SetPassword(newPassword)
-	return s.App.Save(record)
+	record.RefreshTokenKey()
+	if err := s.App.Save(record); err != nil {
+		return "", err
+	}
+	token, err := record.NewAuthToken()
+	if err != nil {
+		return "", err
+	}
+	return token, nil
 }

@@ -136,15 +136,35 @@ var knownProviders = []ProviderInfo{
 			{ID: "openrouter/nvidia/nemotron-3.5-lightning", UpstreamID: "nvidia/nemotron-3.5-lightning", Provider: "openrouter", DisplayName: "Nemotron 3.5 Lightning", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/meta/muse-glimmer-30b", UpstreamID: "meta/muse-glimmer-30b", Provider: "openrouter", DisplayName: "Muse Glimmer", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/inclusionai/ling-3.0-flash", UpstreamID: "inclusionai/ling-3.0-flash", Provider: "openrouter", DisplayName: "Ling 3.0 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/z-ai/glm-5.3-flash", UpstreamID: "z-ai/glm-5.3-flash", Provider: "openrouter", DisplayName: "GLM 5.3 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/z-ai/glm-5.3-flash", UpstreamID: "z-ai/glm-5.3-flash", Provider: "openrouter", DisplayName: "GLM 5.3 Flash", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/mistralai/ministral-3b-2512", UpstreamID: "mistralai/ministral-3b-2512", Provider: "openrouter", DisplayName: "Mistral Ministral 3B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/mistralai/ministral-8b-2512", UpstreamID: "mistralai/ministral-8b-2512", Provider: "openrouter", DisplayName: "Mistral Ministral 8B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+		{ID: "openrouter/mistralai/ministral-14b-2512", UpstreamID: "mistralai/ministral-14b-2512", Provider: "openrouter", DisplayName: "Mistral Ministral 14B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/mistralai/mistral-small-2603", UpstreamID: "mistralai/mistral-small-2603", Provider: "openrouter", DisplayName: "Mistral Small 4", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/inception/mercury-2.5", UpstreamID: "inception/mercury-2.5", Provider: "openrouter", DisplayName: "Mercury 2.5", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			// The reasoning effort is exposed as a distinct model per level
 			// (mirroring Yara), so the level is fixed per catalog entry and can
 			// only be granted by an admin — never selected from the prompt input.
 			{ID: "openrouter/openai/gpt-5.6-luna (reasoning: none)", UpstreamID: "openai/gpt-5.6-luna (reasoning: none)", Provider: "openrouter", DisplayName: "GPT-5.6 Luna (reasoning: none)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/openai/gpt-5.6-luna (reasoning: low)", UpstreamID: "openai/gpt-5.6-luna (reasoning: low)", Provider: "openrouter", DisplayName: "GPT-5.6 Luna (reasoning: low)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/openai/gpt-5.6-luna (reasoning: medium)", UpstreamID: "openai/gpt-5.6-luna (reasoning: medium)", Provider: "openrouter", DisplayName: "GPT-5.6 Luna (reasoning: medium)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+		},
+	},
+	{
+		ID:           "inferx",
+		Name:         "InferX",
+		BaseURL:      "https://model.inferx.net/endpoints/v1",
+		OpenAICompat: true,
+		DefaultModel: "deepseek-v4-flash-0731",
+		GoAIOptions: map[string]any{
+			"useResponsesAPI": false,
+		},
+		Models: []ModelInfo{
+			{ID: "inferx/deepseek-v4-flash-0731", UpstreamID: "deepseek-v4-flash-0731", Provider: "inferx", DisplayName: "DeepSeek V4 Flash 0731", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/gemma-4-31B-it-fp8", UpstreamID: "gemma-4-31B-it-fp8", Provider: "inferx", DisplayName: "Gemma 4 31B IT FP8", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/Qwen3.6-35B-A3B-FP8", UpstreamID: "Qwen3.6-35B-A3B-FP8", Provider: "inferx", DisplayName: "Qwen 3.6 35B A3B FP8", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/Qwen3.8-27B-FP8", UpstreamID: "Qwen3.8-27B-FP8", Provider: "inferx", DisplayName: "Qwen3.8-27B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "inferx/glm-5.3-flash", UpstreamID: "glm-5.3-flash", Provider: "inferx", DisplayName: "GLM 5.3 Flash", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{
