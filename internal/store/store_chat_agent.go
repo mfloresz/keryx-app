@@ -21,3 +21,21 @@ func (s *Store) UpdateChatAgent(chatID, ownerID, agentID string) (*ChatRecord, e
 	}
 	return chatFromRecord(record), nil
 }
+
+// UpdateChatPreset persists the selected model preset for a chat.
+// preset empty string clears back to the default.
+func (s *Store) UpdateChatPreset(chatID, ownerID, preset string) (*ChatRecord, error) {
+	record, err := s.App.FindFirstRecordByFilter(
+		ChatsCollection,
+		"id = {:id} && owner = {:owner}",
+		dbx.Params{"id": chatID, "owner": ownerID},
+	)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	record.Set("preset", preset)
+	if err := s.App.Save(record); err != nil {
+		return nil, err
+	}
+	return chatFromRecord(record), nil
+}

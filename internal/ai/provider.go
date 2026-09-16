@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/zendev-sh/goai/provider"
 )
@@ -52,29 +53,104 @@ type ChatMessage struct {
 }
 
 // ChatAttachment is a file attached to a message, already resolved to bytes.
+// Markdown, when set, is a text conversion of the document used as LLM
+// context in place of the raw bytes; it is resolved server-side and never
+// persisted with the message.
 type ChatAttachment struct {
 	ID        string `json:"id"`
 	Filename  string `json:"filename"`
 	MediaType string `json:"mediaType"`
 	Data      []byte `json:"-"`
+	Markdown  string `json:"-"`
+}
+
+// TextAttachmentBudget caps the total characters of text attachments inlined
+// into a title prompt (~2000 tokens at ~4 chars/token).
+const TextAttachmentBudget = 8000
+
+// MarkdownAttachmentBudget caps the characters of a document's Markdown
+// conversion inlined into a chat prompt (~50k tokens at ~4 chars/token).
+const MarkdownAttachmentBudget = 200_000
+
+// formatFileBlock renders a text attachment as a labeled file block for prompts.
+func formatFileBlock(filename, mediaType, text string) string {
+	return fmt.Sprintf("<file name=%q media=%s>\n%s\n</file>", filename, mediaType, text)
+}
+
+// TitleUserMessage builds the user message for title generation: the message
+// text plus text attachments inlined as file blocks under a shared character
+// budget (each file truncated line-safely with a marker). Non-text attachments
+// are skipped.
+func TitleUserMessage(m ChatMessage, maxAttachmentChars int) string {
+	var b strings.Builder
+	b.WriteString(m.Content)
+	remaining := maxAttachmentChars
+	for _, a := range m.Attachments {
+		var text, media string
+		if a.Markdown != "" {
+			text, media = a.Markdown, "text/markdown"
+		} else if len(a.Data) > 0 && isTextMedia(a.MediaType) {
+			text, media = string(a.Data), a.MediaType
+		}
+		if remaining <= 0 || text == "" {
+			continue
+		}
+		n := utf8.RuneCountInString(text)
+		if n > remaining {
+			text = TruncateText(text, remaining)
+			n = remaining
+		}
+		remaining -= n
+		b.WriteString("\n\n" + formatFileBlock(a.Filename, media, text))
+	}
+	return b.String()
+}
+
+// TruncateText cuts s to at most maxChars runes, preferring a line boundary
+// (as long as it keeps at least half the budget), and appends a marker.
+func TruncateText(s string, maxChars int) string {
+	cut := -1
+	runes := 0
+	for i := range s {
+		if runes == maxChars {
+			cut = i
+			break
+		}
+		runes++
+	}
+	if cut < 0 {
+		return s
+	}
+	if nl := strings.LastIndexByte(s[:cut], '\n'); nl > cut/2 {
+		cut = nl + 1
+	}
+	return s[:cut] + "\n…[truncated]"
 }
 
 // messageParts converts a ChatMessage into goai provider parts.
-// Text-like attachments are inlined as labeled text; images go as image parts;
-// other binaries go as file parts with a data URL.
+// Attachments with a Markdown conversion are inlined as labeled text so any
+// provider can read them; text-like attachments are inlined as labeled text;
+// images go as image parts; other binaries go as file parts with a data URL.
 func messageParts(m ChatMessage) []provider.Part {
 	var parts []provider.Part
 	if m.Content != "" {
 		parts = append(parts, provider.Part{Type: provider.PartText, Text: m.Content})
 	}
 	for _, a := range m.Attachments {
+		if a.Markdown != "" {
+			parts = append(parts, provider.Part{
+				Type: provider.PartText,
+				Text: formatFileBlock(a.Filename, "text/markdown", a.Markdown),
+			})
+			continue
+		}
 		if len(a.Data) == 0 {
 			continue
 		}
 		if isTextMedia(a.MediaType) {
 			parts = append(parts, provider.Part{
 				Type: provider.PartText,
-				Text: fmt.Sprintf("<file name=%q media=%s>\n%s\n</file>", a.Filename, a.MediaType, string(a.Data)),
+				Text: formatFileBlock(a.Filename, a.MediaType, string(a.Data)),
 			})
 			continue
 		}

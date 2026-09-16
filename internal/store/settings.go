@@ -63,6 +63,7 @@ type ChatRecord struct {
 	Votes      json.RawMessage `json:"votes"`
 	WebSearch  bool            `json:"webSearch"`
 	AgentID    string          `json:"agentId,omitempty"`
+	Preset     string          `json:"preset,omitempty"`
 	Branches   json.RawMessage `json:"branches"`
 	LastUsage  json.RawMessage `json:"lastUsage,omitempty"`
 	CreatedAt  string          `json:"createdAt,omitempty"`
