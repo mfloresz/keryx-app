@@ -146,6 +146,8 @@ func (s *Store) ensureChatsCollection(users *core.Collection) (*core.Collection,
 	c.Fields.Add(&core.BoolField{Name: "web_search"})
 	c.Fields.Add(&core.JSONField{Name: "branches"})
 	c.Fields.Add(&core.JSONField{Name: "last_usage"})
+	c.Fields.Add(&core.TextField{Name: "agent_id", Max: 80})
+	c.Fields.Add(&core.TextField{Name: "preset", Max: 30})
 	addSystemDateFields(c)
 	c.AddIndex("idx_chats_owner", false, "owner", "")
 	if err := s.App.Save(c); err != nil {
@@ -156,7 +158,7 @@ func (s *Store) ensureChatsCollection(users *core.Collection) (*core.Collection,
 
 func (s *Store) ensureAttachmentsCollection(users *core.Collection, chats *core.Collection) (*core.Collection, error) {
 	if existing, err := s.App.FindCollectionByNameOrId(AttachmentsCollection); err == nil {
-		return existing, nil
+		return s.migrateAttachmentsCollection(existing)
 	}
 	c := core.NewBaseCollection(AttachmentsCollection)
 	ownerOnly := "@request.auth.id != '' && owner = @request.auth.id"
@@ -171,8 +173,19 @@ func (s *Store) ensureAttachmentsCollection(users *core.Collection, chats *core.
 	c.Fields.Add(&core.TextField{Name: "media_type", Max: 200})
 	c.Fields.Add(&core.NumberField{Name: "size"})
 	c.Fields.Add(&core.FileField{Name: "file", Required: true, MaxSelect: 1, MaxSize: 50 << 20})
+	c.Fields.Add(&core.FileField{Name: "converted_file", MaxSelect: 1, MaxSize: 50 << 20})
 	addSystemDateFields(c)
 	if err := s.App.Save(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// migrateAttachmentsCollection adds fields introduced after the collection
+// was first created. converted_file holds the Markdown conversion of the
+// original document (produced client-side) used as LLM context.
+func (s *Store) migrateAttachmentsCollection(c *core.Collection) (*core.Collection, error) {
+	if err := s.ensureField(c, &core.FileField{Name: "converted_file", MaxSelect: 1, MaxSize: 50 << 20}); err != nil {
 		return nil, err
 	}
 	return c, nil

@@ -23,6 +23,7 @@ export interface ChatRecord {
   votes: any[];
   webSearch?: boolean;
   agentId?: string | null;
+  preset?: string | null;
   lastUsage?: LanguageModelUsage;
   branches?: Record<string, ChatBranchState>;
 }

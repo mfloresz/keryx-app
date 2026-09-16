@@ -1,4 +1,5 @@
 import type { AttachmentFile, PromptInputContext, PromptInputMessage } from './types'
+import { convertToMarkdown, isConvertible } from '@/services/documentConversion'
 import { nanoid } from 'nanoid'
 import { inject, onBeforeUnmount, provide, ref } from 'vue'
 import { PROMPT_INPUT_KEY } from './types'
@@ -15,6 +16,36 @@ export function usePromptInputProvider(props: {
   const files = ref<AttachmentFile[]>([])
   const fileInputRef = ref<HTMLInputElement | null>(null)
   const isLoading = ref(false)
+
+  // In-flight document conversions by attachment id, awaited before submit.
+  const conversions = new Map<string, Promise<void>>()
+
+  // Converts convertible documents to Markdown off the main thread. The
+  // attachment stays visible with a spinner meanwhile; a failed conversion
+  // removes it (documents without a text layer are not attachable).
+  const startConversion = (id: string) => {
+    const attachment = files.value.find(f => f.id === id)
+    if (!attachment?.file || !isConvertible(attachment.filename ?? '')) {
+      return
+    }
+    attachment.converting = true
+    const promise = convertToMarkdown(attachment.file)
+      .then((markdown) => {
+        attachment.convertedMarkdown = markdown
+      })
+      .catch((code: string) => {
+        removeFile(id)
+        props.onError?.({
+          code: code === 'needsOcr' ? 'no_text_layer' : 'convert_error',
+          message: `Document conversion failed (${code})`,
+        })
+      })
+      .finally(() => {
+        attachment.converting = false
+        conversions.delete(id)
+      })
+    conversions.set(id, promise)
+  }
 
   const revokeObjectUrl = (file: AttachmentFile) => {
     if (file.url && file.url.startsWith('blob:')) {
@@ -99,6 +130,7 @@ export function usePromptInputProvider(props: {
     }))
 
     files.value = [...files.value, ...newAttachments]
+    newAttachments.forEach(attachment => startConversion(attachment.id))
   }
 
   const removeFile = (id: string) => {
@@ -158,6 +190,12 @@ export function usePromptInputProvider(props: {
   const submitForm = async () => {
     if (!props.onSubmit)
       return
+
+    // Wait for pending document conversions so the submit either includes
+    // the Markdown or the attachment was removed after a failed conversion.
+    if (conversions.size > 0) {
+      await Promise.allSettled([...conversions.values()])
+    }
 
     const submittedText = textInput.value
     const submittedFiles = [...files.value]

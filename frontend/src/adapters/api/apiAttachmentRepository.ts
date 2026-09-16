@@ -11,15 +11,23 @@ interface UploadedAttachment {
 
 async function uploadFiles(
   chatId: string,
-  files: File[],
+  files: AttachmentFile[],
 ): Promise<UploadedAttachment[]> {
   const auth = await getAuthAdapter();
   const headers = await auth.getAuthorizationHeaders();
 
   const form = new FormData();
-  for (const file of files) {
+  files.forEach((f, i) => {
+    const file = f.file as File;
     form.append("files", file, file.name);
-  }
+    // Markdown conversion produced client-side, paired with files[i] by index.
+    // Sent as a plain text field (no filename) so the backend reads it from
+    // the multipart values (a Blob with filename would land in the files
+    // section and the conversion would be silently dropped).
+    if (f.convertedMarkdown) {
+      form.append(`converted_${i}`, f.convertedMarkdown);
+    }
+  });
 
   const response = await fetch(`/api/chats/${chatId}/attachments`, {
     method: "POST",
@@ -50,10 +58,7 @@ export const apiAttachmentRepository: AttachmentRepository = {
     );
     const uploaded = new Map<File, UploadedAttachment>();
     if (pending.length) {
-      const results = await uploadFiles(
-        chatId,
-        pending.map((f) => f.file as File),
-      );
+      const results = await uploadFiles(chatId, pending);
       pending.forEach((f, i) => {
         const result = results[i];
         if (result) uploaded.set(f.file as File, result);

@@ -217,6 +217,8 @@
     "unsupportedImageTitle": "Image not supported",
     "unsupportedImageDescription": "The selected model does not support images. Only text documents are allowed.",
     "unsupportedCloudAttachmentDescription": "In cloud mode, attachments must be uploaded as embedded local files. Please reattach the file and try again.",
+    "attachmentNoTextLayer": "This PDF has no extractable text (it may be scanned). Attach a PDF with a text layer.",
+    "attachmentConvertError": "The document could not be converted to text, so it was not attached.",
     "addPhotosOrFiles": "Add photos or files",
     "thinking": "Thinking...",
     "stop": "Stop",
@@ -259,6 +261,21 @@
     "preview": "Preview",
     "codePreview": "HTML preview",
     "codePreviewDescription": "Rendered from the code block in an isolated iframe."
+  },
+  "artifact": {
+    "openPanel": "Artifacts ({count})",
+    "version": "Artifact version",
+    "previous": "Previous artifact",
+    "next": "Next artifact",
+    "code": "Code",
+    "download": "Download HTML",
+    "openNewTab": "Open in new tab",
+    "reload": "Reload preview",
+    "empty": "No HTML artifact selected.",
+    "isolatedNote": "Isolated iframe · network allowed",
+    "publishing": "Publishing preview…",
+    "publishError": "Could not publish the preview.",
+    "retry": "Retry"
   },
   "reasoning": {
     "thinking": "Thinking...",

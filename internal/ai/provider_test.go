@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/zendev-sh/goai/provider"
 )
 
 func TestTruncateText(t *testing.T) {
@@ -81,6 +83,77 @@ func TestTitleUserMessage(t *testing.T) {
 		}, TextAttachmentBudget)
 		if msg != "" {
 			t.Errorf("expected empty message, got %q", msg)
+		}
+	})
+
+	t.Run("uses markdown conversion for documents", func(t *testing.T) {
+		msg := TitleUserMessage(ChatMessage{
+			Attachments: []ChatAttachment{
+				{Filename: "report.pdf", MediaType: "application/pdf", Data: []byte("raw pdf bytes"), Markdown: "PDF content"},
+			},
+		}, TextAttachmentBudget)
+		if !strings.Contains(msg, `<file name="report.pdf" media=text/markdown>`) {
+			t.Errorf("markdown block missing:\n%q", msg)
+		}
+		if !strings.Contains(msg, "PDF content") {
+			t.Errorf("markdown content missing:\n%q", msg)
+		}
+	})
+}
+
+func TestMessagePartsMarkdown(t *testing.T) {
+	t.Run("markdown conversion inlines as text block", func(t *testing.T) {
+		parts := messageParts(ChatMessage{
+			Attachments: []ChatAttachment{{
+				Filename:  "report.pdf",
+				MediaType: "application/pdf",
+				Data:      []byte("raw pdf bytes"),
+				Markdown:  "# Title\n\nBody",
+			}},
+		})
+		if len(parts) != 1 {
+			t.Fatalf("expected 1 part, got %d", len(parts))
+		}
+		p := parts[0]
+		if p.Type != provider.PartText {
+			t.Errorf("expected PartText, got %q", p.Type)
+		}
+		if !strings.HasPrefix(p.Text, `<file name="report.pdf" media=text/markdown>`) {
+			t.Errorf("unexpected text part: %q", p.Text)
+		}
+	})
+
+	t.Run("no markdown falls back to file part", func(t *testing.T) {
+		parts := messageParts(ChatMessage{
+			Attachments: []ChatAttachment{{
+				Filename:  "report.pdf",
+				MediaType: "application/pdf",
+				Data:      []byte("raw pdf bytes"),
+			}},
+		})
+		if len(parts) != 1 {
+			t.Fatalf("expected 1 part, got %d", len(parts))
+		}
+		p := parts[0]
+		if p.Type != provider.PartFile {
+			t.Errorf("expected PartFile, got %q", p.Type)
+		}
+		if !strings.HasPrefix(p.URL, "data:application/pdf;base64,") {
+			t.Errorf("expected pdf data URL, got %q", p.URL)
+		}
+	})
+
+	t.Run("markdown wins over image media type", func(t *testing.T) {
+		parts := messageParts(ChatMessage{
+			Attachments: []ChatAttachment{{
+				Filename:  "scan.pdf",
+				MediaType: "application/pdf",
+				Data:      []byte("raw"),
+				Markdown:  "converted",
+			}},
+		})
+		if parts[0].Type != provider.PartText {
+			t.Errorf("expected markdown to replace PartFile, got %q", parts[0].Type)
 		}
 	})
 }
