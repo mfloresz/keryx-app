@@ -43,6 +43,17 @@ type StreamChunk struct {
 type ChatStreamResult struct {
 	Text      string
 	Reasoning string
+	Usage     Usage
+}
+
+// Usage is the token accounting for one request, including prompt-cache
+// hits when the provider reports them (e.g. OpenRouter usage.include).
+type Usage struct {
+	InputTokens      int
+	OutputTokens     int
+	ReasoningTokens  int
+	CacheReadTokens  int
+	CacheWriteTokens int
 }
 
 // ChatMessage represents a single message in a chat conversation.
@@ -195,6 +206,10 @@ type ChatRequest struct {
 	System    string        `json:"system,omitempty"`
 	MaxTokens int           `json:"maxTokens,omitempty"`
 	Timeout   time.Duration `json:"timeout,omitempty"`
+	// CacheKey is a stable per-chat ID for prompt-cache grouping. The
+	// OpenAI-compatible provider sends it as the standard prompt_cache_key
+	// and, for OpenRouter, as its native session_id. Empty disables it.
+	CacheKey string `json:"-"`
 	// Tools is an optional list of tool definitions for function calling.
 	Tools []ToolDefinition `json:"tools,omitempty"`
 	// ToolExec is the function that executes a tool by name when the model calls it.

@@ -17,6 +17,7 @@ import {
 } from '@/components/ai-elements/attachments'
 import type { AttachmentData } from '@/components/ai-elements/attachments'
 import { ensureAttachmentResolved, resolvedAttachmentUrl } from '@/utils/attachmentUrl'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import {
   Tool,
   ToolContent,
@@ -168,10 +169,11 @@ const branchMetadata = computed(() => {
 
 const justCopied = ref(false)
 
-function copyText() {
+async function copyText() {
   const text = getTextContent(props.message)
-  if (text) {
-    navigator.clipboard.writeText(text)
+  if (!text) return
+  const copied = await copyTextToClipboard(text)
+  if (copied) {
     justCopied.value = true
     setTimeout(() => {
       justCopied.value = false

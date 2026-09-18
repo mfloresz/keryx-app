@@ -71,7 +71,7 @@ func (p *OpenAIProvider) model() (provider.LanguageModel, error) {
 	if p == nil || p.APIKey == "" {
 		return nil, fmt.Errorf("openai-compatible provider not configured: missing API key")
 	}
-	return p.buildModel(reasoningBaseModel(p.Model)), nil
+	return p.buildModel(reasoningBaseModel(p.Model), ""), nil
 }
 
 // headers identifies the app and, when SessionID is set, the chat conversation.
@@ -97,11 +97,18 @@ func (p *OpenAIProvider) isOpenRouter() bool {
 	return strings.Contains(p.BaseURL, "openrouter.ai")
 }
 
-func (p *OpenAIProvider) buildModel(modelID string) provider.LanguageModel {
+func (p *OpenAIProvider) buildModel(modelID, cacheKey string) provider.LanguageModel {
 	if p.isOpenRouter() {
 		opts := []openrouter.Option{openrouter.WithAPIKey(p.APIKey), openrouter.WithHeaders(p.headers())}
 		if p.BaseURL != "" {
 			opts = append(opts, openrouter.WithBaseURL(p.BaseURL))
+		}
+		// OpenRouter's native grouping key for sticky routing and session
+		// analytics. Without it, sticky routing falls back to hashing the
+		// opening messages, which changes on every chat turn (dynamic
+		// datetime context) and kills cache affinity.
+		if trimmed := strings.TrimSpace(cacheKey); trimmed != "" {
+			opts = append(opts, openrouter.WithSessionID(trimmed))
 		}
 		return openrouter.Chat(modelID, opts...)
 	}
@@ -143,6 +150,13 @@ func (p *OpenAIProvider) requestOptions(req ChatRequest) map[string]any {
 	}
 	if effort := reasoningEffort(model); effort != "" {
 		opts["reasoning"] = map[string]any{"effort": effort}
+	}
+	// Standard OpenAI-compatible grouping key for prompt-cache affinity.
+	// goai's openaicompat layer forwards it verbatim as prompt_cache_key;
+	// OpenRouter also honors it as a fallback sticky-routing key when no
+	// session_id is present (we send both there).
+	if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" {
+		opts["prompt_cache_key"] = trimmed
 	}
 	// Some gateways (e.g. opencode-go) only stream reasoning-class models in
 	// real time over the Responses API; Chat Completions buffers the whole
@@ -237,7 +251,11 @@ func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (string, err
 
 	// Override model from request if provided
 	if req.Model != "" {
-		model = p.buildModel(reasoningBaseModel(req.Model))
+		model = p.buildModel(reasoningBaseModel(req.Model), req.CacheKey)
+	} else if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" && p.isOpenRouter() {
+		// Same model, but the OpenRouter session_id is a model-level
+		// option, so rebuild to attach it.
+		model = p.buildModel(reasoningBaseModel(p.Model), trimmed)
 	}
 
 	result, err := goai.GenerateText(ctx, model, p.goaiOpts(req)...)
@@ -263,7 +281,11 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 
 	// Override model from request if provided
 	if req.Model != "" {
-		model = p.buildModel(reasoningBaseModel(req.Model))
+		model = p.buildModel(reasoningBaseModel(req.Model), req.CacheKey)
+	} else if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" && p.isOpenRouter() {
+		// Same model, but the OpenRouter session_id is a model-level
+		// option, so rebuild to attach it.
+		model = p.buildModel(reasoningBaseModel(p.Model), trimmed)
 	}
 
 	stream, err := goai.StreamText(ctx, model, p.goaiOpts(req)...)
@@ -292,6 +314,18 @@ func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChun
 	result.Reasoning = strings.TrimSpace(reasoning.String())
 	if err := stream.Err(); err != nil {
 		return result, fmt.Errorf("stream error: %w", err)
+	}
+	// Usage (including prompt-cache reads/writes) is only known once the
+	// stream is fully drained. The provider already requested usage
+	// reporting (usage.include / stream_options.include_usage).
+	if res := stream.Result(); res != nil {
+		result.Usage = Usage{
+			InputTokens:      res.TotalUsage.InputTokens,
+			OutputTokens:     res.TotalUsage.OutputTokens,
+			ReasoningTokens:  res.TotalUsage.ReasoningTokens,
+			CacheReadTokens:  res.TotalUsage.CacheReadTokens,
+			CacheWriteTokens: res.TotalUsage.CacheWriteTokens,
+		}
 	}
 
 	return result, nil

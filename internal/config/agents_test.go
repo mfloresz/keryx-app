@@ -40,7 +40,7 @@ func TestDefaultAgentsCatalog(t *testing.T) {
 }
 
 func TestAvailablePromptTags(t *testing.T) {
-	want := []string{"{username}", "{datetime}", "{language}"}
+	want := []string{"{username}", "{date}", "{datetime}", "{language}"}
 	if len(AvailablePromptTags) != len(want) {
 		t.Fatalf("AvailablePromptTags = %v, want %v", AvailablePromptTags, want)
 	}

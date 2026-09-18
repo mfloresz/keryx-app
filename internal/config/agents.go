@@ -12,8 +12,10 @@ type BuiltinAgent struct {
 }
 
 // AvailablePromptTags lists the placeholders resolved by the backend via
-// applyUserContext (see internal/api/router_chats.go).
-var AvailablePromptTags = []string{"{username}", "{datetime}", "{language}"}
+// applyUserContext (see internal/api/router_chats.go). {date} is day
+// granularity (cache-stable); {datetime} is kept for prompts that need
+// the time and for backward compatibility with existing overrides.
+var AvailablePromptTags = []string{"{username}", "{date}", "{datetime}", "{language}"}
 
 // DefaultAgents is the built-in agent catalog. The admin can override any of
 // these with a DB record keyed by ID (builtin_id); deleting that record

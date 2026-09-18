@@ -388,7 +388,7 @@ const isSavingAgent = ref(false);
 const deleteAgentTarget = ref<AdminAgent | null>(null);
 const isDeletingAgent = ref(false);
 
-const PROMPT_TAG_KEYS = ["{username}", "{datetime}", "{language}"] as const;
+const PROMPT_TAG_KEYS = ["{username}", "{date}", "{datetime}", "{language}"] as const;
 
 async function loadPromptsAndAgents(): Promise<void> {
   try {

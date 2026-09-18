@@ -184,7 +184,7 @@ async function handleAccept() {
 <template>
   <AuthShell
     :image-alt="t('auth.login.heroAlt')"
-    image-src="/auth/login-hero.png"
+    image-src="/auth/login-hero.webp"
   >
     <div class="space-y-7 overflow-hidden">
       <div class="space-y-2 text-center md:text-left">

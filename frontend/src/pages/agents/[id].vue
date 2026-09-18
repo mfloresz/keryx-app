@@ -288,7 +288,7 @@ watch(() => route.params.id, loadAgent)
               <Label>{{ t('agents.editor.instructions') }}</Label>
               <div class="flex flex-wrap gap-1.5">
                 <button
-                  v-for="tag in ['{username}','{datetime}','{language}']"
+                  v-for="tag in ['{username}','{date}','{datetime}','{language}']"
                   :key="tag"
                   type="button"
                   class="rounded-full border bg-muted px-2.5 py-1 text-xs font-mono hover:bg-muted/80"
