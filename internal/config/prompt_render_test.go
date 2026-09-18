@@ -31,10 +31,16 @@ func TestBaseSystemPromptHasComarkCapabilities(t *testing.T) {
 	}
 
 	// sanity: prompt still has placeholders for the renderer
-	for _, s := range []string{"{username}", "{datetime}", "{language}"} {
+	for _, s := range []string{"{username}", "{date}", "{language}"} {
 		if !strings.Contains(p, s) {
 			t.Errorf("missing placeholder %q", s)
 		}
+	}
+
+	// The base prompt must not embed time-granular context: it would change
+	// the system prefix on every request and defeat prompt caching.
+	if strings.Contains(p, "{datetime}") {
+		t.Errorf("base prompt must use {date} instead of {datetime} for cache stability")
 	}
 
 	if !strings.HasPrefix(p, "Role\n") {

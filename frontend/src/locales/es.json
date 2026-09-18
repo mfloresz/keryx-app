@@ -155,7 +155,7 @@
       "descriptionPlaceholder": "Describe qué hace este agente...",
       "iconLabel": "Icono",
       "instructions": "Instrucciones",
-      "instructionsHint": "Define el system prompt que usará este agente. Usa {language}, {username}, {datetime} como placeholders.",
+      "instructionsHint": "Define el system prompt que usará este agente. Usa {language}, {username}, {date} (mejor para caché) o {datetime} como placeholders.",
       "knowledge": "Conocimiento",
       "knowledgeHint": "Próximamente: añade archivos y fuentes.",
       "guardrails": "Añadir barreras de protección",

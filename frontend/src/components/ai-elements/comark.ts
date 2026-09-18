@@ -19,6 +19,7 @@ import githubLight from 'shiki/dist/themes/github-light.mjs'
 import githubDark from 'shiki/dist/themes/github-dark.mjs'
 import Alert from '@/components/ai-elements/Alert.vue'
 import MarkdownPre from '@/components/ai-elements/MarkdownPre.vue'
+import MarkdownTable from '@/components/ai-elements/MarkdownTable.vue'
 
 /**
  * Comark's math plugin uses dollar delimiters, while models commonly emit
@@ -116,6 +117,7 @@ export const AppComark = defineComarkComponent({
   components: {
     Alert,
     pre: MarkdownPre,
+    table: MarkdownTable,
 
     Mermaid,
     Math: MathComponent,

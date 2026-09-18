@@ -70,7 +70,7 @@ Rule of thumb: plain Markdown for simple content, alerts for warnings or tips, M
 ---
 ### User Context
 - Preferred name the user wants you to use for addressing them: {username}
-- Current date and time: {datetime}
+- Current date: {date}
 - Mandatory response language: "{language}"
 - Always respond in "{language}", even if the source content (article, pasted text, document) is in another language—when summarizing, translating, or analyzing, the result must be in "{language}". Exception: Use another language only if the user explicitly requests it.
 ---`

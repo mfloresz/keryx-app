@@ -710,6 +710,9 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		Model:    resolvedModel,
 		Messages: req.Messages,
 		System:   systemPrompt,
+		// Stable per-chat grouping key for prompt-cache affinity
+		// (prompt_cache_key on OpenAI-compat, session_id on OpenRouter).
+		CacheKey: ai.SessionForChat(chatID),
 		Tools:    tools,
 		ToolExec: toolExec,
 	}, func(chunk ai.StreamChunk) {
@@ -844,10 +847,12 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 }
 
-// applyUserContext replaces the {username}, {datetime} and {language}
-// placeholders in the system prompt with values from the chat request.
-// Falls back to the stored user profile / server time when the client
-// sends empty values, so the prompt stays valid for any client.
+// applyUserContext replaces the {username}, {date}, {datetime} and
+// {language} placeholders in the system prompt with values from the chat
+// request. Falls back to the stored user profile / server time when the
+// client sends empty values, so the prompt stays valid for any client.
+// {date} is day granularity so the cached system prefix stays stable all
+// day; {datetime} keeps full timestamp resolution for prompts that need it.
 func (s *Server) applyUserContext(prompt, username, datetime, language, timezone, userID string) string {
 	username = strings.TrimSpace(username)
 	if username == "" {
@@ -873,17 +878,18 @@ func (s *Server) applyUserContext(prompt, username, datetime, language, timezone
 
 	// Prefer the client-sent instant (UTC ISO 8601), localized to the
 	// user's timezone; fall back to the server clock.
-	datetime = strings.TrimSpace(datetime)
-	if t, err := time.Parse(time.RFC3339, datetime); err == nil {
-		datetime = t.In(loc).Format("2006-01-02 15:04:05") + " " + loc.String()
-	} else {
-		datetime = time.Now().In(loc).Format("2006-01-02 15:04:05") + " " + loc.String()
+	instant := time.Now().In(loc)
+	if t, err := time.Parse(time.RFC3339, strings.TrimSpace(datetime)); err == nil {
+		instant = t.In(loc)
 	}
+	datetime = instant.Format("2006-01-02 15:04:05") + " " + loc.String()
+	date := instant.Format("2006-01-02")
 
 	langName := languageName(language)
 
 	prompt = strings.ReplaceAll(prompt, "{username}", username)
 	prompt = strings.ReplaceAll(prompt, "{datetime}", datetime)
+	prompt = strings.ReplaceAll(prompt, "{date}", date)
 	prompt = strings.ReplaceAll(prompt, "{language}", langName)
 	return prompt
 }
