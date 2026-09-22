@@ -10,7 +10,7 @@ function mountMarkdown(md: string): HTMLElement {
   document.body.appendChild(host)
   const Root = defineComponent({
     render: () =>
-      h(Suspense, null, { default: () => h(AppComark, { markdown: md }) }),
+      h(Suspense, null, { default: () => h(AppComark, { value: md }) }),
   })
   const app = createApp(Root)
   app.use(createPinia())

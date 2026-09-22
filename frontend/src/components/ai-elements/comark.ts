@@ -1,4 +1,4 @@
-import { defineComarkComponent } from '@comark/vue'
+import { defineMarkdownComponent } from '@comark/vue'
 import highlight from '@comark/vue/plugins/highlight'
 import alert from '@comark/vue/plugins/alert'
 import emoji from '@comark/vue/plugins/emoji'
@@ -90,7 +90,7 @@ const themes: { light: ThemeRegistration; dark: ThemeRegistration } = {
  *
  * `autoClose` (streaming) and `linkify` are enabled by default in Comark.
  */
-export const AppComark = defineComarkComponent({
+export const AppComark = defineMarkdownComponent({
   name: 'AppComark',
   plugins: [
     highlight({

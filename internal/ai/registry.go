@@ -127,7 +127,7 @@ var knownProviders = []ProviderInfo{
 		Name:         "OpenRouter",
 		BaseURL:      "https://openrouter.ai/api/v1",
 		OpenAICompat: true,
-		DefaultModel: "openrouter/openai/gpt-5.6-luna (reasoning: medium)",
+		DefaultModel: "openrouter/openai/gpt-6-luna (reasoning: medium)",
 		GoAIOptions: map[string]any{
 			"useResponsesAPI":  false,
 			"strictJsonSchema": true,
@@ -145,9 +145,9 @@ var knownProviders = []ProviderInfo{
 			// The reasoning effort is exposed as a distinct model per level
 			// (mirroring Yara), so the level is fixed per catalog entry and can
 			// only be granted by an admin — never selected from the prompt input.
-			{ID: "openrouter/openai/gpt-5.6-luna (reasoning: none)", UpstreamID: "openai/gpt-5.6-luna (reasoning: none)", Provider: "openrouter", DisplayName: "GPT-5.6 Luna (reasoning: none)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/openai/gpt-5.6-luna (reasoning: low)", UpstreamID: "openai/gpt-5.6-luna (reasoning: low)", Provider: "openrouter", DisplayName: "GPT-5.6 Luna (reasoning: low)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/openai/gpt-5.6-luna (reasoning: medium)", UpstreamID: "openai/gpt-5.6-luna (reasoning: medium)", Provider: "openrouter", DisplayName: "GPT-5.6 Luna (reasoning: medium)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/openai/gpt-6-luna (reasoning: none)", UpstreamID: "openai/gpt-6-luna (reasoning: none)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: none)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/openai/gpt-6-luna (reasoning: low)", UpstreamID: "openai/gpt-6-luna (reasoning: low)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: low)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/openai/gpt-6-luna (reasoning: medium)", UpstreamID: "openai/gpt-6-luna (reasoning: medium)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: medium)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
 	},
 	{

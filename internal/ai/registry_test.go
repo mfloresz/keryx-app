@@ -30,7 +30,7 @@ func TestResolveModel(t *testing.T) {
 		{name: "openrouter ministral model", modelID: "openrouter/mistralai/ministral-3b-2512", wantProvider: "openrouter", wantUpstream: "mistralai/ministral-3b-2512"},
 		{name: "openrouter mistral small model", modelID: "openrouter/mistralai/mistral-small-2603", wantProvider: "openrouter", wantUpstream: "mistralai/mistral-small-2603"},
 		{name: "openrouter glm flash model", modelID: "openrouter/z-ai/glm-5.3-flash", wantProvider: "openrouter", wantUpstream: "z-ai/glm-5.3-flash"},
-		{name: "openrouter reasoning variant keeps effort", modelID: "openrouter/openai/gpt-5.6-luna (reasoning: medium)", wantProvider: "openrouter", wantUpstream: "openai/gpt-5.6-luna (reasoning: medium)"},
+		{name: "openrouter reasoning variant keeps effort", modelID: "openrouter/openai/gpt-6-luna (reasoning: medium)", wantProvider: "openrouter", wantUpstream: "openai/gpt-6-luna (reasoning: medium)"},
 		{name: "unknown prefix errors", modelID: "unknown/model-x", wantErr: true},
 		{name: "unprefixed errors (no gateway)", modelID: "gpt-5.4-nano", wantErr: true},
 		{name: "empty model errors", modelID: " ", wantErr: true},
@@ -163,9 +163,9 @@ func TestOpenRouterCatalogMetadata(t *testing.T) {
 		}
 	}
 	for _, id := range []string{
-		"openrouter/openai/gpt-5.6-luna (reasoning: none)",
-		"openrouter/openai/gpt-5.6-luna (reasoning: low)",
-		"openrouter/openai/gpt-5.6-luna (reasoning: medium)",
+		"openrouter/openai/gpt-6-luna (reasoning: none)",
+		"openrouter/openai/gpt-6-luna (reasoning: low)",
+		"openrouter/openai/gpt-6-luna (reasoning: medium)",
 	} {
 		if m, ok := byID[id]; !ok {
 			t.Errorf("missing reasoning variant %q", id)
