@@ -35,7 +35,7 @@ const md = computed(() => normalizeMathDelimiters((slotContent.value ?? props.co
   <Suspense>
     <template #default>
       <AppComark
-        :markdown="md"
+        :value="md"
         :streaming="props.streaming"
         :class="
           cn(

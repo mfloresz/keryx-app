@@ -87,7 +87,7 @@ const shouldShowPreview = computed(() =>
       <template #default>
         <AppComark
           v-if="isOpen"
-          :markdown="md"
+          :value="md"
           :streaming="isStreaming"
           class="markdown-content"
         />
