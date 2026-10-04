@@ -2,37 +2,33 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"maps"
 	"strings"
 	"time"
 
-	"github.com/zendev-sh/goai"
-	"github.com/zendev-sh/goai/provider"
-	"github.com/zendev-sh/goai/provider/openai"
-	"github.com/zendev-sh/goai/provider/openrouter"
+	"github.com/cloudwego/eino/components/model"
+	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
 )
 
-// OpenAIProvider implements Provider for OpenAI-compatible APIs using goai.
+// OpenAIProvider implements Provider for OpenAI-compatible APIs (OpenAI,
+// OpenRouter, Venice, OpenCode, LM Studio, …) using the eino OpenAI
+// component, which streams reasoning content and reports token usage —
+// including prompt-cache hits — as part of its message metadata.
 type OpenAIProvider struct {
 	APIKey  string
 	BaseURL string
 	Model   string
 	Timeout time.Duration
-	// ProviderOptions are passed to goai on every call. Use for provider-specific
-	// behavior toggles like forcing Chat Completions (e.g. Venice).
-	ProviderOptions map[string]any
-	// GoAIOptions are the static provider options from the registry (GoAIOptions).
-	GoAIOptions map[string]any
-	// ResponsesAPIModels is the set of base upstream model IDs (reasoning
-	// suffixes stripped) that must use the Responses API instead of Chat
-	// Completions. Some gateways (e.g. opencode-go) only stream these models
-	// in real time over /responses.
-	ResponsesAPIModels map[string]bool
-	// OpenRouter selects goai's native OpenRouter provider, which adds the
-	// gateway's recommended headers (HTTP-Referer/X-Title -> "goai") and
-	// usage reporting. Without it OpenRouter shows the app as Unknown.
+	// Options are static wire extras from the provider registry, e.g.
+	// venice_parameters. Behavior toggles the previous engine accepted
+	// (useResponsesAPI, strictJsonSchema, structuredOutputs) are dropped:
+	// eino always speaks Chat Completions and never forces structured
+	// outputs for plain text generation.
+	Options map[string]any
+	// OpenRouter selects OpenRouter-specific wire behavior: session_id
+	// grouping plus usage reporting body fields and app attribution headers.
+	// Without it OpenRouter shows the app as Unknown and streams without
+	// usage accounting.
 	OpenRouter bool
 	// SessionID carries the opaque OpenCode session for cache grouping.
 	// Only set for opencode-go/opencode-zen; empty for every other provider.
@@ -67,23 +63,6 @@ func reasoningBaseModel(model string) string {
 	return model
 }
 
-func (p *OpenAIProvider) model() (provider.LanguageModel, error) {
-	if p == nil || p.APIKey == "" {
-		return nil, fmt.Errorf("openai-compatible provider not configured: missing API key")
-	}
-	return p.buildModel(reasoningBaseModel(p.Model), ""), nil
-}
-
-// headers identifies the app and, when SessionID is set, the chat conversation.
-// User-Agent is always keryx so OpenCode does not see a generic Go HTTP client.
-func (p *OpenAIProvider) headers() map[string]string {
-	h := map[string]string{"User-Agent": keryxUserAgent}
-	if trimmed := strings.TrimSpace(p.SessionID); trimmed != "" {
-		h[opencodeSessionHeader] = trimmed
-	}
-	return h
-}
-
 // isOpenRouter reports whether this instance targets OpenRouter, either via
 // the explicit flag or by BaseURL. The flag covers tests with a mock URL;
 // the BaseURL check is a safety net for providers built without the flag.
@@ -97,130 +76,107 @@ func (p *OpenAIProvider) isOpenRouter() bool {
 	return strings.Contains(p.BaseURL, "openrouter.ai")
 }
 
-func (p *OpenAIProvider) buildModel(modelID, cacheKey string) provider.LanguageModel {
+// headers identifies the app and, when SessionID is set, the chat conversation.
+// User-Agent is always keryx so OpenCode does not see a generic Go HTTP client;
+// X-Title attributes the app on OpenRouter.
+func (p *OpenAIProvider) headers() map[string]string {
+	h := map[string]string{"User-Agent": keryxUserAgent}
+	if trimmed := strings.TrimSpace(p.SessionID); trimmed != "" {
+		h[opencodeSessionHeader] = trimmed
+	}
 	if p.isOpenRouter() {
-		opts := []openrouter.Option{openrouter.WithAPIKey(p.APIKey), openrouter.WithHeaders(p.headers())}
-		if p.BaseURL != "" {
-			opts = append(opts, openrouter.WithBaseURL(p.BaseURL))
-		}
-		// OpenRouter's native grouping key for sticky routing and session
-		// analytics. Without it, sticky routing falls back to hashing the
-		// opening messages, which changes on every chat turn (dynamic
-		// datetime context) and kills cache affinity.
-		if trimmed := strings.TrimSpace(cacheKey); trimmed != "" {
-			opts = append(opts, openrouter.WithSessionID(trimmed))
-		}
-		return openrouter.Chat(modelID, opts...)
+		h["X-Title"] = keryxUserAgent
 	}
-	opts := []openai.Option{openai.WithAPIKey(p.APIKey), openai.WithHeaders(p.headers())}
-	if p.BaseURL != "" {
-		opts = append(opts, openai.WithBaseURL(p.BaseURL))
-	}
-	return openai.Chat(modelID, opts...)
+	return h
 }
 
-// mergedOptions merges static GoAIOptions with per-call ProviderOptions.
-// For Chat/ChatStream (text generation), strictJsonSchema is excluded.
-func (p *OpenAIProvider) mergedOptions() map[string]any {
-	out := make(map[string]any)
-	if p.GoAIOptions != nil {
-		maps.Copy(out, p.GoAIOptions)
+// requestModel returns the upstream model ID for a request: the per-request
+// model (reasoning suffix stripped) or the provider default.
+func (p *OpenAIProvider) requestModel(req ChatRequest) string {
+	if req.Model != "" {
+		return reasoningBaseModel(req.Model)
 	}
-	if p.ProviderOptions != nil {
-		maps.Copy(out, p.ProviderOptions)
-	}
-	// DeepSeek models don't support structured outputs
-	if strings.Contains(p.Model, "deepseek") {
-		out["structuredOutputs"] = false
-	}
-	// For text generation, strictJsonSchema is not needed
-	delete(out, "strictJsonSchema")
-	return out
+	return reasoningBaseModel(p.Model)
 }
 
-// requestOptions returns the provider options for a single request. Reasoning
-// effort is derived from the per-request model variant (which is fixed per
-// catalog model), so it stays correct even when the provider instance is
-// cached and shared across different model variants.
-func (p *OpenAIProvider) requestOptions(req ChatRequest) map[string]any {
-	opts := p.mergedOptions()
-	model := req.Model
-	if model == "" {
-		model = p.Model
-	}
-	if effort := reasoningEffort(model); effort != "" {
-		opts["reasoning"] = map[string]any{"effort": effort}
-	}
-	// Standard OpenAI-compatible grouping key for prompt-cache affinity.
-	// goai's openaicompat layer forwards it verbatim as prompt_cache_key;
-	// OpenRouter also honors it as a fallback sticky-routing key when no
-	// session_id is present (we send both there).
-	if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" {
-		opts["prompt_cache_key"] = trimmed
-	}
-	// Some gateways (e.g. opencode-go) only stream reasoning-class models in
-	// real time over the Responses API; Chat Completions buffers the whole
-	// response. Keyed by base model so it survives the reasoning variants.
-	if p.ResponsesAPIModels != nil && p.ResponsesAPIModels[reasoningBaseModel(model)] {
-		opts["useResponsesAPI"] = true
-	}
-	return opts
-}
+// requestOptions builds the per-request model options: reasoning effort
+// (derived from the model variant, which is fixed per catalog model so it
+// stays correct even when the provider instance is cached), output budget,
+// app headers, prompt-cache grouping and file-part payload injection.
+func (p *OpenAIProvider) requestOptions(req ChatRequest) ([]model.Option, error) {
+	var opts []model.Option
 
-func (p *OpenAIProvider) goaiOpts(req ChatRequest) []goai.Option {
-	var o []goai.Option
-
-	if req.System != "" {
-		o = append(o, goai.WithSystem(req.System))
+	// Reasoning effort comes from the per-request model variant, falling
+	// back to the provider's variant when the request doesn't override the
+	// model (the effort is fixed per catalog model, never chosen at request
+	// time).
+	variant := req.Model
+	if variant == "" {
+		variant = p.Model
 	}
-
-	if len(req.Messages) > 0 {
-		msgs := make([]provider.Message, 0, len(req.Messages))
-		for _, m := range req.Messages {
-			parts := messageParts(m)
-			if len(parts) == 0 {
-				continue
-			}
-			msgs = append(msgs, provider.Message{
-				Role:    provider.Role(m.Role),
-				Content: parts,
-			})
-		}
-		o = append(o, goai.WithMessages(msgs...))
+	if effort := reasoningEffort(variant); effort != "" {
+		opts = append(opts, einoopenai.WithReasoningEffort(einoopenai.ReasoningEffortLevel(effort)))
 	}
 
 	if req.MaxTokens > 0 {
-		o = append(o, goai.WithMaxOutputTokens(req.MaxTokens))
+		opts = append(opts, model.WithMaxTokens(req.MaxTokens))
 	}
 
-	// Provider-specific options
-	opts := p.requestOptions(req)
-	if len(opts) > 0 {
-		o = append(o, goai.WithProviderOptions(opts))
+	if headers := p.headers(); len(headers) > 0 {
+		opts = append(opts, einoopenai.WithExtraHeader(headers))
 	}
 
-	// Tools (function calling)
-	if len(req.Tools) > 0 && req.ToolExec != nil {
-		tools := make([]goai.Tool, 0, len(req.Tools))
-		for _, t := range req.Tools {
-			toolDef := goai.Tool{
-				Name:        t.Name,
-				Description: t.Description,
-			}
-			if t.InputSchema != "" {
-				toolDef.InputSchema = json.RawMessage(t.InputSchema)
-			}
-			// Wrap the execute function to pass through the tool name.
-			toolName := t.Name
-			toolDef.Execute = func(ctx context.Context, input json.RawMessage) (string, error) {
-				return req.ToolExec(ctx, toolName, input)
-			}
-			tools = append(tools, toolDef)
+	extra := map[string]any{}
+	if p.isOpenRouter() {
+		// OpenRouter's native grouping key for sticky routing and session
+		// analytics. Without it, sticky routing falls back to hashing the
+		// opening messages, which changes on every chat turn (dynamic
+		// datetime context) and kills cache affinity. usage.include makes
+		// OpenRouter report token usage on streamed responses. The standard
+		// prompt_cache_key travels too as a fallback sticky-routing key.
+		if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" {
+			extra["session_id"] = trimmed
+			extra["prompt_cache_key"] = trimmed
 		}
-		o = append(o, goai.WithTools(tools...), goai.WithMaxSteps(5))
+		extra["usage"] = map[string]any{"include": true}
+	} else if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" {
+		// Standard OpenAI-compatible grouping key for prompt-cache affinity.
+		extra["prompt_cache_key"] = trimmed
+	}
+	for k, v := range p.Options {
+		if k == "useResponsesAPI" || k == "strictJsonSchema" || k == "structuredOutputs" {
+			continue
+		}
+		extra[k] = v
+	}
+	if len(extra) > 0 {
+		opts = append(opts, einoopenai.WithExtraFields(extra))
 	}
 
-	return o
+	if hasWireFileParts(req) {
+		opts = append(opts, einoopenai.WithRequestPayloadModifier(injectFileParts))
+	}
+
+	return opts, nil
+}
+
+func (p *OpenAIProvider) chatModel(ctx context.Context, req ChatRequest) (model.BaseChatModel, []model.Option, error) {
+	if p == nil || p.APIKey == "" {
+		return nil, nil, fmt.Errorf("openai-compatible provider not configured: missing API key")
+	}
+	cm, err := einoopenai.NewChatModel(ctx, &einoopenai.ChatModelConfig{
+		APIKey:  p.APIKey,
+		BaseURL: p.BaseURL,
+		Model:   p.requestModel(req),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	opts, err := p.requestOptions(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cm, opts, nil
 }
 
 func (p *OpenAIProvider) requestTimeout(req ChatRequest) time.Duration {
@@ -235,99 +191,51 @@ func (p *OpenAIProvider) requestTimeout(req ChatRequest) time.Duration {
 }
 
 func (p *OpenAIProvider) Chat(ctx context.Context, req ChatRequest) (string, error) {
-	model, err := p.model()
-	if err != nil {
-		return "", err
-	}
-
-	// Caller-owned timeout: do NOT use goai.WithTimeout. goai's internal
-	// timeout context is canceled before the chunk channel closes at the end
-	// of tool-loop streams, producing a spurious "context canceled" error
-	// after an otherwise successful response (see streamWithToolLoop /
-	// TextStream.consume in goai 0.9.2). Wrapping the context outside goai
-	// and canceling after full consumption avoids that race entirely.
+	// Caller-owned timeout: the HTTP client is left timeout-free so a long
+	// tool-loop stream is never killed by the client before the chunk
+	// channel is drained; the context is canceled only after full
+	// consumption, which avoids spurious "context canceled" errors.
 	ctx, cancel := context.WithTimeout(ctx, p.requestTimeout(req))
 	defer cancel()
 
-	// Override model from request if provided
-	if req.Model != "" {
-		model = p.buildModel(reasoningBaseModel(req.Model), req.CacheKey)
-	} else if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" && p.isOpenRouter() {
-		// Same model, but the OpenRouter session_id is a model-level
-		// option, so rebuild to attach it.
-		model = p.buildModel(reasoningBaseModel(p.Model), trimmed)
+	cm, opts, err := p.chatModel(ctx, req)
+	if err != nil {
+		return "", err
 	}
-
-	result, err := goai.GenerateText(ctx, model, p.goaiOpts(req)...)
+	msgs := buildSchemaMessages(req, false)
+	tools, err := toToolInfos(req.Tools)
+	if err != nil {
+		return "", err
+	}
+	result, err := runToolLoopGenerate(ctx, cm, msgs, tools, req, opts)
 	if err != nil {
 		return "", fmt.Errorf("chat completion: %w", err)
 	}
-	return strings.TrimSpace(result.Text), nil
+	return result.Text, nil
 }
 
 func (p *OpenAIProvider) ChatStream(ctx context.Context, req ChatRequest, onChunk func(StreamChunk)) (ChatStreamResult, error) {
 	var result ChatStreamResult
 
-	model, err := p.model()
-	if err != nil {
-		return result, err
-	}
-
-	// Caller-owned timeout (see Chat for why goai.WithTimeout is avoided).
-	// cancel runs only after the stream is fully drained and Err() checked,
-	// so it can never win the race against the final buffered chunks.
+	// Caller-owned timeout (see Chat): cancel runs only after the stream is
+	// fully drained and the error checked, so it can never win the race
+	// against the final buffered chunks.
 	ctx, cancel := context.WithTimeout(ctx, p.requestTimeout(req))
 	defer cancel()
 
-	// Override model from request if provided
-	if req.Model != "" {
-		model = p.buildModel(reasoningBaseModel(req.Model), req.CacheKey)
-	} else if trimmed := strings.TrimSpace(req.CacheKey); trimmed != "" && p.isOpenRouter() {
-		// Same model, but the OpenRouter session_id is a model-level
-		// option, so rebuild to attach it.
-		model = p.buildModel(reasoningBaseModel(p.Model), trimmed)
+	cm, opts, err := p.chatModel(ctx, req)
+	if err != nil {
+		return result, err
 	}
-
-	stream, err := goai.StreamText(ctx, model, p.goaiOpts(req)...)
+	msgs := buildSchemaMessages(req, false)
+	tools, err := toToolInfos(req.Tools)
+	if err != nil {
+		return result, err
+	}
+	result, err = runToolLoopStream(ctx, cm, msgs, tools, req, opts, onChunk)
 	if err != nil {
 		return result, fmt.Errorf("chat stream: %w", err)
 	}
-
-	var text strings.Builder
-	var reasoning strings.Builder
-	for chunk := range stream.Stream() {
-		switch chunk.Type {
-		case provider.ChunkText:
-			text.WriteString(chunk.Text)
-			if onChunk != nil {
-				onChunk(StreamChunk{Kind: StreamChunkText, Text: chunk.Text})
-			}
-		case provider.ChunkReasoning:
-			reasoning.WriteString(chunk.Text)
-			if onChunk != nil {
-				onChunk(StreamChunk{Kind: StreamChunkReasoning, Text: chunk.Text})
-			}
-		}
-	}
-
-	result.Text = strings.TrimSpace(text.String())
-	result.Reasoning = strings.TrimSpace(reasoning.String())
-	if err := stream.Err(); err != nil {
-		return result, fmt.Errorf("stream error: %w", err)
-	}
-	// Usage (including prompt-cache reads/writes) is only known once the
-	// stream is fully drained. The provider already requested usage
-	// reporting (usage.include / stream_options.include_usage).
-	if res := stream.Result(); res != nil {
-		result.Usage = Usage{
-			InputTokens:      res.TotalUsage.InputTokens,
-			OutputTokens:     res.TotalUsage.OutputTokens,
-			ReasoningTokens:  res.TotalUsage.ReasoningTokens,
-			CacheReadTokens:  res.TotalUsage.CacheReadTokens,
-			CacheWriteTokens: res.TotalUsage.CacheWriteTokens,
-		}
-	}
-
 	return result, nil
 }
 

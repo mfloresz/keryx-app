@@ -15,12 +15,10 @@ type ProviderInfo struct {
 	Models       []ModelInfo    `json:"models"`
 	DefaultModel string         `json:"defaultModel"`
 	OpenAICompat bool           `json:"openaiCompat"`
-	GoAIOptions  map[string]any `json:"goaiOptions,omitempty"`
-	// ResponsesAPIModels lists base upstream model IDs (reasoning-suffix
-	// stripped) that must use the OpenAI Responses API instead of Chat
-	// Completions. Some gateways (e.g. opencode-go) only stream these models
-	// in real time over /responses.
-	ResponsesAPIModels []string `json:"responsesApiModels,omitempty"`
+	// Options are static wire extras forwarded with every request to this
+	// provider (e.g. venice_parameters). Behavior toggles from the previous
+	// engine (useResponsesAPI, strictJsonSchema) no longer apply.
+	Options map[string]any `json:"options,omitempty"`
 }
 
 // ModelInfo describes a single model exposed by a provider.
@@ -45,9 +43,7 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://api.venice.ai/api/v1",
 		OpenAICompat: true,
 		DefaultModel: "e2ee-deepseek-v4-flash",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": true,
+		Options: map[string]any{
 			"venice_parameters": map[string]any{
 				"include_venice_system_prompt": false,
 			},
@@ -75,13 +71,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://opencode.ai/zen/go/v1",
 		OpenAICompat: true,
 		DefaultModel: "mimo-v2.5",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": true,
-		},
-		// Luna only streams in real time over the Responses API on this
-		// gateway; Chat Completions buffers the full response.
-		ResponsesAPIModels: []string{"gpt-5.6-luna"},
 		Models: []ModelInfo{
 			{ID: "opencode-go/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode-go", DisplayName: "Mimo V2.5", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "opencode-go/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode-go", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
@@ -98,10 +87,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "http://localhost:1234/v1",
 		OpenAICompat: true,
 		DefaultModel: "local-model",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": false,
-		},
 		Models: []ModelInfo{
 			{ID: "lmstudio/local-model", UpstreamID: "local-model", Provider: "lmstudio", DisplayName: "Local Model", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
@@ -112,9 +97,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://llm.chutes.ai/v1",
 		OpenAICompat: true,
 		DefaultModel: "google/gemma-4-31B-turbo-TEE",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-		},
 		Models: []ModelInfo{
 			{ID: "chutes/gemma-4-31B-turbo-TEE", UpstreamID: "google/gemma-4-31B-turbo-TEE", Provider: "chutes", DisplayName: "Google Gemma 4 31B Turbo", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "chutes/nemotron-3-nano-omni-30B-TEE", UpstreamID: "Nemotron-3-Nano-Omni-30B-TEE", Provider: "chutes", DisplayName: "Nemotron 3 Nano Omni 30B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
@@ -128,10 +110,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://openrouter.ai/api/v1",
 		OpenAICompat: true,
 		DefaultModel: "openrouter/openai/gpt-6-luna (reasoning: medium)",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": true,
-		},
 		Models: []ModelInfo{
 			{ID: "openrouter/nvidia/nemotron-3.5-lightning", UpstreamID: "nvidia/nemotron-3.5-lightning", Provider: "openrouter", DisplayName: "Nemotron 3.5 Lightning", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "openrouter/meta/muse-glimmer-30b", UpstreamID: "meta/muse-glimmer-30b", Provider: "openrouter", DisplayName: "Muse Glimmer", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
@@ -156,9 +134,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://model.inferx.net/endpoints/v1",
 		OpenAICompat: true,
 		DefaultModel: "deepseek-v4-flash-0731",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI": false,
-		},
 		Models: []ModelInfo{
 			{ID: "inferx/deepseek-v4-flash-0731", UpstreamID: "deepseek-v4-flash-0731", Provider: "inferx", DisplayName: "DeepSeek V4 Flash 0731", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "inferx/gemma-4-31B-it-fp8", UpstreamID: "gemma-4-31B-it-fp8", Provider: "inferx", DisplayName: "Gemma 4 31B IT FP8", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},

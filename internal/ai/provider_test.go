@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/zendev-sh/goai/provider"
+	"github.com/cloudwego/eino/schema"
 )
 
 func TestTruncateText(t *testing.T) {
@@ -101,59 +101,105 @@ func TestTitleUserMessage(t *testing.T) {
 	})
 }
 
-func TestMessagePartsMarkdown(t *testing.T) {
+func TestBuildSchemaMessagesMarkdown(t *testing.T) {
 	t.Run("markdown conversion inlines as text block", func(t *testing.T) {
-		parts := messageParts(ChatMessage{
-			Attachments: []ChatAttachment{{
-				Filename:  "report.pdf",
-				MediaType: "application/pdf",
-				Data:      []byte("raw pdf bytes"),
-				Markdown:  "# Title\n\nBody",
+		msgs := buildSchemaMessages(ChatRequest{
+			Messages: []ChatMessage{{
+				Role: "user",
+				Attachments: []ChatAttachment{{
+					Filename:  "report.pdf",
+					MediaType: "application/pdf",
+					Data:      []byte("raw pdf bytes"),
+					Markdown:  "# Title\n\nBody",
+				}},
 			}},
-		})
+		}, false)
+		if len(msgs) != 1 {
+			t.Fatalf("expected 1 message, got %d", len(msgs))
+		}
+		parts := msgs[0].UserInputMultiContent
 		if len(parts) != 1 {
 			t.Fatalf("expected 1 part, got %d", len(parts))
 		}
 		p := parts[0]
-		if p.Type != provider.PartText {
-			t.Errorf("expected PartText, got %q", p.Type)
+		if p.Type != schema.ChatMessagePartTypeText {
+			t.Errorf("expected text part, got %q", p.Type)
 		}
 		if !strings.HasPrefix(p.Text, `<file name="report.pdf" media=text/markdown>`) {
 			t.Errorf("unexpected text part: %q", p.Text)
 		}
 	})
 
-	t.Run("no markdown falls back to file part", func(t *testing.T) {
-		parts := messageParts(ChatMessage{
-			Attachments: []ChatAttachment{{
-				Filename:  "report.pdf",
-				MediaType: "application/pdf",
-				Data:      []byte("raw pdf bytes"),
+	t.Run("no markdown stages file part for payload injection", func(t *testing.T) {
+		msgs := buildSchemaMessages(ChatRequest{
+			Messages: []ChatMessage{{
+				Role: "user",
+				Attachments: []ChatAttachment{{
+					Filename:  "report.pdf",
+					MediaType: "application/pdf",
+					Data:      []byte("raw pdf bytes"),
+				}},
 			}},
-		})
-		if len(parts) != 1 {
-			t.Fatalf("expected 1 part, got %d", len(parts))
+		}, false)
+		if len(msgs) != 1 {
+			t.Fatalf("expected 1 message, got %d", len(msgs))
 		}
-		p := parts[0]
-		if p.Type != provider.PartFile {
-			t.Errorf("expected PartFile, got %q", p.Type)
+		if n := len(msgs[0].UserInputMultiContent); n != 0 {
+			t.Errorf("expected no inline parts, got %d", n)
 		}
-		if !strings.HasPrefix(p.URL, "data:application/pdf;base64,") {
-			t.Errorf("expected pdf data URL, got %q", p.URL)
+		files, ok := msgs[0].Extra[extraFilePartsKey].([]wireFilePart)
+		if !ok || len(files) != 1 {
+			t.Fatalf("expected staged wire file part, got %v", msgs[0].Extra)
+		}
+		if files[0].MediaType != "application/pdf" || files[0].Name != "report.pdf" {
+			t.Errorf("unexpected wire file part: %+v", files[0])
+		}
+		if !strings.HasPrefix(files[0].DataURL, "data:application/pdf;base64,") {
+			t.Errorf("expected pdf data URL, got %q", files[0].DataURL)
 		}
 	})
 
-	t.Run("markdown wins over image media type", func(t *testing.T) {
-		parts := messageParts(ChatMessage{
-			Attachments: []ChatAttachment{{
-				Filename:  "scan.pdf",
-				MediaType: "application/pdf",
-				Data:      []byte("raw"),
-				Markdown:  "converted",
+	t.Run("images stay inline parts", func(t *testing.T) {
+		msgs := buildSchemaMessages(ChatRequest{
+			Messages: []ChatMessage{{
+				Role: "user",
+				Attachments: []ChatAttachment{{
+					Filename:  "pic.png",
+					MediaType: "image/png",
+					Data:      []byte("raw"),
+				}},
 			}},
-		})
-		if parts[0].Type != provider.PartText {
-			t.Errorf("expected markdown to replace PartFile, got %q", parts[0].Type)
+		}, false)
+		parts := msgs[0].UserInputMultiContent
+		if len(parts) != 1 || parts[0].Type != schema.ChatMessagePartTypeImageURL {
+			t.Fatalf("expected one image part, got %+v", parts)
+		}
+		if parts[0].Image == nil || parts[0].Image.URL == nil ||
+			!strings.HasPrefix(*parts[0].Image.URL, "data:image/png;base64,") {
+			t.Errorf("expected png data URL, got %+v", parts[0].Image)
+		}
+	})
+
+	t.Run("inline file parts for native-file providers", func(t *testing.T) {
+		msgs := buildSchemaMessages(ChatRequest{
+			Messages: []ChatMessage{{
+				Role: "user",
+				Attachments: []ChatAttachment{{
+					Filename:  "report.pdf",
+					MediaType: "application/pdf",
+					Data:      []byte("raw pdf bytes"),
+				}},
+			}},
+		}, true)
+		parts := msgs[0].UserInputMultiContent
+		if len(parts) != 1 || parts[0].Type != schema.ChatMessagePartTypeFileURL {
+			t.Fatalf("expected one file part, got %+v", parts)
+		}
+		if parts[0].File == nil || parts[0].File.Base64Data == nil || parts[0].File.Name != "report.pdf" {
+			t.Errorf("unexpected file part: %+v", parts[0].File)
+		}
+		if _, staged := msgs[0].Extra[extraFilePartsKey]; staged {
+			t.Error("file part should not be staged when inlined")
 		}
 	})
 }

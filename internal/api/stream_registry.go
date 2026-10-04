@@ -35,7 +35,7 @@ type activeStream struct {
 
 // streamEvent is a single SSE frame forwarded to reconnecting clients.
 type streamEvent struct {
-	event string // "start" | "text" | "reasoning" | "finish" | "error"
+	event string // "start" | "text" | "reasoning" | "tool_call" | "tool_result" | "finish" | "error"
 	extra map[string]string
 }
 
@@ -63,6 +63,20 @@ func (as *activeStream) append(kind, text string) {
 			// Slow subscriber: drop the event rather than blocking the
 			// main generation goroutine. The subscriber's next poll of
 			// the snapshot endpoint recovers the missing text.
+		}
+	}
+}
+
+// broadcast forwards a pre-formatted event to reconnect subscribers without
+// touching the accumulated text/reasoning snapshots (used for tool activity,
+// which is persisted with the assistant message instead).
+func (as *activeStream) broadcast(event string, extra map[string]string) {
+	as.subscribersMu.Lock()
+	defer as.subscribersMu.Unlock()
+	for ch := range as.subscribers {
+		select {
+		case ch <- streamEvent{event: event, extra: extra}:
+		default:
 		}
 	}
 }
