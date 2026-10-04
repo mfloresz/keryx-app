@@ -48,8 +48,20 @@ func (s *Store) EnsureSchema() error {
 	if err := s.migrateChatsCollectionForAgents(chats); err != nil {
 		return fmt.Errorf("migrate chats agent_id: %w", err)
 	}
+	// chats.project_id: TextField (not Relation) so deleting a project never
+	// breaks existing chats — the stream just loses the workspace tools.
+	if err := s.migrateChatsCollectionForProjects(chats); err != nil {
+		return fmt.Errorf("migrate chats project_id: %w", err)
+	}
 	if _, err := s.ensureAttachmentsCollection(users, chats); err != nil {
 		return fmt.Errorf("ensure attachments: %w", err)
+	}
+	projects, err := s.ensureProjectsCollection(users)
+	if err != nil {
+		return fmt.Errorf("ensure projects: %w", err)
+	}
+	if _, err := s.ensureProjectFilesCollection(users, projects); err != nil {
+		return fmt.Errorf("ensure project files: %w", err)
 	}
 	if err := s.seedModels(); err != nil {
 		return fmt.Errorf("seed models: %w", err)

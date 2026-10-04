@@ -20,6 +20,8 @@ const (
 		WebSearchConfigCollection         = "web_search_config"
 	PromptOverridesCollection         = "prompt_overrides"
 	AgentsCollection                  = "agents"
+	ProjectsCollection                = "projects"
+	ProjectFilesCollection            = "project_files"
 )
 
 // User roles
@@ -64,6 +66,7 @@ type ChatRecord struct {
 	WebSearch  bool            `json:"webSearch"`
 	AgentID    string          `json:"agentId,omitempty"`
 	Preset     string          `json:"preset,omitempty"`
+	ProjectID  string          `json:"projectId,omitempty"`
 	Branches   json.RawMessage `json:"branches"`
 	LastUsage  json.RawMessage `json:"lastUsage,omitempty"`
 	CreatedAt  string          `json:"createdAt,omitempty"`

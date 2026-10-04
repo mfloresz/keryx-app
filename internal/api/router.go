@@ -111,6 +111,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/agents/{id}", s.withAuth(s.handleUpdateAgent))
 	mux.HandleFunc("DELETE /api/agents/{id}", s.withAuth(s.handleDeleteAgent))
 	mux.HandleFunc("POST /api/agents/{id}/duplicate", s.withAuth(s.handleDuplicateAgent))
+
+	// Project workspace routes (user)
+	mux.HandleFunc("GET /api/projects", s.withAuth(s.handleListProjects))
+	mux.HandleFunc("POST /api/projects", s.withAuth(s.handleCreateProject))
+	mux.HandleFunc("PATCH /api/projects/{id}", s.withAuth(s.handleUpdateProject))
+	mux.HandleFunc("DELETE /api/projects/{id}", s.withAuth(s.handleDeleteProject))
+	mux.HandleFunc("GET /api/projects/{id}/files", s.withAuth(s.handleListProjectFiles))
+	mux.HandleFunc("GET /api/projects/{id}/file", s.withAuth(s.handleGetProjectFile))
+	mux.HandleFunc("PUT /api/projects/{id}/file", s.withAuth(s.handlePutProjectFile))
+	mux.HandleFunc("DELETE /api/projects/{id}/file", s.withAuth(s.handleDeleteProjectFile))
+
 	mux.HandleFunc("DELETE /api/chats", s.withAuth(s.handleDeleteAllChats))
 	mux.HandleFunc("GET /api/favorites", s.withAuth(s.handleListFavorites))
 
@@ -127,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.withRateLimit(s.streamLimiter, userKey, s.handleChatStream)))
 	mux.HandleFunc("PATCH /api/chats/{id}/agent", s.withAuth(s.handleUpdateChatAgent))
 	mux.HandleFunc("PATCH /api/chats/{id}/preset", s.withAuth(s.handleUpdateChatPreset))
+	mux.HandleFunc("PATCH /api/chats/{id}/project", s.withAuth(s.handleUpdateChatProject))
 	mux.HandleFunc("GET /api/chats/{id}/stream", s.withAuth(s.handleReconnectStream))
 	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))

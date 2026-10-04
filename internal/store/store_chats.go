@@ -73,6 +73,9 @@ func (s *Store) SaveChat(chat *ChatRecord, ownerID string) (*ChatRecord, error) 
 	if v := record.Collection().Fields.GetByName("preset"); v != nil {
 		record.Set("preset", chat.Preset)
 	}
+	if v := record.Collection().Fields.GetByName("project_id"); v != nil {
+		record.Set("project_id", chat.ProjectID)
+	}
 
 	if chat.Messages != nil {
 		record.Set("messages", string(chat.Messages))
@@ -241,6 +244,7 @@ func chatFromRecord(r *core.Record) *ChatRecord {
 		WebSearch:  r.GetBool("web_search"),
 		AgentID:    r.GetString("agent_id"),
 		Preset:     r.GetString("preset"),
+		ProjectID:  r.GetString("project_id"),
 		CreatedAt:  r.GetString("created"),
 		UpdatedAt:  r.GetString("updated"),
 	}

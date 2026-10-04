@@ -148,8 +148,56 @@ func (s *Store) ensureChatsCollection(users *core.Collection) (*core.Collection,
 	c.Fields.Add(&core.JSONField{Name: "last_usage"})
 	c.Fields.Add(&core.TextField{Name: "agent_id", Max: 80})
 	c.Fields.Add(&core.TextField{Name: "preset", Max: 30})
+	c.Fields.Add(&core.TextField{Name: "project_id", Max: 80})
 	addSystemDateFields(c)
 	c.AddIndex("idx_chats_owner", false, "owner", "")
+	if err := s.App.Save(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (s *Store) ensureProjectsCollection(users *core.Collection) (*core.Collection, error) {
+	if existing, err := s.App.FindCollectionByNameOrId(ProjectsCollection); err == nil {
+		return existing, nil
+	}
+	c := core.NewBaseCollection(ProjectsCollection)
+	ownerOnly := "@request.auth.id != '' && owner = @request.auth.id"
+	c.ListRule = new(ownerOnly)
+	c.ViewRule = new(ownerOnly)
+	c.CreateRule = new(ownerOnly)
+	c.UpdateRule = new(ownerOnly)
+	c.DeleteRule = new(ownerOnly)
+	c.Fields.Add(&core.RelationField{Name: "owner", Required: true, CollectionId: users.Id, MaxSelect: 1})
+	c.Fields.Add(&core.TextField{Name: "name", Required: true, Max: maxProjectNameLen})
+	c.Fields.Add(&core.TextField{Name: "description", Max: maxProjectDescLen})
+	addSystemDateFields(c)
+	c.AddIndex("idx_projects_owner", false, "owner", "")
+	c.AddIndex("idx_projects_owner_name_unique", true, "owner, name", "")
+	if err := s.App.Save(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (s *Store) ensureProjectFilesCollection(users, projects *core.Collection) (*core.Collection, error) {
+	if existing, err := s.App.FindCollectionByNameOrId(ProjectFilesCollection); err == nil {
+		return existing, nil
+	}
+	c := core.NewBaseCollection(ProjectFilesCollection)
+	ownerOnly := "@request.auth.id != '' && owner = @request.auth.id"
+	c.ListRule = new(ownerOnly)
+	c.ViewRule = new(ownerOnly)
+	c.CreateRule = new(ownerOnly)
+	c.UpdateRule = new(ownerOnly)
+	c.DeleteRule = new(ownerOnly)
+	c.Fields.Add(&core.RelationField{Name: "project", Required: true, CollectionId: projects.Id, MaxSelect: 1, CascadeDelete: true})
+	c.Fields.Add(&core.RelationField{Name: "owner", Required: true, CollectionId: users.Id, MaxSelect: 1})
+	c.Fields.Add(&core.TextField{Name: "path", Required: true, Max: maxPathLen})
+	c.Fields.Add(&core.TextField{Name: "content", Max: maxFileChars})
+	c.Fields.Add(&core.NumberField{Name: "size"})
+	addSystemDateFields(c)
+	c.AddIndex("idx_project_files_path_unique", true, "project, path", "")
 	if err := s.App.Save(c); err != nil {
 		return nil, err
 	}

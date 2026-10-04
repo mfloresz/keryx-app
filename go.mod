@@ -3,6 +3,7 @@ module keryx-server
 go 1.26.4
 
 require (
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/cloudwego/eino v0.9.21
 	github.com/cloudwego/eino-ext/components/model/gemini v0.1.36
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.13

@@ -20,10 +20,12 @@ import { useArtifactStore } from '@/stores/artifact'
 import ArtifactPanel from '@/components/artifacts/ArtifactPanel.vue'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
-import type { ModelPreset, ChatAgent } from '@/components/chat/ChatInput.vue'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import type { ModelPreset, ChatAgent, ChatProject } from '@/components/chat/ChatInput.vue'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { FolderOpenIcon } from 'lucide-vue-next'
 import type { AttachmentFile } from '@/components/ai-elements/prompt-input/types'
 
 const route = useRoute()
@@ -123,6 +125,8 @@ function buildSearchRequestBody(webSearch: boolean) {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
     // Agent override: when set, the backend ignores any client `system`.
     ...(selectedAgentId.value ? { agentId: selectedAgentId.value } : {}),
+    // Project workspace: activates the backend file tools for this chat.
+    ...(selectedProjectId.value ? { projectId: selectedProjectId.value } : {}),
   }
 }
 
@@ -183,6 +187,127 @@ async function persistChatPreset(preset: string) {
 watch(selectedAgentId, (value) => { void persistChatAgent(value) })
 watch(selectedPreset, (value) => { void persistChatPreset(value) })
 
+// ---- Projects: workspace the chat's file tools operate in ----
+const projects = ref<ChatProject[]>([])
+const queryProjectId =
+  typeof route.query.projectId === 'string' && route.query.projectId ? route.query.projectId : null
+const selectedProjectId = ref<string | null>(queryProjectId)
+const projectsLoaded = ref(false)
+
+const selectedProjectExists = computed(() =>
+  !selectedProjectId.value || projects.value.some(p => p.id === selectedProjectId.value),
+)
+
+function maybeClearMissingProject() {
+  if (!chatLoaded.value || !projectsLoaded.value) return
+  if (!selectedProjectExists.value && selectedProjectId.value) {
+    toast(t('chat.project.missing'))
+    selectedProjectId.value = null
+  }
+}
+
+watch(selectedProjectExists, () => { maybeClearMissingProject() })
+watch([chatLoaded, projectsLoaded], () => { maybeClearMissingProject() })
+
+async function fetchProjects() {
+  try {
+    const res = await fetch('/api/projects', { headers: await (await getAuthAdapter()).getAuthorizationHeaders() })
+    if (res.ok) projects.value = await res.json()
+  } catch {
+    projects.value = []
+  } finally {
+    projectsLoaded.value = true
+  }
+}
+
+async function persistChatProject(projectId: string | null) {
+  if (!chatId.value || !chatLoaded.value) return
+  if ((chatData.value?.projectId ?? null) === (projectId ?? null)) return
+  try {
+    const updated = await chatRepository.updateProject(chatId.value, projectId)
+    if (chatData.value) chatData.value = { ...chatData.value, projectId: updated?.projectId ?? projectId }
+  } catch {
+    // Non-fatal: selection stays local for this session.
+  }
+}
+
+watch(selectedProjectId, (value) => { void persistChatProject(value) })
+
+// ---- Project creation (inline, so the story-agent flow never leaves chat) ----
+const isCreateProjectDialogOpen = ref(false)
+const newProjectName = ref('')
+const newProjectDescription = ref('')
+const isCreatingProject = ref(false)
+
+function openCreateProjectDialog() {
+  newProjectName.value = ''
+  newProjectDescription.value = ''
+  isCreateProjectDialogOpen.value = true
+}
+
+async function confirmCreateProject() {
+  const name = newProjectName.value.trim()
+  if (!name || isCreatingProject.value) return
+  isCreatingProject.value = true
+  try {
+    const res = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(await (await getAuthAdapter()).getAuthorizationHeaders()) },
+      body: JSON.stringify({ name, description: newProjectDescription.value.trim() }),
+    })
+    if (!res.ok) throw new Error(await res.text().catch(() => 'create failed'))
+    const created = await res.json() as ChatProject
+    projects.value = [...projects.value, created]
+    selectedProjectId.value = created.id
+    isCreateProjectDialogOpen.value = false
+  } catch {
+    toast(t('chat.project.createFailed'))
+  } finally {
+    isCreatingProject.value = false
+  }
+}
+
+// ---- Project files viewer ----
+interface ProjectFileEntry { path: string; size: number; updatedAt: string }
+const projectFiles = ref<ProjectFileEntry[]>([])
+const projectFilesDialogOpen = ref(false)
+const projectFilesLoading = ref(false)
+const viewingFile = ref<{ path: string; content: string } | null>(null)
+const viewingFileLoading = ref(false)
+
+async function openProjectFiles() {
+  if (!selectedProjectId.value) return
+  projectFilesDialogOpen.value = true
+  projectFilesLoading.value = true
+  try {
+    const res = await fetch(`/api/projects/${selectedProjectId.value}/files`, {
+      headers: await (await getAuthAdapter()).getAuthorizationHeaders(),
+    })
+    projectFiles.value = res.ok ? await res.json() : []
+  } catch {
+    projectFiles.value = []
+  } finally {
+    projectFilesLoading.value = false
+  }
+}
+
+async function viewProjectFile(file: ProjectFileEntry) {
+  if (!selectedProjectId.value) return
+  viewingFileLoading.value = true
+  viewingFile.value = null
+  try {
+    const res = await fetch(`/api/projects/${selectedProjectId.value}/file?path=${encodeURIComponent(file.path)}`, {
+      headers: await (await getAuthAdapter()).getAuthorizationHeaders(),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      viewingFile.value = { path: data.path, content: data.content ?? '' }
+    }
+  } finally {
+    viewingFileLoading.value = false
+  }
+}
+
 async function loadChat() {
   isLoading.value = true
   loadError.value = null
@@ -209,6 +334,9 @@ async function loadChat() {
     }
     if (!queryAgentId && (loadedChat as any).agentId) {
       selectedAgentId.value = (loadedChat as any).agentId
+    }
+    if (!queryProjectId && (loadedChat as any).projectId) {
+      selectedProjectId.value = (loadedChat as any).projectId
     }
     chatLoaded.value = true
   } catch (err: any) {
@@ -506,6 +634,7 @@ onMounted(async () => {
     // silently ignore — search toggle won't appear
   }
   void fetchAgents()
+  void fetchProjects()
   // Fetch presets with capabilities
   try {
     const res = await fetch('/api/models/presets')
@@ -587,6 +716,10 @@ onMounted(async () => {
     <!-- Chat header -->
     <div class="hidden lg:flex items-center gap-2 px-4 py-3">
       <h2 class="font-semibold truncate flex-1">{{ chatTitle }}</h2>
+      <Button v-if="selectedProjectId" variant="outline" size="sm" class="h-7 text-xs" @click="openProjectFiles">
+        <FolderOpenIcon class="h-3.5 w-3.5" />
+        {{ $t('chat.project.files') }}
+      </Button>
       <Button v-if="htmlArtifacts.length" variant="outline" size="sm" class="h-7 text-xs" @click="artifactStore.open()">
         {{ $t('artifact.openPanel', { count: htmlArtifacts.length }) }}
       </Button>
@@ -600,10 +733,56 @@ onMounted(async () => {
     <ChatInput :status="chat.status" :preset="selectedPreset" :presets="presets" :web-search="chatData?.webSearch"
       :webSearchGloballyEnabled="webSearchGloballyEnabled"
       :agents="agents" :agent-id="selectedAgentId"
+      :projects="projects" :project-id="selectedProjectId"
       @update:agentId="selectedAgentId = $event"
+      @update:projectId="selectedProjectId = $event"
+      @create-project="openCreateProjectDialog"
       @submit="handleSubmit" @update:preset="selectedPreset = $event" @stop="handleStop" />
     </div>
 
     <ArtifactPanel v-if="artifactStore.isOpen && (htmlArtifacts.length || artifactStore.all.length)" class="fixed inset-0 z-50 lg:static" />
+
+    <!-- Project files dialog -->
+    <Dialog :open="projectFilesDialogOpen" @update:open="(v: boolean) => { if (!v) { projectFilesDialogOpen = false; viewingFile = null } }">
+      <DialogContent class="sm:max-w-xl max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader class="shrink-0">
+          <DialogTitle>{{ $t('chat.project.files') }}</DialogTitle>
+        </DialogHeader>
+        <div class="flex-1 min-h-0 overflow-y-auto">
+          <div v-if="projectFilesLoading" class="py-6 text-center text-sm text-muted-foreground">{{ $t('chat.loadingChat') }}</div>
+          <div v-else-if="!projectFiles.length" class="py-6 text-center text-sm text-muted-foreground">{{ $t('chat.project.filesEmpty') }}</div>
+          <div v-else class="space-y-1">
+            <button v-for="file in projectFiles" :key="file.path" type="button"
+              class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-accent"
+              @click="viewProjectFile(file)">
+              <span class="truncate flex-1">{{ file.path }}</span>
+              <span class="shrink-0 text-xs text-muted-foreground">{{ file.size }} B</span>
+            </button>
+          </div>
+          <div v-if="viewingFileLoading" class="py-4 text-center text-sm text-muted-foreground">…</div>
+          <pre v-else-if="viewingFile" class="mt-2 max-h-[50vh] overflow-auto rounded-md border bg-muted/40 p-3 text-xs whitespace-pre-wrap">{{ viewingFile.content }}</pre>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Create project dialog -->
+    <Dialog :open="isCreateProjectDialogOpen" @update:open="(v: boolean) => { if (!v) isCreateProjectDialogOpen = false }">
+      <DialogContent class="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ $t('chat.project.createTitle') }}</DialogTitle>
+          <DialogDescription>{{ $t('chat.project.createDescription') }}</DialogDescription>
+        </DialogHeader>
+        <div class="space-y-3">
+          <Input v-model="newProjectName" :placeholder="$t('chat.project.namePlaceholder')" maxlength="80" />
+          <Textarea v-model="newProjectDescription" :placeholder="$t('chat.project.descriptionPlaceholder')" class="min-h-[70px]" maxlength="300" />
+        </div>
+        <DialogFooter class="gap-2 sm:gap-0">
+          <Button variant="outline" @click="isCreateProjectDialogOpen = false">{{ $t('app.cancel') }}</Button>
+          <Button :disabled="!newProjectName.trim() || isCreatingProject" @click="confirmCreateProject">
+            {{ $t('chat.project.create') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

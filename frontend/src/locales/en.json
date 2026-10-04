@@ -240,6 +240,20 @@
       "missing": "The agent for this chat is no longer available",
       "limitReached": "You reached the agent limit (50)",
       "menuLabel": "Agents"
+    },
+    "project": {
+      "menuLabel": "Projects",
+      "clear": "Remove project",
+      "missing": "This chat's project is no longer available",
+      "files": "Files",
+      "filesEmpty": "No files yet. Ask the assistant to create one.",
+      "createItem": "New project",
+      "createTitle": "New project",
+      "createDescription": "Creates a closed workspace where the assistant can read, create and edit files.",
+      "namePlaceholder": "Name (e.g. My novel)",
+      "descriptionPlaceholder": "Description (optional)",
+      "create": "Create",
+      "createFailed": "Failed to create the project"
     }
   },
   "message": {

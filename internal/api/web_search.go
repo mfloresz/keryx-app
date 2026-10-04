@@ -119,6 +119,24 @@ func (s *Server) handleWebSearchConfig(w http.ResponseWriter, r *http.Request) {
 	}, http.StatusOK)
 }
 
+// execWebSearchTool runs one web_search tool call with graceful degradation:
+// a Brave failure is handed to the model as tool output instead of failing
+// the whole stream (which would also kill title generation after the error).
+func execWebSearchTool(braveAPIKey, chatID, userID string, rawInput json.RawMessage) (string, error) {
+	var params struct {
+		Query string `json:"query"`
+	}
+	if err := json.Unmarshal(rawInput, &params); err != nil {
+		return "", fmt.Errorf("invalid web_search params: %w", err)
+	}
+	result, err := callBraveSearch(braveAPIKey, params.Query, 10)
+	if err != nil {
+		slog.Warn("Brave search tool call failed", "error", err, "chat", chatID, "user", userID)
+		return "Web search is temporarily unavailable. Continue answering from your own knowledge and mention that the live search failed.", nil
+	}
+	return result.Results, nil
+}
+
 // ---- Brave Search Integration ----
 
 // braveSearchResult holds the formatted search results from Brave.

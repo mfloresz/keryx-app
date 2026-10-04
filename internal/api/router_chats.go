@@ -514,6 +514,10 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		// AgentID selects an Agent whose system prompt fully overrides the
 		// base prompt. Empty = use base (or legacy System).
 		AgentID string `json:"agentId"`
+		// ProjectID attaches a project workspace: file tools become
+		// available and a workspace section is appended to the prompt.
+		// Empty = plain chat (no workspace tools).
+		ProjectID string `json:"projectId"`
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
@@ -572,6 +576,20 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve the project workspace. An invalid project degrades gracefully
+	// to a plain chat (same policy as missing agents) so an old selection
+	// never breaks the stream.
+	var project *store.Project
+	if req.ProjectID != "" {
+		if p, pErr := s.Store.GetProjectForOwner(req.ProjectID, userID); pErr == nil {
+			project = p
+		} else {
+			slog.Warn("project not found, streaming without workspace", "projectId", req.ProjectID, "chat", chatID, "user", userID)
+			// Don't persist an invalid selection.
+			req.ProjectID = ""
+		}
+	}
+
 	// Resolve the Brave API key for web search. The feature only activates when
 	// the admin both configured a key and enabled it; otherwise we silently
 	// degrade to a normal chat (the tool and its prompt section are skipped).
@@ -592,7 +610,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	// disconnects mid-response. Upsert by message id keeps edit/regenerate
 	// flows from duplicating the message. Preset and agent selection travel
 	// with every stream so closing/reopening a chat restores them.
-	userMessageID := s.persistUserMessage(chatID, userID, req.UserMessage, req.WebSearch, req.Preset, req.AgentID)
+	userMessageID := s.persistUserMessage(chatID, userID, req.UserMessage, req.WebSearch, req.Preset, req.AgentID, req.ProjectID)
 	assistantMessageID := generateID()
 
 	// The OpenCode session groups a chat's requests for prompt-cache
@@ -628,6 +646,17 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	}
 	if webSearchActive {
 		systemPrompt += s.buildSearchSystemPrompt()
+	}
+
+	// Workspace tools + prompt section, active only with a valid project.
+	var projectTools []ai.ToolDefinition
+	if project != nil {
+		projectTools = buildProjectToolDefinitions()
+		files, err := s.Store.ListProjectFiles(project.ID, userID)
+		if err != nil {
+			files = nil
+		}
+		systemPrompt += buildProjectWorkspacePrompt(project, files)
 	}
 
 	// Inject the dynamic user context (preferred name, current datetime,
@@ -680,30 +709,24 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build tool definitions for web search
+	// Build tool definitions: web search (when active) plus the project
+	// workspace tools (when a project is attached). One exec closure
+	// dispatches by tool name.
 	var tools []ai.ToolDefinition
 	var toolExec ai.ToolExecFunc
 	if webSearchActive {
-		tools = buildSearchToolDefinition()
+		tools = append(tools, buildSearchToolDefinition()...)
+	}
+	if project != nil {
+		tools = append(tools, projectTools...)
+	}
+	if len(tools) > 0 {
+		projectExec := projectToolExec(s, project.ID, userID)
 		toolExec = func(ctx context.Context, toolName string, input json.RawMessage) (string, error) {
 			if toolName == "web_search" {
-				var params struct {
-					Query string `json:"query"`
-				}
-				if err := json.Unmarshal(input, &params); err != nil {
-					return "", fmt.Errorf("invalid web_search params: %w", err)
-				}
-				result, err := callBraveSearch(braveAPIKey, params.Query, 10)
-				if err != nil {
-					// Degrade gracefully: hand the failure to the model as tool
-					// output instead of failing the whole stream (which would
-					// also kill title generation after the error).
-					slog.Warn("Brave search tool call failed", "error", err, "chat", chatID, "user", userID)
-					return "Web search is temporarily unavailable. Continue answering from your own knowledge and mention that the live search failed.", nil
-				}
-				return result.Results, nil
+				return execWebSearchTool(braveAPIKey, chatID, userID, input)
 			}
-			return "", fmt.Errorf("unknown tool: %s", toolName)
+			return projectExec(ctx, toolName, input)
 		}
 	}
 
@@ -935,10 +958,10 @@ func languageName(lang string) string {
 }
 
 // persistUserMessage upserts the client-provided user message into the chat
-// and records the web-search flag, model preset and agent selection. Returns
-// the persisted message id (empty when nothing was persisted). Serialized per
-// chat via the chat lock.
-func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, webSearch bool, preset, agentID string) string {
+// and records the web-search flag, model preset, agent and project
+// selection. Returns the persisted message id (empty when nothing was
+// persisted). Serialized per chat via the chat lock.
+func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, webSearch bool, preset, agentID, projectID string) string {
 	unlock := s.lockChat(chatID)
 	defer unlock()
 
@@ -961,6 +984,9 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 	} else {
 		chat.AgentID = ""
 	}
+	// The project selection is persisted only when valid (checked by the
+	// caller); an invalid one degrades to a plain chat for the stream.
+	chat.ProjectID = projectID
 
 	messageID := ""
 	if len(raw) > 0 {
