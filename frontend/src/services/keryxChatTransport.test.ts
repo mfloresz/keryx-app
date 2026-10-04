@@ -84,6 +84,26 @@ describe('keryxChatTransport tool events', () => {
     expect(input).toMatchObject({ toolCallId: 'tc2', input: 'not-json' })
   })
 
+  it('forwards the project selection in the request body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      sseResponse([
+        { type: 'start', assistantMessageId: 'a1' },
+        { type: 'finish' },
+      ])
+    )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    await makeTransport().sendMessages({
+      ...sendOptions,
+      body: { model: 'venice/x', projectId: 'proj-123', agentId: 'ag-1' },
+    })
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const payload = JSON.parse(String(requestInit.body)) as Record<string, unknown>
+    expect(payload.projectId).toBe('proj-123')
+    expect(payload.agentId).toBe('ag-1')
+  })
+
   it('forwards live tool events on reconnect', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(
       sseResponse([
