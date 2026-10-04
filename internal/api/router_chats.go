@@ -651,6 +651,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	// still persist whatever was generated so far.
 	var (
 		partialText, partialReasoning strings.Builder
+		toolParts                     []map[string]any
 		streamStarted                 bool
 	)
 
@@ -674,8 +675,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		}
 		lastPersist = time.Now()
 		text, reasoning := active.snapshot()
-		if strings.TrimSpace(text) != "" || reasoning != "" {
-			s.appendAssistantMessage(chatID, userID, assistantMessageID, text, reasoning)
+		if strings.TrimSpace(text) != "" || reasoning != "" || len(toolParts) > 0 {
+			s.appendAssistantMessage(chatID, userID, assistantMessageID, text, reasoning, toolParts)
 		}
 	}
 
@@ -733,6 +734,38 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			partialReasoning.WriteString(chunk.Text)
 			writeSSEEvent(w, "reasoning", map[string]string{"text": chunk.Text})
 			active.append("reasoning", chunk.Text)
+		case ai.StreamChunkToolCall:
+			// Surface live tool activity: the execution stays server-side,
+			// the client only learns that a tool was invoked and with what
+			// arguments.
+			extra := map[string]string{
+				"name":       chunk.ToolName,
+				"toolCallId": chunk.ToolCallID,
+				"input":      chunk.Input,
+			}
+			writeSSEEvent(w, "tool_call", extra)
+			active.broadcast("tool_call", extra)
+		case ai.StreamChunkToolResult:
+			part := map[string]any{
+				"type":       "dynamic-tool",
+				"toolCallId": chunk.ToolCallID,
+				"toolName":   chunk.ToolName,
+				"state":      "output-available",
+				"output":     chunk.Output,
+			}
+			if json.Valid([]byte(chunk.Input)) {
+				part["input"] = json.RawMessage(chunk.Input)
+			} else {
+				part["input"] = chunk.Input
+			}
+			toolParts = append(toolParts, part)
+			extra := map[string]string{
+				"name":       chunk.ToolName,
+				"toolCallId": chunk.ToolCallID,
+				"output":     chunk.Output,
+			}
+			writeSSEEvent(w, "tool_result", extra)
+			active.broadcast("tool_result", extra)
 		default:
 			partialText.WriteString(chunk.Text)
 			writeSSEEvent(w, "text", map[string]string{"text": chunk.Text})
@@ -753,8 +786,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		// Persist the partial assistant response (if any) instead of losing it.
-		if strings.TrimSpace(fullText) != "" || fullReasoning != "" {
-			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning)
+		if strings.TrimSpace(fullText) != "" || fullReasoning != "" || len(toolParts) > 0 {
+			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts)
 		}
 		slog.Error("chat stream failed", "error", err, "chat", chatID, "user", userID, "model", req.Model)
 		active.broadcastFinish("error", map[string]string{"error": "The model provider returned an error. Please try again."})
@@ -799,10 +832,6 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 								Timeout: 120 * time.Second,
 							}
 						} else {
-							responsesAPIModels := make(map[string]bool, len(info.ResponsesAPIModels))
-							for _, m := range info.ResponsesAPIModels {
-								responsesAPIModels[m] = true
-							}
 							// Titles share the chat's OpenCode session so they
 							// hit the same prompt-cache grouping.
 							session := ""
@@ -810,14 +839,13 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 								session = ai.SessionForChat(chatID)
 							}
 							titleProvider = &ai.OpenAIProvider{
-								APIKey:             apiKey,
-								BaseURL:            info.BaseURL,
-								Model:              upstreamModel,
-								Timeout:            120 * time.Second,
-								GoAIOptions:        info.GoAIOptions,
-								ResponsesAPIModels: responsesAPIModels,
-								SessionID:          session,
-								OpenRouter:         info.ID == "openrouter",
+								APIKey:     apiKey,
+								BaseURL:    info.BaseURL,
+								Model:      upstreamModel,
+								Timeout:    120 * time.Second,
+								Options:    info.Options,
+								SessionID:  session,
+								OpenRouter: info.ID == "openrouter",
 							}
 						}
 					}
@@ -836,7 +864,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Append assistant message and persist atomically with the title.
-	savedTitle := s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, chat.Title)
+	savedTitle := s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts, chat.Title)
 	if savedTitle != "" {
 		writeSSEEvent(w, "finish", map[string]string{"title": savedTitle})
 		flusher.Flush()
@@ -976,10 +1004,11 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 }
 
 // appendAssistantMessage appends (or replaces, on retry) the assistant
-// message in the stored chat and returns the persisted title. The read-save
-// cycle is serialized per chat so it never clobbers votes, branches, or
-// edits saved while the stream was running.
-func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoning string, titleOverride ...string) string {
+// message in the stored chat and returns the persisted title. toolParts are
+// the dynamic-tool parts (web search invocations) observed during the
+// stream. The read-save cycle is serialized per chat so it never clobbers
+// votes, branches, or edits saved while the stream was running.
+func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoning string, toolParts []map[string]any, titleOverride ...string) string {
 	unlock := s.lockChat(chatID)
 	defer unlock()
 
@@ -995,6 +1024,7 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 	if reasoning != "" {
 		parts = append(parts, map[string]any{"type": "reasoning", "text": reasoning})
 	}
+	parts = append(parts, toolParts...)
 	parts = append(parts, map[string]any{"type": "text", "text": text})
 	assistantMsg := map[string]any{
 		"id":        messageID,
@@ -1147,7 +1177,7 @@ func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
 			case "finish":
 				// Handled via done channel; ignore duplicates here.
 			default:
-				writeSSEEvent(w, ev.event, map[string]string{"text": ev.extra["text"]})
+				writeSSEEvent(w, ev.event, ev.extra)
 				flusher.Flush()
 			}
 		}

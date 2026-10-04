@@ -70,12 +70,9 @@ func TestOpenAIProviderSendsSessionAndUserAgent(t *testing.T) {
 	defer srv.Close()
 
 	provider := &OpenAIProvider{
-		APIKey:  "test-key",
-		BaseURL: srv.URL,
-		Model:   "test-model",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI": false,
-		},
+		APIKey:    "test-key",
+		BaseURL:   srv.URL,
+		Model:     "test-model",
 		SessionID: "abc12345",
 	}
 	if _, err := provider.Chat(context.Background(), ChatRequest{
@@ -106,9 +103,6 @@ func TestOpenAIProviderOmitsSessionWhenEmpty(t *testing.T) {
 		APIKey:  "test-key",
 		BaseURL: srv.URL,
 		Model:   "test-model",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI": false,
-		},
 	}
 	if _, err := provider.Chat(context.Background(), ChatRequest{
 		Messages: []ChatMessage{{Role: "user", Content: "hello"}},

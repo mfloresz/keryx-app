@@ -14,6 +14,17 @@ interface KeryxChatTransportOptions {
   headers?: () => Promise<Record<string, string>>;
 }
 
+// parseMaybeJSON turns tool payloads into objects when they are valid JSON
+// (tool inputs always are), leaving plain strings untouched.
+function parseMaybeJSON(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
 export class KeryxChatTransport implements ChatTransport<UIMessage> {
   private api: string;
   private getHeaders: () => Promise<Record<string, string>>;
@@ -208,6 +219,21 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                     id: reasoningId,
                     delta: data.text,
                   } as UIMessageChunk);
+                } else if (data.type === 'tool_call' && data.toolCallId) {
+                  // Live tool activity: the backend executes the tool and
+                  // keeps streaming; show an input-available tool part.
+                  controller.enqueue({
+                    type: 'tool-input-available',
+                    toolCallId: data.toolCallId,
+                    toolName: data.name ?? 'tool',
+                    input: parseMaybeJSON(data.input),
+                  } as UIMessageChunk);
+                } else if (data.type === 'tool_result' && data.toolCallId) {
+                  controller.enqueue({
+                    type: 'tool-output-available',
+                    toolCallId: data.toolCallId,
+                    output: parseMaybeJSON(data.output),
+                  } as UIMessageChunk);
                 } else if (data.type === 'text' && data.text) {
                   closeReasoning();
                   controller.enqueue({
@@ -364,6 +390,19 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                     type: 'reasoning-delta',
                     id: reasoningId,
                     delta: data.text,
+                  } as UIMessageChunk);
+                } else if (data.type === 'tool_call' && data.toolCallId) {
+                  controller.enqueue({
+                    type: 'tool-input-available',
+                    toolCallId: data.toolCallId,
+                    toolName: data.name ?? 'tool',
+                    input: parseMaybeJSON(data.input),
+                  } as UIMessageChunk);
+                } else if (data.type === 'tool_result' && data.toolCallId) {
+                  controller.enqueue({
+                    type: 'tool-output-available',
+                    toolCallId: data.toolCallId,
+                    output: parseMaybeJSON(data.output),
                   } as UIMessageChunk);
                 } else if ((data.type === 'text_snapshot' || data.type === 'text') && data.text) {
                   closeReasoning();

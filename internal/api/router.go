@@ -313,10 +313,6 @@ func (s *Server) getProviderForModel(modelID, sessionID string) (ai.Provider, st
 			Timeout: 120 * time.Second,
 		}
 	} else {
-		responsesAPIModels := make(map[string]bool, len(info.ResponsesAPIModels))
-		for _, m := range info.ResponsesAPIModels {
-			responsesAPIModels[m] = true
-		}
 		// The OpenCode session groups a chat's requests for prompt-cache
 		// optimization. Only opencode-go/opencode-zen consume it.
 		session := ""
@@ -324,14 +320,13 @@ func (s *Server) getProviderForModel(modelID, sessionID string) (ai.Provider, st
 			session = sessionID
 		}
 		p = &ai.OpenAIProvider{
-			APIKey:             apiKey,
-			BaseURL:            info.BaseURL,
-			Model:              upstreamModel,
-			Timeout:            120 * time.Second,
-			GoAIOptions:        info.GoAIOptions,
-			ResponsesAPIModels: responsesAPIModels,
-			SessionID:          session,
-			OpenRouter:         info.ID == "openrouter",
+			APIKey:     apiKey,
+			BaseURL:    info.BaseURL,
+			Model:      upstreamModel,
+			Timeout:    120 * time.Second,
+			Options:    info.Options,
+			SessionID:  session,
+			OpenRouter: info.ID == "openrouter",
 		}
 	}
 	if !ai.IsOpencodeProvider(info.ID) {
