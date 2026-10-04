@@ -22,6 +22,14 @@ const routes = [
     component: () => import("@/pages/agents/[id].vue"),
   },
   {
+    path: "/projects",
+    component: () => import("@/pages/projects/index.vue"),
+  },
+  {
+    path: "/projects/:id",
+    component: () => import("@/pages/projects/[id].vue"),
+  },
+  {
     path: "/favorites",
     component: () => import("@/pages/favorites.vue"),
   },

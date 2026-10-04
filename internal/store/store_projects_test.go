@@ -137,6 +137,19 @@ func TestProjectWorkspaceLifecycle(t *testing.T) {
 	if err != nil || len(paths) != 2 {
 		t.Fatalf("glob = %v, %v; want 2 paths", paths, err)
 	}
+
+	// Listing stats: two files, sizes known.
+	summaries, err := s.ListProjectsWithStats(alice)
+	if err != nil || len(summaries) != 1 {
+		t.Fatalf("summaries = %v, %v; want 1 project", summaries, err)
+	}
+	if summaries[0].FileCount != 2 {
+		t.Errorf("fileCount = %d, want 2", summaries[0].FileCount)
+	}
+	wantSize := len("linea 1\nlinea 2\nlinea 3") + len("acto 1\nacto 2")
+	if summaries[0].TotalSize != wantSize {
+		t.Errorf("totalSize = %d, want %d", summaries[0].TotalSize, wantSize)
+	}
 	matches, err := s.GrepProjectFiles(project.ID, alice, "linea 3", "", false, 10)
 	if err != nil || len(matches) != 1 || !strings.Contains(matches[0], "personajes/ana.md:3") {
 		t.Fatalf("grep = %v, %v", matches, err)

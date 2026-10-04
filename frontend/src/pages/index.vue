@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectsStore } from '@/stores/projects'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
 import { getUserFacingChatError } from '@/utils/chatErrors'
@@ -25,6 +26,8 @@ const presets = ref<ModelPreset[]>([])
 const webSearchGloballyEnabled = ref(false)
 const agents = ref<ChatAgent[]>([])
 const selectedAgentId = ref<string | null>(null)
+const projectsStore = useProjectsStore()
+const selectedProjectId = ref<string | null>(null)
 
 onMounted(async () => {
   try {
@@ -48,6 +51,23 @@ onMounted(async () => {
   const qAgent = route.query.agentId
   if (typeof qAgent === 'string' && qAgent && agents.value.some(a => a.id === qAgent)) {
     selectedAgentId.value = qAgent
+  }
+  // Preselect project from query string (e.g. coming from a project page's
+  // "Hacer una pregunta"). The project list loads in the background; the
+  // selection is kept even before the list resolves (the backend validates
+  // ownership anyway).
+  const qProject = route.query.projectId
+  if (typeof qProject === 'string' && qProject) {
+    selectedProjectId.value = qProject
+    void projectsStore.fetchProjects()
+  }
+})
+
+watch(() => route.query.projectId, (val) => {
+  if (typeof val === 'string' && val) {
+    selectedProjectId.value = val
+  } else {
+    selectedProjectId.value = null
   }
 })
 
@@ -129,6 +149,7 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
       webSearch: Boolean(webSearch),
       preset: selectedPreset.value,
       agentId: selectedAgentId.value,
+      projectId: selectedProjectId.value ?? undefined,
     }
     const saved = await chatRepository.createChat(baseChat)
     const chatId = saved.id
@@ -154,7 +175,11 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
 
     router.push({
       path: `/chat/${chatId}`,
-      query: { preset: selectedPreset.value, ...(selectedAgentId.value ? { agentId: selectedAgentId.value } : {}) },
+      query: {
+        preset: selectedPreset.value,
+        ...(selectedAgentId.value ? { agentId: selectedAgentId.value } : {}),
+        ...(selectedProjectId.value ? { projectId: selectedProjectId.value } : {}),
+      },
     })
   } catch (error: any) {
     if (import.meta.env.DEV) console.error('Failed to create chat:', error)
@@ -186,7 +211,10 @@ async function handleSubmit({ text, files, webSearch }: { text: string; files: A
           :webSearchGloballyEnabled="webSearchGloballyEnabled"
           :agents="agents"
           :agent-id="selectedAgentId"
+          :projects="projectsStore.projects"
+          :project-id="selectedProjectId"
           @update:agentId="selectedAgentId = $event"
+          @update:projectId="selectedProjectId = $event"
           @submit="handleSubmit"
           @update:preset="selectedPreset = $event"
         />

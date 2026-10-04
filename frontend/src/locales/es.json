@@ -42,7 +42,8 @@
     "userMenu": "Menú de usuario",
     "logout": "Cerrar sesión",
     "rename": "Renombrar",
-    "delete": "Eliminar"
+    "delete": "Eliminar",
+    "projects": "Proyectos"
   },
   "settings": {
     "title": "Configuración",
@@ -523,5 +524,45 @@
       "passwordRequired": "La contraseña es obligatoria.",
       "confirmPasswordRequired": "Por favor confirma tu contraseña."
     }
+  },
+  "projects": {
+    "title": "Proyectos",
+    "subtitle": "Espacios de trabajo cerrados donde tus asistentes leen, crean y editan archivos.",
+    "search": "Buscar un proyecto",
+    "create": "Nuevo proyecto",
+    "createTitle": "Nuevo proyecto",
+    "createDescription": "Crea un workspace cerrado donde el asistente podrá leer, crear y editar archivos.",
+    "createFailed": "No se pudo crear el proyecto",
+    "limitReached": "Alcanzaste el máximo de proyectos",
+    "edit": "Editar",
+    "editTitle": "Editar proyecto",
+    "updateFailed": "No se pudo actualizar el proyecto",
+    "delete": "Eliminar",
+    "deleteTitle": "Eliminar proyecto {name}?",
+    "deleteDescription": "Se eliminarán el proyecto y todos sus archivos. Esta acción no se puede deshacer.",
+    "deleteFailed": "No se pudo eliminar el proyecto",
+    "emptyTitle": "Sin proyectos todavía",
+    "emptyDescription": "Crea un proyecto para dar a tus chats un workspace de archivos.",
+    "noResults": "Sin resultados",
+    "updated": "Actualizado {when}",
+    "noFiles": "Ningún archivo",
+    "fileCount": "{count} archivos",
+    "notFound": "Proyecto no encontrado",
+    "ask": "Hacer una pregunta",
+    "newFile": "Nuevo archivo",
+    "newFileDescription": "La ruta es relativa a la raíz del proyecto; los directorios son implícitos.",
+    "createFile": "Crear archivo",
+    "filterFiles": "Filtrar archivos",
+    "filesEmpty": "Sin archivos todavía. Crea uno o pídeselo al asistente.",
+    "openFile": "Abrir",
+    "renameFile": "Renombrar",
+    "renameFileFailed": "No se pudo renombrar el archivo",
+    "downloadFile": "Descargar",
+    "deleteFileTitle": "Eliminar {path}?",
+    "deleteFileDescription": "El archivo se eliminará del proyecto. Esta acción no se puede deshacer.",
+    "deleteFileFailed": "No se pudo eliminar el archivo",
+    "readFileFailed": "No se pudo leer el archivo",
+    "writeFileFailed": "No se pudo guardar el archivo",
+    "fileTooLarge": "El archivo supera el límite de tamaño"
   }
 }

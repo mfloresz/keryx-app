@@ -8,16 +8,17 @@ import (
 
 // ---- Project endpoints ----
 
-// handleListProjects returns the authenticated user's projects.
+// handleListProjects returns the authenticated user's projects with
+// workspace stats (file count, total size).
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromContext(r)
-	projects, err := s.Store.ListProjects(userID)
+	projects, err := s.Store.ListProjectsWithStats(userID)
 	if err != nil {
 		internalError(w, r, "Failed to list projects", err)
 		return
 	}
 	if projects == nil {
-		projects = []store.Project{}
+		projects = []store.ProjectSummary{}
 	}
 	jsonResponse(w, projects, http.StatusOK)
 }

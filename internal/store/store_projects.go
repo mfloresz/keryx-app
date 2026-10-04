@@ -42,6 +42,13 @@ type ProjectFile struct {
 	UpdatedAt string `json:"updatedAt"`
 }
 
+// ProjectSummary is a project with workspace stats for listings.
+type ProjectSummary struct {
+	Project
+	FileCount int `json:"fileCount"`
+	TotalSize int `json:"totalSize"`
+}
+
 func projectFromRecord(r *core.Record) *Project {
 	return &Project{
 		ID:          r.Id,
@@ -116,6 +123,45 @@ func (s *Store) ListProjects(ownerID string) ([]Project, error) {
 	out := make([]Project, 0, len(records))
 	for _, r := range records {
 		out = append(out, *projectFromRecord(r))
+	}
+	return out, nil
+}
+
+// ListProjectsWithStats returns the user's projects with file counts and
+// total workspace sizes, for listings ("15 archivos · 42 KB").
+func (s *Store) ListProjectsWithStats(ownerID string) ([]ProjectSummary, error) {
+	projects, err := s.ListProjects(ownerID)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		Project string `db:"project"`
+		Files   int64  `db:"files"`
+		Bytes   int64  `db:"bytes"`
+	}
+	if err := s.App.DB().NewQuery(
+		"SELECT {{project}} AS project, COUNT(*) AS files, COALESCE(SUM({{size}}), 0) AS bytes FROM {{project_files}} WHERE {{owner}} = {:owner} GROUP BY {{project}}",
+	).Bind(dbx.Params{"owner": ownerID}).All(&rows); err != nil {
+		return nil, err
+	}
+	stats := make(map[string]struct {
+		files int64
+		bytes int64
+	}, len(rows))
+	for _, r := range rows {
+		stats[r.Project] = struct {
+			files int64
+			bytes int64
+		}{r.Files, r.Bytes}
+	}
+	out := make([]ProjectSummary, 0, len(projects))
+	for _, p := range projects {
+		summary := ProjectSummary{Project: p}
+		if st, ok := stats[p.ID]; ok {
+			summary.FileCount = int(st.files)
+			summary.TotalSize = int(st.bytes)
+		}
+		out = append(out, summary)
 	}
 	return out, nil
 }
