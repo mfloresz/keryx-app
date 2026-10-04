@@ -75,6 +75,7 @@ import {
   Moon,
   Monitor,
   Bot,
+  Folder,
 } from 'lucide-vue-next'
 import { useTheme, type Theme } from '@/composables/useTheme'
 
@@ -219,6 +220,10 @@ function isFavoritesRoute() {
 
 function isAgentsRoute() {
   return route.path.startsWith('/agents')
+}
+
+function isProjectsRoute() {
+  return route.path.startsWith('/projects')
 }
 
 async function handleLogout() {
@@ -375,6 +380,32 @@ function onKeyDown(e: KeyboardEvent) {
           >
             <Bot class="h-4 w-4 opacity-70" />
             {{ $t('sidebar.agents') }}
+          </Button>
+
+          <Tooltip v-if="collapsed && !isDrawer">
+            <TooltipTrigger as-child>
+              <Button
+                :variant="isProjectsRoute() ? 'secondary' : 'ghost'"
+                class="w-full justify-center"
+                size="sm"
+                @click="router.push('/projects'); closeMobile()"
+              >
+                <Folder class="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <p>{{ $t('sidebar.projects') }}</p>
+            </TooltipContent>
+          </Tooltip>
+          <Button
+            v-else
+            :variant="isProjectsRoute() ? 'secondary' : 'ghost'"
+            class="w-full justify-start gap-2 font-normal"
+            size="sm"
+            @click="router.push('/projects'); closeMobile()"
+          >
+            <Folder class="h-4 w-4 opacity-70" />
+            {{ $t('sidebar.projects') }}
           </Button>
 
           <Tooltip v-if="collapsed && !isDrawer">

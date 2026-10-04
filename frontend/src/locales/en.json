@@ -42,7 +42,8 @@
     "userMenu": "User menu",
     "logout": "Log out",
     "rename": "Rename",
-    "delete": "Delete"
+    "delete": "Delete",
+    "projects": "Projects"
   },
   "settings": {
     "title": "Settings",
@@ -523,5 +524,45 @@
       "passwordRequired": "Password is required.",
       "confirmPasswordRequired": "Please confirm your password."
     }
+  },
+  "projects": {
+    "title": "Projects",
+    "subtitle": "Closed workspaces where your assistants read, create and edit files.",
+    "search": "Search a project",
+    "create": "New project",
+    "createTitle": "New project",
+    "createDescription": "Creates a closed workspace where the assistant can read, create and edit files.",
+    "createFailed": "Failed to create the project",
+    "limitReached": "You reached the project limit",
+    "edit": "Edit",
+    "editTitle": "Edit project",
+    "updateFailed": "Failed to update the project",
+    "delete": "Delete",
+    "deleteTitle": "Delete project {name}?",
+    "deleteDescription": "The project and all its files will be deleted. This action cannot be undone.",
+    "deleteFailed": "Failed to delete the project",
+    "emptyTitle": "No projects yet",
+    "emptyDescription": "Create a project to give your chats a file workspace.",
+    "noResults": "No results",
+    "updated": "Updated {when}",
+    "noFiles": "No files",
+    "fileCount": "{count} files",
+    "notFound": "Project not found",
+    "ask": "Ask a question",
+    "newFile": "New file",
+    "newFileDescription": "The path is relative to the project root; directories are implicit.",
+    "createFile": "Create file",
+    "filterFiles": "Filter files",
+    "filesEmpty": "No files yet. Create one or ask the assistant.",
+    "openFile": "Open",
+    "renameFile": "Rename",
+    "renameFileFailed": "Failed to rename the file",
+    "downloadFile": "Download",
+    "deleteFileTitle": "Delete {path}?",
+    "deleteFileDescription": "The file will be removed from the project. This action cannot be undone.",
+    "deleteFileFailed": "Failed to delete the file",
+    "readFileFailed": "Failed to read the file",
+    "writeFileFailed": "Failed to save the file",
+    "fileTooLarge": "The file exceeds the size limit"
   }
 }

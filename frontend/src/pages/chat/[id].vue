@@ -6,6 +6,7 @@ import { Chat } from '@ai-sdk/vue'
 import type { UIMessage, ChatStatus } from 'ai'
 import { useChatStore } from '@/stores/chat'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectsStore } from '@/stores/projects'
 import type { ChatRecord } from '@/domain/chat/types'
 import { useToast } from '@/composables/useToast'
 import { persistAttachmentFiles } from '@/utils/chatAttachments'
@@ -20,7 +21,7 @@ import { useArtifactStore } from '@/stores/artifact'
 import ArtifactPanel from '@/components/artifacts/ArtifactPanel.vue'
 import ChatMessages from '@/components/chat/ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
-import type { ModelPreset, ChatAgent, ChatProject } from '@/components/chat/ChatInput.vue'
+import type { ModelPreset, ChatAgent } from '@/components/chat/ChatInput.vue'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
+const projectsStore = useProjectsStore()
 const { toast } = useToast()
 const chatRepository = await getChatRepository()
 
@@ -188,14 +190,13 @@ watch(selectedAgentId, (value) => { void persistChatAgent(value) })
 watch(selectedPreset, (value) => { void persistChatPreset(value) })
 
 // ---- Projects: workspace the chat's file tools operate in ----
-const projects = ref<ChatProject[]>([])
 const queryProjectId =
   typeof route.query.projectId === 'string' && route.query.projectId ? route.query.projectId : null
 const selectedProjectId = ref<string | null>(queryProjectId)
 const projectsLoaded = ref(false)
 
 const selectedProjectExists = computed(() =>
-  !selectedProjectId.value || projects.value.some(p => p.id === selectedProjectId.value),
+  !selectedProjectId.value || projectsStore.projects.some(p => p.id === selectedProjectId.value),
 )
 
 function maybeClearMissingProject() {
@@ -208,17 +209,6 @@ function maybeClearMissingProject() {
 
 watch(selectedProjectExists, () => { maybeClearMissingProject() })
 watch([chatLoaded, projectsLoaded], () => { maybeClearMissingProject() })
-
-async function fetchProjects() {
-  try {
-    const res = await fetch('/api/projects', { headers: await (await getAuthAdapter()).getAuthorizationHeaders() })
-    if (res.ok) projects.value = await res.json()
-  } catch {
-    projects.value = []
-  } finally {
-    projectsLoaded.value = true
-  }
-}
 
 async function persistChatProject(projectId: string | null) {
   if (!chatId.value || !chatLoaded.value) return
@@ -250,14 +240,7 @@ async function confirmCreateProject() {
   if (!name || isCreatingProject.value) return
   isCreatingProject.value = true
   try {
-    const res = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(await (await getAuthAdapter()).getAuthorizationHeaders()) },
-      body: JSON.stringify({ name, description: newProjectDescription.value.trim() }),
-    })
-    if (!res.ok) throw new Error(await res.text().catch(() => 'create failed'))
-    const created = await res.json() as ChatProject
-    projects.value = [...projects.value, created]
+    const created = await projectsStore.createProject({ name, description: newProjectDescription.value.trim() })
     selectedProjectId.value = created.id
     isCreateProjectDialogOpen.value = false
   } catch {
@@ -634,7 +617,7 @@ onMounted(async () => {
     // silently ignore — search toggle won't appear
   }
   void fetchAgents()
-  void fetchProjects()
+  void projectsStore.fetchProjects().finally(() => { projectsLoaded.value = true })
   // Fetch presets with capabilities
   try {
     const res = await fetch('/api/models/presets')
@@ -733,7 +716,7 @@ onMounted(async () => {
     <ChatInput :status="chat.status" :preset="selectedPreset" :presets="presets" :web-search="chatData?.webSearch"
       :webSearchGloballyEnabled="webSearchGloballyEnabled"
       :agents="agents" :agent-id="selectedAgentId"
-      :projects="projects" :project-id="selectedProjectId"
+      :projects="projectsStore.projects" :project-id="selectedProjectId"
       @update:agentId="selectedAgentId = $event"
       @update:projectId="selectedProjectId = $event"
       @create-project="openCreateProjectDialog"
