@@ -240,6 +240,20 @@
       "limitReached": "Alcanzaste el máximo de agentes (50)",
       "menuLabel": "Agentes"
     },
+    "project": {
+      "menuLabel": "Proyectos",
+      "clear": "Quitar proyecto",
+      "missing": "El proyecto de este chat ya no está disponible",
+      "files": "Archivos",
+      "filesEmpty": "Sin archivos todavía. Pídele al asistente que cree alguno.",
+      "createItem": "Nuevo proyecto",
+      "createTitle": "Nuevo proyecto",
+      "createDescription": "Crea un workspace cerrado donde el asistente podrá leer, crear y editar archivos.",
+      "namePlaceholder": "Nombre (p. ej. Mi novela)",
+      "descriptionPlaceholder": "Descripción (opcional)",
+      "create": "Crear",
+      "createFailed": "No se pudo crear el proyecto"
+    },
     "addPhotosOrFiles": "Agrega fotos o archivos"
   },
   "message": {

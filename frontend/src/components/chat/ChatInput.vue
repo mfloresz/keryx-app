@@ -42,7 +42,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
-import { GlobeIcon, XIcon, BotIcon, CheckIcon } from 'lucide-vue-next'
+import { GlobeIcon, XIcon, BotIcon, CheckIcon, FolderIcon, PlusIcon } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -68,6 +68,12 @@ export interface ChatAgent {
   source: 'builtin' | 'override' | 'global_custom' | 'user_custom'
 }
 
+export interface ChatProject {
+  id: string
+  name: string
+  description?: string
+}
+
 const PRESET_DESCRIPTION_KEYS: Record<string, { title: string; subtitle: string }> = {
   fast: { title: 'chat.presetFast', subtitle: 'chat.presetFastDesc' },
   reflect: { title: 'chat.presetReflect', subtitle: 'chat.presetReflectDesc' },
@@ -84,6 +90,8 @@ const props = defineProps<{
   webSearchGloballyEnabled?: boolean
   agents?: ChatAgent[]
   agentId?: string | null
+  projects?: ChatProject[]
+  projectId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -91,6 +99,8 @@ const emit = defineEmits<{
   (e: 'update:preset', value: string): void
   (e: 'stop'): void
   (e: 'update:agentId', value: string | null): void
+  (e: 'update:projectId', value: string | null): void
+  (e: 'create-project'): void
 }>()
 
 const useWebSearch = ref(props.webSearch ?? false)
@@ -177,6 +187,14 @@ const selectableAgents = computed(() =>
 function handleAgentSelect(id: string) {
   emit('update:agentId', id === '' ? null : id)
 }
+
+const selectedProject = computed(() =>
+  (props.projects ?? []).find(p => p.id === props.projectId) ?? null
+)
+
+function handleProjectSelect(id: string) {
+  emit('update:projectId', id === '' ? null : id)
+}
 </script>
 
 <template>
@@ -244,6 +262,49 @@ function handleAgentSelect(id: string) {
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>
+
+            <DropdownMenuSub v-if="props.projects?.length">
+              <DropdownMenuSubTrigger
+                class="gap-2"
+                :class="{ 'data-[highlighted]:bg-accent': !!props.projectId }"
+              >
+                <FolderIcon :size="16" />
+                <span>{{ $t('chat.project.menuLabel') }}</span>
+                <span
+                  v-if="selectedProject"
+                  class="ms-auto max-w-[100px] truncate text-xs text-muted-foreground"
+                >{{ selectedProject.name }}</span>
+              </DropdownMenuSubTrigger>
+              <DropdownMenuPortal>
+                <DropdownMenuSubContent
+                  side="right"
+                  :side-offset="8"
+                  class="max-h-64 w-64 overflow-y-auto"
+                >
+                  <DropdownMenuItem
+                    v-for="project in props.projects"
+                    :key="project.id"
+                    class="gap-2"
+                    @select="handleProjectSelect(project.id)"
+                  >
+                    <FolderIcon :size="14" class="shrink-0 text-muted-foreground" />
+                    <span class="truncate">{{ project.name }}</span>
+                    <CheckIcon
+                      v-if="props.projectId === project.id"
+                      class="ms-auto shrink-0"
+                      :size="14"
+                    />
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    class="gap-2 border-t border-border"
+                    @select.stop="emit('create-project')"
+                  >
+                    <PlusIcon :size="14" class="shrink-0 text-muted-foreground" />
+                    <span>{{ $t('chat.project.createItem') }}</span>
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuPortal>
+            </DropdownMenuSub>
           </PromptInputActionMenuContent>
         </PromptInputActionMenu>
 
@@ -271,6 +332,22 @@ function handleAgentSelect(id: string) {
               :aria-label="$t('chat.agent.clear')"
               class="opacity-0 transition-opacity group-hover:opacity-100"
               @click="emit('update:agentId', null)"
+            >
+              <XIcon :size="12" />
+            </button>
+          </div>
+          <!-- Selected project badge -->
+          <div
+            v-if="selectedProject"
+            class="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs"
+          >
+            <FolderIcon :size="12" class="shrink-0" />
+            <span class="max-w-[120px] truncate">{{ selectedProject.name }}</span>
+            <button
+              type="button"
+              :aria-label="$t('chat.project.clear')"
+              class="opacity-0 transition-opacity group-hover:opacity-100"
+              @click="emit('update:projectId', null)"
             >
               <XIcon :size="12" />
             </button>

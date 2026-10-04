@@ -123,6 +123,15 @@ export const apiChatRepository: ChatRepository = {
     );
   },
 
+  async updateProject(chatId, projectId) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/project`, {
+        method: "PATCH",
+        body: JSON.stringify({ projectId }),
+      }),
+    );
+  },
+
   async listFavorites() {
     return readJson(await apiFetch("/api/favorites"));
   },

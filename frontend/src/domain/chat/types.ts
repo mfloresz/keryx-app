@@ -24,6 +24,7 @@ export interface ChatRecord {
   webSearch?: boolean;
   agentId?: string | null;
   preset?: string | null;
+  projectId?: string | null;
   lastUsage?: LanguageModelUsage;
   branches?: Record<string, ChatBranchState>;
 }
