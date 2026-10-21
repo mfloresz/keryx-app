@@ -2,6 +2,8 @@ import * as React from "react";
 import ReactMarkdown, { type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { EyeIcon } from "lucide-react";
+
 import { useHighlightedCode } from "#/hooks/use-highlighted-code";
 import {
   CodeBlock,
@@ -12,6 +14,9 @@ import {
   CodeBlockLine,
   CodeBlockTitle,
 } from "#/components/ui/code-block";
+import { Button } from "#/components/ui/button";
+import { useArtifactStore } from "#/stores/artifact";
+import { useI18n } from "#/i18n";
 
 /**
  * Replacement renderer for <pre> elements in markdown (code fences).
@@ -47,12 +52,26 @@ function MarkdownCodeBlock({
   language: string;
 }) {
   const lines = useHighlightedCode(code, language);
+  const { openFromCodeBlock } = useArtifactStore();
+  const { t } = useI18n();
+  const isHtml = language === "html";
 
   return (
     <CodeBlock className="not-typeset my-3">
       <CodeBlockHeader>
         <CodeBlockTitle>{language || "text"}</CodeBlockTitle>
         <CodeBlockActions>
+          {isHtml ? (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t("message.preview")}
+              title={t("message.preview")}
+              onClick={() => openFromCodeBlock(code)}
+            >
+              <EyeIcon />
+            </Button>
+          ) : null}
           <CodeBlockCopyButton value={code} />
         </CodeBlockActions>
       </CodeBlockHeader>

@@ -3,8 +3,11 @@ import type { UIMessage } from "ai";
 import {
   BotIcon,
   CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   CopyIcon,
   GitForkIcon,
+  LinkIcon,
   PencilIcon,
   RefreshCwIcon,
   ThumbsDownIcon,
@@ -41,6 +44,27 @@ export interface ChatMessageItemProps {
   onRegenerate?: (message: UIMessage) => void;
   onFork?: (message: UIMessage) => void;
   onVote?: (message: UIMessage, isUpvoted: boolean) => void;
+  onBranchChange?: (payload: {
+    rootMessageId: string;
+    snapshotId: string;
+  }) => void;
+}
+
+/** Branch metadata attached by the server for non-destructive regeneration. */
+interface BranchMetadata {
+  rootMessageId: string;
+  currentSnapshotId: string;
+  currentIndex: number;
+  snapshotCount: number;
+  snapshots: Array<{ id: string; label: string; createdAt: string }>;
+}
+
+function getBranchMetadata(message: UIMessage): BranchMetadata | null {
+  const metadata = (message as { metadata?: { keryxBranch?: BranchMetadata } })
+    .metadata;
+  const branch = metadata?.keryxBranch;
+  if (!branch || branch.snapshotCount <= 1) return null;
+  return branch;
 }
 
 function getMessageText(message: UIMessage): string {
@@ -137,6 +161,50 @@ function ToolPart({
   );
 }
 
+function SourcesList({
+  sources,
+}: {
+  sources: Array<{ key: string; title: string; url?: string }>;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <div className="text-xs">
+      <Button
+        variant="ghost"
+        size="xs"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <LinkIcon className="size-3.5" />
+        {sources.length}
+        {t("message.sources")}
+      </Button>
+      {open ? (
+        <ul className="mt-1 space-y-1 ps-6">
+          {sources.map((source) => (
+            <li key={source.key}>
+              {source.url ? (
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="underline underline-offset-4"
+                >
+                  {source.title}
+                </a>
+              ) : (
+                <span>{source.title}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function ChatMessageItem({
   message,
   isStreaming,
@@ -145,6 +213,7 @@ export function ChatMessageItem({
   onRegenerate,
   onFork,
   onVote,
+  onBranchChange,
 }: ChatMessageItemProps) {
   const { t } = useI18n();
   const isUser = message.role === "user";
@@ -159,6 +228,10 @@ export function ChatMessageItem({
     (p) => p.type === "dynamic-tool" || p.type.startsWith("tool-"),
   );
   const files = message.parts.filter((p) => p.type === "file");
+  const sources = message.parts.filter(
+    (p) => p.type === "source-url" || p.type === "source-document",
+  );
+  const branch = getBranchMetadata(message);
 
   async function handleCopy() {
     if (!text) return;
@@ -233,6 +306,71 @@ export function ChatMessageItem({
               <Markdown>{text}</Markdown>
             </div>
           )
+        ) : null}
+
+        {sources.length > 0 ? (
+          <SourcesList
+            sources={sources.map((part) => {
+              const source = part as {
+                type: string;
+                sourceId: string;
+                url?: string;
+                title?: string;
+                mediaType?: string;
+                filename?: string;
+              };
+              return {
+                key: source.sourceId,
+                title: source.title ?? source.filename ?? source.sourceId,
+                url: source.url,
+              };
+            })}
+          />
+        ) : null}
+
+        {branch ? (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t("message.previousBranch")}
+              onClick={() => {
+                const count = branch.snapshotCount;
+                const next =
+                  (branch.currentIndex - 1 + count) % count;
+                const target = branch.snapshots[next];
+                if (target) {
+                  onBranchChange?.({
+                    rootMessageId: branch.rootMessageId,
+                    snapshotId: target.id,
+                  });
+                }
+              }}
+            >
+              <ChevronLeftIcon />
+            </Button>
+            <span>
+              {branch.currentIndex + 1} of {branch.snapshotCount}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t("message.nextBranch")}
+              onClick={() => {
+                const count = branch.snapshotCount;
+                const next = (branch.currentIndex + 1) % count;
+                const target = branch.snapshots[next];
+                if (target) {
+                  onBranchChange?.({
+                    rootMessageId: branch.rootMessageId,
+                    snapshotId: target.id,
+                  });
+                }
+              }}
+            >
+              <ChevronRightIcon />
+            </Button>
+          </div>
         ) : null}
 
         {!isUser ? (

@@ -19,9 +19,16 @@ async function uploadFiles(
   const headers = await auth.getAuthorizationHeaders();
 
   const form = new FormData();
-  files.forEach((f) => {
+  files.forEach((f, index) => {
     if (f.file) {
       form.append("files", f.file, f.file.name);
+    }
+    // Markdown converted client-side, paired with files[index] by index.
+    // Sent as a plain text field (no filename) so the backend reads it
+    // from the multipart values (a Blob with filename would land in the
+    // files section and the conversion would be silently dropped).
+    if (f.convertedMarkdown) {
+      form.append(`converted_${index}`, f.convertedMarkdown);
     }
   });
 

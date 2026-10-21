@@ -28,4 +28,8 @@ export interface PendingAttachment {
   file: File;
   filename: string;
   mediaType: string;
+  /** True while the document is being converted to Markdown. */
+  converting?: boolean;
+  /** Markdown produced by the client-side conversion, if any. */
+  convertedMarkdown?: string;
 }

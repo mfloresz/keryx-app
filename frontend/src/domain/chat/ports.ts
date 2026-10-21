@@ -55,6 +55,12 @@ export interface AttachmentFilePayload {
   url?: string;
   filename: string;
   mediaType: string;
+  /**
+   * Markdown produced by the client-side document conversion. Sent
+   * alongside the file so the backend can use the text instead of
+   * extracting it again.
+   */
+  convertedMarkdown?: string;
 }
 
 export interface AttachmentRepository {

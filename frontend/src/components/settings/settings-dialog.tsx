@@ -15,6 +15,18 @@ import {
 } from "#/components/ui/dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "#/components/ui/select";
+import {
+  appFontSizes,
+  appFonts,
+  useAppFont,
+} from "#/composables/use-app-font";
 import { useTheme, type Theme } from "#/composables/use-theme";
 import { useI18n } from "#/i18n";
 import { useAuth } from "#/stores/auth";
@@ -54,6 +66,7 @@ async function compressAvatarToJpeg(file: File): Promise<File> {
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const { t } = useI18n();
   const { theme, setTheme } = useTheme();
+  const { appFont, appFontSize, setFont, setFontSize } = useAppFont();
   const { locale, setLocale } = useI18n();
   const { userName, userEmail, avatarUrl, updateProfile, changePassword } =
     useAuth();
@@ -204,6 +217,48 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     {option.label}
                   </Button>
                 ))}
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="settings-font">
+                    {t("settings.fontLabel")}
+                  </Label>
+                  <Select
+                    value={appFont}
+                    onValueChange={(value) => setFont(value as never)}
+                  >
+                    <SelectTrigger id="settings-font" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {appFonts.map((font) => (
+                        <SelectItem key={font.value} value={font.value}>
+                          {font.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="settings-font-size">
+                    {t("settings.fontSizeLabel")}
+                  </Label>
+                  <Select
+                    value={appFontSize}
+                    onValueChange={(value) => setFontSize(value as never)}
+                  >
+                    <SelectTrigger id="settings-font-size" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {appFontSizes.map((size) => (
+                        <SelectItem key={size.value} value={size.value}>
+                          {size.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex gap-2">
                 {(["en", "es"] as const).map((code) => (

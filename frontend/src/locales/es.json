@@ -117,7 +117,9 @@
       "confirmNewPasswordPlaceholder": "Confirma tu nueva contraseña",
       "changing": "Cambiando...",
       "updatePassword": "Actualizar Contraseña"
-    }
+    },
+    "fontLabel": "Fuente",
+    "fontSizeLabel": "Tamaño de fuente"
   },
   "favorites": {
     "title": "Favoritos",
@@ -141,48 +143,8 @@
     "byMe": "Por mí",
     "byGlobal": "Global",
     "byCatalog": "Catálogo",
-    "preview": {
-      "personalize": "Personalizar",
-      "chat": "Chat",
-      "duplicate": "Duplicar",
-      "delete": "Eliminar",
-      "deleteConfirm": "¿Eliminar este agente? Los chats que lo usen volverán al prompt base."
-    },
-    "editor": {
-      "breadcrumb": "Agentes",
-      "purpose": "Propósito de este agente",
-      "nameLabel": "Nombre",
-      "namePlaceholder": "Ej. Estudio Biblia",
-      "descriptionLabel": "Descripción",
-      "descriptionPlaceholder": "Describe qué hace este agente...",
-      "iconLabel": "Icono",
-      "instructions": "Instrucciones",
-      "instructionsHint": "Define el system prompt que usará este agente. Usa {language}, {username}, {date} (mejor para caché) o {datetime} como placeholders.",
-      "knowledge": "Conocimiento",
-      "knowledgeHint": "Próximamente: añade archivos y fuentes.",
-      "guardrails": "Añadir barreras de protección",
-      "guardrailsHint": "Próximamente",
-      "tone": "Ajustar tono",
-      "toneHint": "Próximamente",
-      "saved": "Guardado",
-      "private": "Privado",
-      "global": "Global",
-      "previewTitle": "Vista previa de tu agente",
-      "openChat": "Abrir nuevo chat",
-      "save": "Guardar",
-      "saving": "Guardando...",
-      "savedSuccess": "Agente guardado",
-      "savedError": "No se pudo guardar el agente",
-      "createdSuccess": "Agente creado",
-      "deletedSuccess": "Agente eliminado",
-      "deletedError": "No se pudo eliminar el agente",
-      "duplicatedSuccess": "Agente duplicado",
-      "limitReached": "Alcanzaste el máximo de agentes (50)",
-      "nameRequired": "El nombre es obligatorio",
-      "promptRequired": "Las instrucciones son obligatorias",
-      "promptTooLong": "Las instrucciones no pueden superar 10000 caracteres",
-      "charsUsed": "{used}/10000 caracteres"
-    }
+    "preview": "Chatear con el agente",
+    "editor": "Editar agente"
   },
   "chat": {
     "welcomeTitle": "Hola soy Keryx, ¿En qué puedo ayudarte?",
@@ -261,7 +223,11 @@
     "askAboutProject": "Preguntar sobre este proyecto",
     "tools": {
       "label": "Llamadas a herramientas"
-    }
+    },
+    "attachFiles": "Adjuntar archivos",
+    "addTools": "Añadir herramientas",
+    "removeAttachment": "Quitar adjunto",
+    "dropFiles": "Suelta los archivos para adjuntarlos"
   },
   "message": {
     "user": "Usuario",
@@ -282,7 +248,8 @@
     "preview": "Vista previa",
     "codePreview": "Vista previa HTML",
     "codePreviewDescription": "Renderizado del bloque de código en un iframe aislado.",
-    "editDescription": "Edita tu mensaje y envíalo de nuevo para continuar la conversación."
+    "editDescription": "Edita tu mensaje y envíalo de nuevo para continuar la conversación.",
+    "sources": "fuentes"
   },
   "artifact": {
     "openPanel": "Artefactos ({count})",
@@ -297,7 +264,8 @@
     "isolatedNote": "Iframe aislado · red permitida",
     "publishing": "Publicando vista previa…",
     "publishError": "No se pudo publicar la vista previa.",
-    "retry": "Reintentar"
+    "retry": "Reintentar",
+    "close": "Cerrar"
   },
   "reasoning": {
     "thinking": "Pensando...",
@@ -330,6 +298,10 @@
       "roleAdmin": "Administrador"
     },
     "invitations": {
+      "emailRequired": "El email es obligatorio",
+      "emailInvalid": "Introduce un email válido",
+      "copyLink": "Copiar",
+      "copySuccess": "Copiado",
       "title": "Invitaciones",
       "description": "Crea cuentas solo por invitación para el modo cloud.",
       "createTitle": "Invitar usuario",
@@ -358,6 +330,13 @@
       "actionsColumn": "Acciones"
     },
     "models": {
+      "titleGeneration": "Generación de títulos",
+      "titleGenerationDescription": "Elige qué modelo escribe los títulos de los chats.",
+      "useChatModel": "Usar el mismo modelo que el chat",
+      "useDedicatedModel": "Usar un modelo ligero dedicado",
+      "chooseModel": "Elige un modelo",
+      "modelPresets": "Presets de modelo",
+      "modelPresetsDescription": "Asigna a cada preset visible un modelo real.",
       "title": "Modelos",
       "description": "Controla qué modelos quedan disponibles para el rol usuario. Los administradores siempre conservan acceso al catálogo completo.",
       "modelColumn": "Modelo",
@@ -440,7 +419,13 @@
     },
     "prompts": {
       "title": "Prompts del sistema",
-      "description": "Edita los prompts globales Base y Título. Si no hay override en DB se usan los embebidos del código.",
+      "description": "Sustituye los prompts que el servidor envía al modelo.",
+      "base": "Prompt base (chat)",
+      "titlePrompt": "Prompt de títulos",
+      "embedded": "Integrado",
+      "override": "Sustituido",
+      "reset": "Restablecer",
+      "resetDescription": "Esto restaura el valor integrado por defecto.",
       "baseLabel": "Prompt Base (chat)",
       "titleLabel": "Prompt de Títulos",
       "availableTags": "Tags disponibles",
@@ -461,8 +446,12 @@
       "charsUsed": "{used}/{max} caracteres"
     },
     "agents": {
-      "title": "Agentes Globales",
-      "description": "Gestiona agentes visibles para todos. Los usuarios pueden duplicarlos pero no editarlos.",
+      "title": "Agentes globales",
+      "description": "Agentes disponibles para todos los usuarios.",
+      "create": "Crear agente",
+      "edit": "Editar agente",
+      "delete": "Eliminar agente",
+      "empty": "Aún no hay agentes globales.",
       "createTitle": "Crear agente",
       "editTitle": "Editar agente",
       "nameLabel": "Nombre",
@@ -483,6 +472,25 @@
       "deleteAction": "Eliminar",
       "deleteConfirm": "¿Eliminar este agente? Los chats que lo usen volverán al prompt base.",
       "builtinHint": "Esto creará un override en DB"
+    },
+    "connections": {
+      "title": "Conexiones",
+      "description": "Claves de API de los proveedores y búsqueda web.",
+      "configured": "Configurado",
+      "notConfigured": "Sin configurar",
+      "updatedAt": "Actualizado: {date}",
+      "saveKey": "Guardar clave",
+      "update": "Actualizar",
+      "deleteKey": "Eliminar clave",
+      "setKey": "Definir clave de API",
+      "keyNeverShown": "La clave no se vuelve a mostrar una vez guardada.",
+      "saved": "Guardado",
+      "webSearch": "Búsqueda web",
+      "braveKey": "Clave de API de Brave Search",
+      "enableWebSearch": "Activar la búsqueda web"
+    },
+    "behavior": {
+      "title": "Comportamiento"
     }
   },
   "auth": {
@@ -529,7 +537,14 @@
       "error": "No se pudo aceptar la invitación",
       "requestTimedOut": "La solicitud agotó el tiempo de espera. Por favor inténtalo de nuevo.",
       "passwordRequired": "La contraseña es obligatoria.",
-      "confirmPasswordRequired": "Por favor confirma tu contraseña."
+      "confirmPasswordRequired": "Por favor confirma tu contraseña.",
+      "acceptButton": "Crear cuenta",
+      "loadError": "No se pudo cargar la invitación"
+    },
+    "validation": {
+      "emailRequired": "El email es obligatorio",
+      "emailInvalid": "Introduce un email válido",
+      "passwordRequired": "La contraseña es obligatoria"
     }
   },
   "projects": {

@@ -6,9 +6,10 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
+import type { FileUIPart, UIMessage } from "ai";
 import { toast } from "sonner";
 
+import { ArtifactPanel } from "#/components/artifacts/artifact-panel";
 import { ChatMessageItem } from "#/components/chat/chat-message-item";
 import { ChatPromptInput } from "#/components/chat/chat-prompt-input";
 import type {
@@ -45,6 +46,10 @@ import {
 } from "#/components/ui/trace";
 import { useI18n } from "#/i18n";
 import { getChatRepository, getAuthAdapter } from "#/services/runtime";
+import { annotateBranchMetadata } from "#/shared/chat-core";
+import { extractHtmlArtifacts } from "#/utils/html-artifacts";
+import { useArtifactStore } from "#/stores/artifact";
+import { watchChatTitle } from "#/services/title-watcher";
 import { getChatStreamApi, getChatTransportHeaders } from "#/services/chat-transport";
 import { KeryxChatTransport } from "#/services/keryx-chat-transport";
 import { useAuth } from "#/stores/auth";
@@ -90,6 +95,10 @@ interface LoadedChat {
   agentId: string | null;
   projectId: string | null;
   votes: Record<string, boolean | null>;
+  /** Branch snapshots for non-destructive regeneration. */
+  branches: Record<string, unknown> | undefined;
+  /** True when the server has not generated a title yet. */
+  titleIsEmpty: boolean;
 }
 
 /**
@@ -144,6 +153,11 @@ function ChatPage() {
             agentId: chat.agentId ?? null,
             projectId: chat.projectId ?? null,
             votes,
+            branches: (chat.branches ?? undefined) as Record<
+              string,
+              unknown
+            > | undefined,
+            titleIsEmpty: !chat.title,
           });
         }
       } catch (err) {
@@ -205,6 +219,7 @@ function ChatConversation({
   const { userName, userEmail } = useAuth();
   const chatStore = useChatStore();
   const projectsStore = useProjectsStore();
+  const artifactStore = useArtifactStore();
 
   const [presets, setPresets] = React.useState<ModelPreset[]>([]);
   const [agents, setAgents] = React.useState<ChatAgent[]>([]);
@@ -294,7 +309,7 @@ function ChatConversation({
     [chatId],
   );
 
-  const { messages, sendMessage, regenerate, status, stop } =
+  const { messages, sendMessage, regenerate, status, stop, setMessages } =
     useChat<UIMessage>({
       id: chatId,
       messages: loaded.messages,
@@ -313,6 +328,67 @@ function ChatConversation({
     });
 
   const isBusy = status === "streaming" || status === "submitted";
+
+  // The server creates branch snapshots when a message is regenerated, so
+  // the branches have to be re-read after every regeneration.
+  const [branches, setBranches] = React.useState(loaded.branches);
+  const refreshBranches = React.useCallback(async () => {
+    try {
+      const repo = await chatRepository;
+      const updated = await repo.getChat(chatId);
+      setBranches((updated?.branches ?? undefined) as
+        | Record<string, unknown>
+        | undefined);
+    } catch {
+      // Non-fatal: the navigator simply stays hidden.
+    }
+  }, [chatRepository, chatId]);
+
+  // Annotated messages carry the branch metadata the server persists for
+  // non-destructive regeneration, so the navigator can be rendered.
+  const annotatedMessages = React.useMemo<UIMessage[]>(() => {
+    const rawMessages = messages as unknown as Array<{ id: string; parts: unknown }>;
+    if (!branches) return messages;
+    try {
+      const annotated = annotateBranchMetadata({
+        id: chatId,
+        title: null,
+        visibility: "private",
+        createdAt: new Date().toISOString(),
+        messages: rawMessages,
+        votes: [],
+        branches,
+      } as never);
+      return (annotated.messages ?? messages) as unknown as UIMessage[];
+    } catch {
+      return messages;
+    }
+  }, [messages, branches, chatId]);
+
+  // Artifacts are derived from the message text, so they stay consistent
+  // with the transcript as it streams.
+  React.useEffect(() => {
+    const artifacts = extractHtmlArtifacts(
+      (annotatedMessages as unknown as Array<{ id: string; parts: unknown }>) ?? [],
+    );
+    artifactStore.syncItems(artifacts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [annotatedMessages]);
+
+  // The server may generate the title after the stream ends; poll until it
+  // lands so the sidebar stops showing "Untitled" without a reload.
+  React.useEffect(() => {
+    if (!loaded.titleIsEmpty) return;
+    const timer = setTimeout(() => {
+      watchChatTitle(
+        chatId,
+        () => chatStore.chats,
+        chatStore.updateChat,
+      );
+    }, 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId, loaded.titleIsEmpty]);
 
   // A message sent from the new-chat screen arrives through the router
   // state: the chat and its first user message already exist, so all that
@@ -429,14 +505,26 @@ function ChatConversation({
     webSearch: boolean;
   }) {
     try {
-      // Files travel as file parts; the transport maps them to attachment
-      // references and the backend resolves the bytes.
-      const fileParts = files.map((file) => ({
-        type: "file" as const,
-        filename: file.filename,
-        mediaType: file.mediaType,
-        url: "",
-      }));
+      // Files are uploaded against the chat, then referenced by storage
+      // key: the transport maps the parts to attachment references and the
+      // backend resolves the bytes.
+      let fileParts: FileUIPart[] = [];
+
+      if (files.length) {
+        const attachmentRepo = await import(
+          "#/adapters/api/api-attachment-repository"
+        ).then((m) => m.apiAttachmentRepository);
+        const uploaded = await attachmentRepo.persistFiles(
+          chatId,
+          files.map((file) => ({
+            file: file.file,
+            filename: file.filename,
+            mediaType: file.mediaType,
+            convertedMarkdown: file.convertedMarkdown,
+          })),
+        );
+        fileParts = uploaded as typeof fileParts;
+      }
 
       void sendMessage(
         { text, files: fileParts },
@@ -467,6 +555,9 @@ function ChatConversation({
       messageId: message.id,
       body: buildRequestBody(false),
     });
+    // The branch snapshot is written server-side; pick it up once the
+    // regeneration has settled.
+    setTimeout(() => void refreshBranches(), 800);
   }
 
   async function handleEdit(message: UIMessage) {
@@ -499,6 +590,39 @@ function ChatConversation({
       { text, messageId: editMessage.id },
       { body: buildRequestBody(false) },
     );
+  }
+
+  const loadVotes = React.useCallback(async () => {
+    try {
+      const repo = await chatRepository;
+      const voteList = await repo.getVotes(chatId);
+      setVotes(
+        voteList.reduce<Record<string, boolean | null>>((acc, v) => {
+          acc[v.messageId] = v.isUpvoted;
+          return acc;
+        }, {}),
+      );
+    } catch {
+      // Vote load failures are non-fatal.
+    }
+  }, [chatRepository, chatId]);
+
+  async function handleBranchChange(payload: {
+    rootMessageId: string;
+    snapshotId: string;
+  }) {
+    try {
+      const repo = await chatRepository;
+      const updated = await repo.switchBranch(chatId, payload);
+      setMessages((updated.messages ?? []) as unknown as UIMessage[]);
+      // The active snapshot moved, so the navigator has to follow.
+      setBranches((updated?.branches ?? undefined) as
+        | Record<string, unknown>
+        | undefined);
+      await loadVotes();
+    } catch {
+      toast.error(t("chat.failedSwitchBranch"));
+    }
   }
 
   async function handleFork(message: UIMessage) {
@@ -560,7 +684,7 @@ function ChatConversation({
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
             <MessageScrollerContent className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
-              {messages.map((message) => (
+              {annotatedMessages.map((message) => (
                 <MessageScrollerItem
                   key={message.id}
                   messageId={message.id}
@@ -576,6 +700,9 @@ function ChatConversation({
                     onRegenerate={(message) => void handleRegenerate(message)}
                     onFork={(message) => void handleFork(message)}
                     onVote={(message, upvoted) => void handleVote(message, upvoted)}
+                    onBranchChange={(payload) =>
+                      void handleBranchChange(payload)
+                    }
                   />
                 </MessageScrollerItem>
               ))}
@@ -597,6 +724,8 @@ function ChatConversation({
           </MessageScrollerViewport>
         </MessageScroller>
       </MessageScrollerProvider>
+
+      <ArtifactPanel />
 
       <ChatPromptInput
         status={status}

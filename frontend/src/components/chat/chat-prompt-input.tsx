@@ -9,9 +9,18 @@ import {
   SquareIcon,
   XIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Attachment, AttachmentMedia } from "#/components/ui/attachment";
 import { Button } from "#/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +41,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "#/components/ui/select";
+import { Spinner } from "#/components/ui/spinner";
 import { useI18n } from "#/i18n";
+import {
+  convertToMarkdown,
+  isConvertible,
+} from "#/services/document-conversion";
 import type {
   ChatAgent,
   ChatProject,
@@ -43,7 +57,12 @@ import type {
 const DOCUMENT_ACCEPT =
   ".pdf,.txt,.md,.doc,.docx,.docm,.odt,.ods,.odp,.ppt,.pptx,.pptm,.ppsx,.ppsm,.xls,.xlsx,.xlsm,.rtf,.epub,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.cpp,.go,.rs";
 
-const PRESET_DESCRIPTION_KEYS: Record<string, { title: string; subtitle: string }> = {
+const MAX_FILES = 3;
+
+const PRESET_DESCRIPTION_KEYS: Record<
+  string,
+  { title: string; subtitle: string }
+> = {
   fast: { title: "chat.presetFast", subtitle: "chat.presetFastDesc" },
   reflect: { title: "chat.presetReflect", subtitle: "chat.presetReflectDesc" },
   extended_context: {
@@ -95,6 +114,8 @@ export function ChatPromptInput({
   const [text, setText] = React.useState("");
   const [files, setFiles] = React.useState<PendingAttachment[]>([]);
   const [useWebSearch, setUseWebSearch] = React.useState(webSearch ?? false);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [unsupportedImageOpen, setUnsupportedImageOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const selectedPreset = presets.find((p) => p.preset === preset);
@@ -109,29 +130,98 @@ export function ChatPromptInput({
   );
 
   const activePresetTitle = selectedPreset
-    ? (PRESET_DESCRIPTION_KEYS[preset]?.title
-        ? t(PRESET_DESCRIPTION_KEYS[preset].title)
-        : selectedPreset.label)
+    ? PRESET_DESCRIPTION_KEYS[preset]?.title
+      ? t(PRESET_DESCRIPTION_KEYS[preset].title)
+      : selectedPreset.label
     : preset;
 
-  function addFiles(fileList: FileList | null) {
-    if (!fileList) return;
-    const next: PendingAttachment[] = [];
-    for (const file of Array.from(fileList)) {
-      next.push({
-        id: `${file.name}-${file.size}-${next.length}`,
-        file,
-        filename: file.name,
-        mediaType: file.type || "application/octet-stream",
+  const isBusy = status === "streaming" || status === "submitted";
+  const isConverting = files.some((file) => file.converting);
+
+  /**
+   * Starts the client-side document conversion. The attachment stays
+   * visible with a spinner meanwhile; a failed conversion removes it,
+   * because a document without a text layer cannot be attached.
+   */
+  const startConversion = React.useCallback(
+    (attachment: PendingAttachment) => {
+      if (!isConvertible(attachment.filename)) return;
+
+      setFiles((current) =>
+        current.map((f) =>
+          f.id === attachment.id ? { ...f, converting: true } : f,
+        ),
+      );
+
+      void convertToMarkdown(attachment.file)
+        .then((markdown) => {
+          setFiles((current) =>
+            current.map((f) =>
+              f.id === attachment.id
+                ? { ...f, convertedMarkdown: markdown }
+                : f,
+            ),
+          );
+        })
+        .catch((code: string) => {
+          setFiles((current) => current.filter((f) => f.id !== attachment.id));
+          toast.error(
+            code === "needsOcr"
+              ? t("chat.attachmentNoTextLayer")
+              : t("chat.attachmentConvertError"),
+          );
+        })
+        .finally(() => {
+          setFiles((current) =>
+            current.map((f) =>
+              f.id === attachment.id ? { ...f, converting: false } : f,
+            ),
+          );
+        });
+    },
+    [t],
+  );
+
+  const addFiles = React.useCallback(
+    (fileList: FileList | null | File[]) => {
+      if (!fileList) return;
+      let incoming = Array.from(fileList);
+
+      // The model does not accept images: reject them with an explanation
+      // and keep the rest of the drop.
+      const hasImage = incoming.some((file) => file.type.startsWith("image/"));
+      if (hasImage && !modelSupportsImages) {
+        setUnsupportedImageOpen(true);
+        incoming = incoming.filter((file) => !file.type.startsWith("image/"));
+        if (!incoming.length) return;
+      }
+
+      setFiles((current) => {
+        const room = Math.max(0, MAX_FILES - current.length);
+        const next: PendingAttachment[] = incoming
+          .slice(0, room)
+          .map((file, index) => ({
+            id: `${file.name}-${file.size}-${Date.now()}-${index}`,
+            file,
+            filename: file.name,
+            mediaType: file.type || "application/octet-stream",
+          }));
+        // Documents that need converting start right away.
+        for (const attachment of next) startConversion(attachment);
+        return [...current, ...next];
       });
-    }
-    setFiles((current) => [...current, ...next].slice(0, 3));
+    },
+    [modelSupportsImages, startConversion],
+  );
+
+  function removeFile(id: string) {
+    setFiles((current) => current.filter((f) => f.id !== id));
   }
 
   function handleSubmit() {
     const trimmed = text.trim();
     if (!trimmed && files.length === 0) return;
-    if (status === "streaming" || status === "submitted") return;
+    if (isBusy || isConverting) return;
 
     onSubmit({ text: trimmed, files, webSearch: useWebSearch });
     setText("");
@@ -146,211 +236,274 @@ export function ChatPromptInput({
     }
   }
 
+  // Drag & drop anywhere on the document.
+  React.useEffect(() => {
+    const onDragOver = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes("Files")) return;
+      event.preventDefault();
+      setIsDragging(true);
+    };
+    const onDragLeave = (event: DragEvent) => {
+      if (event.relatedTarget) return;
+      setIsDragging(false);
+    };
+    const onDrop = (event: DragEvent) => {
+      if (!event.dataTransfer?.files.length) return;
+      event.preventDefault();
+      setIsDragging(false);
+      addFiles(event.dataTransfer.files);
+    };
+
+    window.addEventListener("dragover", onDragOver);
+    window.addEventListener("dragleave", onDragLeave);
+    window.addEventListener("drop", onDrop);
+    return () => {
+      window.removeEventListener("dragover", onDragOver);
+      window.removeEventListener("dragleave", onDragLeave);
+      window.removeEventListener("drop", onDrop);
+    };
+  }, [addFiles]);
+
   return (
     <div className="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
-      <InputGroup className="mx-auto max-w-3xl overflow-hidden rounded-2xl border border-border bg-card shadow-sm focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/10 transition-shadow">
-        {/* Attachments row */}
-        {files.length > 0 ? (
-          <div className="order-first w-full px-3 pt-3">
-            <div className="flex flex-wrap gap-2">
+      <div
+        className={`relative mx-auto max-w-3xl transition-shadow ${
+          isDragging ? "ring-2 ring-primary/50" : ""
+        }`}
+      >
+        <InputGroup className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/10">
+          {/* Attachments row */}
+          {files.length > 0 ? (
+            <InputGroupAddon align="block-start" className="flex-wrap px-3 pt-3">
               {files.map((file) => (
                 <Attachment key={file.id} size="sm">
                   <AttachmentMedia variant="icon">
-                    <PaperclipIcon />
+                    {file.converting ? <Spinner /> : <PaperclipIcon />}
                   </AttachmentMedia>
-                  <span className="max-w-40 truncate text-xs">{file.filename}</span>
+                  <span className="max-w-40 truncate text-xs">
+                    {file.filename}
+                  </span>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon-xs"
-                    aria-label={`Remove ${file.filename}`}
-                    onClick={() =>
-                      setFiles((current) =>
-                        current.filter((f) => f.id !== file.id),
-                      )
-                    }
+                    aria-label={t("chat.removeAttachment")}
+                    onClick={() => removeFile(file.id)}
                   >
                     <XIcon />
                   </Button>
                 </Attachment>
               ))}
-            </div>
-          </div>
-        ) : null}
+            </InputGroupAddon>
+          ) : null}
 
-        {/* Textarea: always a full-width row stacked above the toolbar. */}
-        <InputGroupTextarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !event.nativeEvent.isComposing
-            ) {
-              event.preventDefault();
-              handleSubmit();
-            }
-          }}
-          placeholder={t("chat.inputPlaceholder")}
-          aria-label={t("chat.inputPlaceholder")}
-          className="min-h-12 resize-none p-3"
-        />
-
-        {/* Toolbar: left tools, then right-aligned controls, in one row. */}
-        <InputGroupAddon align="block-end" className="px-2 pb-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button variant="ghost" size="icon-xs" aria-label="Add tools" />
+          <InputGroupTextarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                !event.nativeEvent.isComposing
+              ) {
+                event.preventDefault();
+                handleSubmit();
+                return;
               }
-            >
-              <PlusIcon className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-64">
-              <DropdownMenuItem
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <PaperclipIcon className="mr-2 size-4" />
-                Attach files
-              </DropdownMenuItem>
+              // Backspace on an empty input removes the last attachment.
+              if (event.key === "Backspace" && !text && files.length > 0) {
+                event.preventDefault();
+                removeFile(files[files.length - 1]!.id);
+              }
+            }}
+            onPaste={(event) => {
+              const pasted = Array.from(event.clipboardData.files);
+              if (pasted.length) {
+                event.preventDefault();
+                addFiles(pasted);
+              }
+            }}
+            placeholder={t("chat.inputPlaceholder")}
+            aria-label={t("chat.inputPlaceholder")}
+            className="min-h-12 resize-none p-3"
+          />
 
-              {selectableAgents.length > 0 ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    className={agentId ? "bg-accent" : undefined}
+          {/* Toolbar: left tools, then right-aligned controls, in one row. */}
+          <InputGroupAddon align="block-end" className="px-2 pb-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t("chat.addTools")}
+                  />
+                }
+              >
+                <PlusIcon className="size-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64">
+                <DropdownMenuItem
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <PaperclipIcon className="mr-2 size-4" />
+                  {t("chat.attachFiles")}
+                </DropdownMenuItem>
+
+                {selectableAgents.length > 0 ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => onAgentChange(null)}>
+                      <BotIcon className="mr-2 size-4 text-muted-foreground" />
+                      <span className="truncate">
+                        {t("chat.agent.menuLabel")}
+                      </span>
+                      {agentId === null ? (
+                        <CheckIcon className="ms-auto size-4" />
+                      ) : null}
+                    </DropdownMenuItem>
+                    {selectableAgents.map((agent) => (
+                      <DropdownMenuItem
+                        key={agent.id + ":" + agent.source}
+                        onClick={() => onAgentChange(agent.id)}
+                      >
+                        <BotIcon className="mr-2 size-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{agent.name}</span>
+                        {agentId === agent.id ? (
+                          <CheckIcon className="ms-auto size-4 shrink-0" />
+                        ) : null}
+                      </DropdownMenuItem>
+                    ))}
+                  </>
+                ) : null}
+
+                {projects && projects.length > 0 ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    {projects.map((project) => (
+                      <DropdownMenuItem
+                        key={project.id}
+                        onClick={() => onProjectChange(project.id)}
+                      >
+                        <FolderIcon className="mr-2 size-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{project.name}</span>
+                        {projectId === project.id ? (
+                          <CheckIcon className="ms-auto size-4 shrink-0" />
+                        ) : null}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuItem
+                      className="border-t border-border"
+                      onClick={onCreateProject}
+                    >
+                      <PlusIcon className="mr-2 size-4" />
+                      {t("chat.project.createItem")}
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {webSearchGloballyEnabled ? (
+              <Button
+                type="button"
+                variant={useWebSearch ? "default" : "ghost"}
+                size="xs"
+                onClick={() => setUseWebSearch((value) => !value)}
+              >
+                <GlobeIcon className="size-4" />
+                {t("chat.search")}
+              </Button>
+            ) : null}
+
+            {/* Right-aligned controls */}
+            <div className="ms-auto flex min-w-0 flex-wrap items-center gap-2">
+              {selectedAgent ? (
+                <span className="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs">
+                  <BotIcon className="size-3 shrink-0" />
+                  <span className="max-w-30 truncate">{selectedAgent.name}</span>
+                  <button
+                    type="button"
+                    aria-label={t("chat.agent.clear")}
+                    className="opacity-0 transition-opacity group-hover:opacity-100"
                     onClick={() => onAgentChange(null)}
                   >
-                    <BotIcon className="mr-2 size-4 text-muted-foreground" />
-                    <span className="truncate">{t("chat.agent.menuLabel")}</span>
-                    {agentId === null ? (
-                      <CheckIcon className="ms-auto size-4" />
-                    ) : null}
-                  </DropdownMenuItem>
-                  {selectableAgents.map((agent) => (
-                    <DropdownMenuItem
-                      key={agent.id + ":" + agent.source}
-                      onClick={() => onAgentChange(agent.id)}
-                    >
-                      <BotIcon className="mr-2 size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{agent.name}</span>
-                      {agentId === agent.id ? (
-                        <CheckIcon className="ms-auto size-4 shrink-0" />
-                      ) : null}
-                    </DropdownMenuItem>
-                  ))}
-                </>
+                    <XIcon className="size-3" />
+                  </button>
+                </span>
               ) : null}
 
-              {projects && projects.length > 0 ? (
-                <>
-                  <DropdownMenuSeparator />
-                  {projects.map((project) => (
-                    <DropdownMenuItem
-                      key={project.id}
-                      onClick={() => onProjectChange(project.id)}
-                    >
-                      <FolderIcon className="mr-2 size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{project.name}</span>
-                      {projectId === project.id ? (
-                        <CheckIcon className="ms-auto size-4 shrink-0" />
-                      ) : null}
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuItem
-                    className="border-t border-border"
-                    onClick={onCreateProject}
+              {selectedProject ? (
+                <span className="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs">
+                  <FolderIcon className="size-3 shrink-0" />
+                  <span className="max-w-30 truncate">
+                    {selectedProject.name}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t("chat.project.clear")}
+                    className="opacity-0 transition-opacity group-hover:opacity-100"
+                    onClick={() => onProjectChange(null)}
                   >
-                    <PlusIcon className="mr-2 size-4" />
-                    {t("chat.project.createItem")}
-                  </DropdownMenuItem>
-                </>
+                    <XIcon className="size-3" />
+                  </button>
+                </span>
               ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
 
-          {webSearchGloballyEnabled ? (
-            <Button
-              type="button"
-              variant={useWebSearch ? "default" : "ghost"}
-              size="xs"
-              onClick={() => setUseWebSearch((value) => !value)}
-            >
-              <GlobeIcon className="size-4" />
-              {t("chat.search")}
-            </Button>
-          ) : null}
-
-          {/* Right-aligned controls */}
-          <div className="ms-auto flex min-w-0 flex-wrap items-center gap-2">
-          {selectedAgent ? (
-            <span className="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs">
-              <BotIcon className="size-3 shrink-0" />
-              <span className="max-w-30 truncate">{selectedAgent.name}</span>
-              <button
-                type="button"
-                aria-label={t("chat.agent.clear")}
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => onAgentChange(null)}
+              <Select
+                value={preset}
+                onValueChange={(value) => handlePresetChange(String(value))}
               >
-                <XIcon className="size-3" />
-              </button>
-            </span>
-          ) : null}
+                <SelectTrigger
+                  size="sm"
+                  className="h-8 min-w-0 max-w-full px-3 text-xs"
+                >
+                  <SelectValue placeholder={activePresetTitle} />
+                </SelectTrigger>
+                <SelectContent>
+                  {presets.map((p) => (
+                    <SelectItem key={p.preset} value={p.preset} className="py-2">
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-          {selectedProject ? (
-            <span className="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs">
-              <FolderIcon className="size-3 shrink-0" />
-              <span className="max-w-30 truncate">{selectedProject.name}</span>
-              <button
-                type="button"
-                aria-label={t("chat.project.clear")}
-                className="opacity-0 transition-opacity group-hover:opacity-100"
-                onClick={() => onProjectChange(null)}
-              >
-                <XIcon className="size-3" />
-              </button>
-            </span>
-          ) : null}
+              {isBusy ? (
+                <InputGroupButton
+                  type="button"
+                  size="icon-sm"
+                  variant="outline"
+                  aria-label={t("chat.stop")}
+                  onClick={onStop}
+                >
+                  <SquareIcon className="size-4 fill-current" />
+                </InputGroupButton>
+              ) : (
+                <InputGroupButton
+                  type="submit"
+                  size="icon-sm"
+                  aria-label={t("chat.send")}
+                  disabled={
+                    (!text.trim() && files.length === 0) ||
+                    status === "error" ||
+                    isConverting
+                  }
+                  onClick={handleSubmit}
+                >
+                  <span aria-hidden>↑</span>
+                </InputGroupButton>
+              )}
+            </div>
+          </InputGroupAddon>
+        </InputGroup>
 
-          <Select value={preset} onValueChange={(value) => handlePresetChange(String(value))}>
-            <SelectTrigger size="sm" className="h-8 min-w-0 max-w-full px-3 text-xs">
-              <SelectValue placeholder={activePresetTitle} />
-            </SelectTrigger>
-            <SelectContent>
-              {presets.map((p) => (
-                <SelectItem key={p.preset} value={p.preset} className="py-2">
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {status === "streaming" || status === "submitted" ? (
-            <InputGroupButton
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              aria-label={t("chat.stop")}
-              onClick={onStop}
-            >
-              <SquareIcon className="size-4 fill-current" />
-            </InputGroupButton>
-          ) : (
-            <InputGroupButton
-              type="submit"
-              size="icon-sm"
-              aria-label={t("chat.send")}
-              disabled={(!text.trim() && files.length === 0) || status === "error"}
-              onClick={handleSubmit}
-            >
-              <span aria-hidden>↑</span>
-            </InputGroupButton>
-          )}
-          </div>
-        </InputGroupAddon>
-      </InputGroup>
+        {isDragging ? (
+          <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm font-medium text-primary">
+            {t("chat.dropFiles")}
+          </p>
+        ) : null}
+      </div>
 
       <input
         ref={fileInputRef}
@@ -363,6 +516,26 @@ export function ChatPromptInput({
           event.target.value = "";
         }}
       />
+
+      {/* The model does not accept images. */}
+      <Dialog
+        open={unsupportedImageOpen}
+        onOpenChange={setUnsupportedImageOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("chat.unsupportedImageTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("chat.unsupportedImageDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setUnsupportedImageOpen(false)}>
+              {t("app.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

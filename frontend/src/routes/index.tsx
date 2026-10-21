@@ -184,6 +184,7 @@ function NewChat() {
             file: file.file,
             filename: file.filename,
             mediaType: file.mediaType,
+            convertedMarkdown: file.convertedMarkdown,
           })),
         );
         if (cleanFiles.length) {

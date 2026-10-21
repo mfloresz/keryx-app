@@ -117,7 +117,9 @@
       "confirmNewPasswordPlaceholder": "Confirm your new password",
       "changing": "Changing...",
       "updatePassword": "Update Password"
-    }
+    },
+    "fontLabel": "Font",
+    "fontSizeLabel": "Font size"
   },
   "favorites": {
     "title": "Favorites",
@@ -141,48 +143,8 @@
     "byMe": "By me",
     "byGlobal": "Global",
     "byCatalog": "Catalog",
-    "preview": {
-      "personalize": "Customize",
-      "chat": "Chat",
-      "duplicate": "Duplicate",
-      "delete": "Delete",
-      "deleteConfirm": "Delete this agent? Chats using it will fall back to the base prompt."
-    },
-    "editor": {
-      "breadcrumb": "Agents",
-      "purpose": "Purpose of this agent",
-      "nameLabel": "Name",
-      "namePlaceholder": "e.g. Bible Study",
-      "descriptionLabel": "Description",
-      "descriptionPlaceholder": "Describe what this agent does...",
-      "iconLabel": "Icon",
-      "instructions": "Instructions",
-      "instructionsHint": "Define the system prompt for this agent. Use {language}, {username}, {date} (cache-friendly) or {datetime} as placeholders.",
-      "knowledge": "Knowledge",
-      "knowledgeHint": "Coming soon: add files and sources.",
-      "guardrails": "Add guardrails",
-      "guardrailsHint": "Coming soon",
-      "tone": "Adjust tone",
-      "toneHint": "Coming soon",
-      "saved": "Saved",
-      "private": "Private",
-      "global": "Global",
-      "previewTitle": "Preview your agent",
-      "openChat": "Open new chat",
-      "save": "Save",
-      "saving": "Saving...",
-      "savedSuccess": "Agent saved",
-      "savedError": "Could not save agent",
-      "createdSuccess": "Agent created",
-      "deletedSuccess": "Agent deleted",
-      "deletedError": "Could not delete agent",
-      "duplicatedSuccess": "Agent duplicated",
-      "limitReached": "You reached the agent limit (50)",
-      "nameRequired": "Name is required",
-      "promptRequired": "Instructions are required",
-      "promptTooLong": "Instructions cannot exceed 10000 characters",
-      "charsUsed": "{used}/10000 characters"
-    }
+    "preview": "Chat with agent",
+    "editor": "Edit agent"
   },
   "chat": {
     "welcomeTitle": "Hello, I'm Keryx. How can I help you?",
@@ -261,7 +223,11 @@
     "askAboutProject": "Ask about this project",
     "tools": {
       "label": "Tool calls"
-    }
+    },
+    "attachFiles": "Attach files",
+    "addTools": "Add tools",
+    "removeAttachment": "Remove attachment",
+    "dropFiles": "Drop files to attach"
   },
   "message": {
     "user": "User",
@@ -282,7 +248,8 @@
     "preview": "Preview",
     "codePreview": "HTML preview",
     "codePreviewDescription": "Rendered from the code block in an isolated iframe.",
-    "editDescription": "Edit your message and resend it to continue the conversation."
+    "editDescription": "Edit your message and resend it to continue the conversation.",
+    "sources": "sources"
   },
   "artifact": {
     "openPanel": "Artifacts ({count})",
@@ -297,7 +264,8 @@
     "isolatedNote": "Isolated iframe · network allowed",
     "publishing": "Publishing preview…",
     "publishError": "Could not publish the preview.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "close": "Close"
   },
   "reasoning": {
     "thinking": "Thinking...",
@@ -330,6 +298,10 @@
       "roleAdmin": "Admin"
     },
     "invitations": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Please enter a valid email address",
+      "copyLink": "Copy",
+      "copySuccess": "Copied",
       "title": "Invitations",
       "description": "Create invitation-only accounts for cloud mode.",
       "createTitle": "Invite user",
@@ -358,6 +330,13 @@
       "actionsColumn": "Actions"
     },
     "models": {
+      "titleGeneration": "Title Generation",
+      "titleGenerationDescription": "Choose which model writes the chat titles.",
+      "useChatModel": "Use the same model as the chat",
+      "useDedicatedModel": "Use a dedicated lightweight model",
+      "chooseModel": "Choose a model",
+      "modelPresets": "Model Presets",
+      "modelPresetsDescription": "Map each user-facing preset to a real model.",
       "title": "Models",
       "description": "Control which models remain available to the user role. Admins always retain access to the full catalog.",
       "modelColumn": "Model",
@@ -440,7 +419,13 @@
     },
     "prompts": {
       "title": "System prompts",
-      "description": "Edit the global Base and Title prompts. If there is no DB override, the embedded defaults are used.",
+      "description": "Override the prompts the server sends to the model.",
+      "base": "Base prompt (chat)",
+      "titlePrompt": "Title prompt",
+      "embedded": "Embedded",
+      "override": "Override",
+      "reset": "Reset",
+      "resetDescription": "This restores the embedded default.",
       "baseLabel": "Base prompt (chat)",
       "titleLabel": "Title prompt",
       "availableTags": "Available tags",
@@ -461,8 +446,12 @@
       "charsUsed": "{used}/{max} characters"
     },
     "agents": {
-      "title": "Global Agents",
-      "description": "Manage agents visible to everyone. Users can duplicate them but not edit them.",
+      "title": "Global agents",
+      "description": "Agents available to every user.",
+      "create": "Create agent",
+      "edit": "Edit agent",
+      "delete": "Delete agent",
+      "empty": "No global agents yet.",
       "createTitle": "Create agent",
       "editTitle": "Edit agent",
       "nameLabel": "Name",
@@ -483,6 +472,25 @@
       "deleteAction": "Delete",
       "deleteConfirm": "Delete this agent? Chats using it will fall back to the base prompt.",
       "builtinHint": "This will create a DB override"
+    },
+    "connections": {
+      "title": "Connections",
+      "description": "Provider API keys and web search.",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "updatedAt": "Updated: {date}",
+      "saveKey": "Save Key",
+      "update": "Update",
+      "deleteKey": "Delete Key",
+      "setKey": "Set API Key",
+      "keyNeverShown": "The key is never shown again once saved.",
+      "saved": "Saved",
+      "webSearch": "Web Search",
+      "braveKey": "Brave Search API Key",
+      "enableWebSearch": "Enable web search"
+    },
+    "behavior": {
+      "title": "Behavior"
     }
   },
   "auth": {
@@ -529,7 +537,14 @@
       "error": "Unable to accept invitation",
       "requestTimedOut": "The request timed out. Please try again.",
       "passwordRequired": "Password is required.",
-      "confirmPasswordRequired": "Please confirm your password."
+      "confirmPasswordRequired": "Please confirm your password.",
+      "acceptButton": "Create account",
+      "loadError": "Could not load the invitation"
+    },
+    "validation": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Please enter a valid email address",
+      "passwordRequired": "Password is required"
     }
   },
   "projects": {
