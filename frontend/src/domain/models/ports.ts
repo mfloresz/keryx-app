@@ -1,8 +1,4 @@
-import type {
-  ChatModel,
-  ModelProviderOption,
-  ModelSelection,
-} from "./types";
+import type { ChatModel, ModelProviderOption, ModelSelection } from "./types";
 
 export interface ModelRepository {
   listProviders(): Promise<ModelProviderOption[]>;

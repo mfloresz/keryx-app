@@ -1,4 +1,3 @@
-import type { AttachmentFile } from "@/components/ai-elements/prompt-input/types";
 import type { ChatIndexEntry, ChatRecord, FavoriteMessageEntry } from "./types";
 
 export interface DeleteMessageRequest {
@@ -14,6 +13,11 @@ export interface BranchSelectionRequest {
 export interface VoteRequest {
   messageId: string;
   isUpvoted?: boolean;
+}
+
+export interface ChatVote {
+  messageId: string;
+  isUpvoted: boolean;
 }
 
 export interface ChatRepository {
@@ -37,10 +41,25 @@ export interface ChatRepository {
   updateAgent(chatId: string, agentId: string | null): Promise<ChatRecord>;
   updateProject(chatId: string, projectId: string | null): Promise<ChatRecord>;
   listFavorites(): Promise<FavoriteMessageEntry[]>;
-  getVotes(chatId: string): Promise<Array<Record<string, any>>>;
-  saveVote(chatId: string, request: VoteRequest): Promise<Record<string, any>>;
+  getVotes(chatId: string): Promise<ChatVote[]>;
+  saveVote(
+    chatId: string,
+    request: VoteRequest,
+  ): Promise<Record<string, unknown>>;
+}
+
+export interface AttachmentFilePayload {
+  /** Raw bytes, present only for files that still need uploading. */
+  file?: File;
+  /** Backend URL, present only for files that were already uploaded. */
+  url?: string;
+  filename: string;
+  mediaType: string;
 }
 
 export interface AttachmentRepository {
-  persistFiles(chatId: string, files: AttachmentFile[]): Promise<any[]>;
+  persistFiles(
+    chatId: string,
+    files: AttachmentFilePayload[],
+  ): Promise<Array<Record<string, unknown>>>;
 }

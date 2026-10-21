@@ -8,14 +8,20 @@
  * resort, `Math.random()`.
  */
 export function randomUUID(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
   // Fallback for non-secure contexts (HTTP).
   // crypto.getRandomValues() is available in most environments even
   // without a secure context, unlike crypto.randomUUID().
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.getRandomValues === "function"
+  ) {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
 
     // Set version 4 bits
@@ -23,13 +29,15 @@ export function randomUUID(): string {
     // Set variant bits (10xx)
     bytes[8] = ((bytes[8]!) & 0x3f) | 0x80;
 
-    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
+      "",
+    );
     return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 
   // Last-resort fallback (unlikely, but defensive).
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
 }

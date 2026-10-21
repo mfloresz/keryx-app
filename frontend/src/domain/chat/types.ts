@@ -1,8 +1,10 @@
+import type { LanguageModelUsage } from "ai";
+
 export interface ChatBranchSnapshot {
   id: string;
   label: string;
   createdAt: string;
-  messages: any[];
+  messages: unknown[];
 }
 
 export interface ChatBranchState {
@@ -12,15 +14,13 @@ export interface ChatBranchState {
   snapshots: ChatBranchSnapshot[];
 }
 
-import type { LanguageModelUsage } from "ai";
-
 export interface ChatRecord {
   id: string;
   title: string | null;
   visibility: "public" | "private";
   createdAt: string;
-  messages: any[];
-  votes: any[];
+  messages: unknown[];
+  votes: unknown[];
   webSearch?: boolean;
   agentId?: string | null;
   preset?: string | null;

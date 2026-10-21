@@ -7,6 +7,13 @@ export interface AuthAdapter {
   register(email: string, password: string, name?: string): Promise<AuthSession>;
   logout(): Promise<void>;
   getAuthorizationHeaders(): Promise<Record<string, string>>;
-  updateProfile(data: { name?: string; avatar?: File; removeAvatar?: boolean }): Promise<AuthSession>;
-  changePassword(currentPassword: string, newPassword: string): Promise<void>;
+  updateProfile(data: {
+    name?: string;
+    avatar?: File;
+    removeAvatar?: boolean;
+  }): Promise<AuthSession>;
+  changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void>;
 }

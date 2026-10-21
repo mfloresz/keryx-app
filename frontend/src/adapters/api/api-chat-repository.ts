@@ -1,0 +1,160 @@
+import type { ChatRepository, ChatVote } from "#/domain/chat/ports";
+import type { ChatRecord } from "#/domain/chat/types";
+import { getAuthAdapter } from "#/services/runtime";
+
+/** Normalizes a HeadersInit into a plain record so it can be spread. */
+function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return headers as Record<string, string>;
+}
+
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const auth = await getAuthAdapter();
+  return await auth.getAuthorizationHeaders();
+}
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const headers = {
+    "content-type": "application/json",
+    ...(await authHeaders()),
+    ...toHeaderRecord(init?.headers),
+  };
+  return fetch(path, { ...init, headers });
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(
+      typeof payload?.message === "string"
+        ? payload.message
+        : `Request failed: ${response.url}`,
+    );
+  }
+  return (await response.json()) as T;
+}
+
+export const apiChatRepository: ChatRepository = {
+  async listChats() {
+    return readJson(await apiFetch("/api/chats"));
+  },
+
+  async createChat(chat) {
+    return readJson<ChatRecord>(
+      await apiFetch("/api/chats", {
+        method: "POST",
+        body: JSON.stringify(chat),
+      }),
+    );
+  },
+
+  async getChat(chatId) {
+    const response = await apiFetch(`/api/chats/${chatId}`);
+    if (response.status === 404) return null;
+    return readJson(response);
+  },
+
+  async deleteChat(chatId) {
+    await readJson(
+      await apiFetch(`/api/chats/${chatId}`, { method: "DELETE" }),
+    );
+  },
+
+  async deleteAllChats() {
+    await readJson(await apiFetch("/api/chats", { method: "DELETE" }));
+  },
+
+  async updateTitle(chatId, title) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/title`, {
+        method: "PATCH",
+        body: JSON.stringify({ title }),
+      }),
+    );
+  },
+
+  async updateVisibility(chatId, visibility) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/visibility`, {
+        method: "PATCH",
+        body: JSON.stringify({ visibility }),
+      }),
+    );
+  },
+
+  async deleteMessage(chatId, payload) {
+    await readJson(
+      await apiFetch(`/api/chats/${chatId}/messages`, {
+        method: "DELETE",
+        body: JSON.stringify(payload),
+      }),
+    );
+  },
+
+  async switchBranch(chatId, payload) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/branches`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    );
+  },
+
+  async forkChat(chatId, messageId) {
+    return readJson<ChatRecord>(
+      await apiFetch(`/api/chats/${chatId}/fork`, {
+        method: "POST",
+        body: JSON.stringify({ messageId }),
+      }),
+    );
+  },
+
+  async updatePreset(chatId, preset) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/preset`, {
+        method: "PATCH",
+        body: JSON.stringify({ preset }),
+      }),
+    );
+  },
+
+  async updateAgent(chatId, agentId) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/agent`, {
+        method: "PATCH",
+        body: JSON.stringify({ agentId }),
+      }),
+    );
+  },
+
+  async updateProject(chatId, projectId) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/project`, {
+        method: "PATCH",
+        body: JSON.stringify({ projectId }),
+      }),
+    );
+  },
+
+  async listFavorites() {
+    return readJson(await apiFetch("/api/favorites"));
+  },
+
+  async getVotes(chatId) {
+    return readJson<ChatVote[]>(
+      await apiFetch(`/api/chats/${chatId}/votes`),
+    );
+  },
+
+  async saveVote(chatId, payload) {
+    return readJson(
+      await apiFetch(`/api/chats/${chatId}/votes`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    );
+  },
+};

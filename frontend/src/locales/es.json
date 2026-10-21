@@ -43,7 +43,8 @@
     "logout": "Cerrar sesión",
     "rename": "Renombrar",
     "delete": "Eliminar",
-    "projects": "Proyectos"
+    "projects": "Proyectos",
+    "actions": "Acciones"
   },
   "settings": {
     "title": "Configuración",
@@ -255,7 +256,12 @@
       "create": "Crear",
       "createFailed": "No se pudo crear el proyecto"
     },
-    "addPhotosOrFiles": "Agrega fotos o archivos"
+    "addPhotosOrFiles": "Agrega fotos o archivos",
+    "send": "Enviar mensaje",
+    "askAboutProject": "Preguntar sobre este proyecto",
+    "tools": {
+      "label": "Llamadas a herramientas"
+    }
   },
   "message": {
     "user": "Usuario",
@@ -275,7 +281,8 @@
     "forkTooltip": "Iniciar un nuevo chat desde este mensaje",
     "preview": "Vista previa",
     "codePreview": "Vista previa HTML",
-    "codePreviewDescription": "Renderizado del bloque de código en un iframe aislado."
+    "codePreviewDescription": "Renderizado del bloque de código en un iframe aislado.",
+    "editDescription": "Edita tu mensaje y envíalo de nuevo para continuar la conversación."
   },
   "artifact": {
     "openPanel": "Artefactos ({count})",
