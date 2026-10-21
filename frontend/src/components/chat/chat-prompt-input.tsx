@@ -194,10 +194,10 @@ export function ChatPromptInput({
           }}
           placeholder={t("chat.inputPlaceholder")}
           aria-label={t("chat.inputPlaceholder")}
-          className="resize-none"
+          className="min-h-12 resize-none p-3"
         />
 
-        {/* Left tools */}
+        {/* Toolbar: left tools, then right-aligned controls, in one row. */}
         <InputGroupAddon align="block-end" className="px-2 pb-2">
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -281,10 +281,9 @@ export function ChatPromptInput({
               {t("chat.search")}
             </Button>
           ) : null}
-        </InputGroupAddon>
 
-        {/* Right tools */}
-        <InputGroupAddon align="block-end" className="justify-end px-2 pb-2">
+          {/* Right-aligned controls */}
+          <div className="ms-auto flex min-w-0 flex-wrap items-center gap-2">
           {selectedAgent ? (
             <span className="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs">
               <BotIcon className="size-3 shrink-0" />
@@ -349,6 +348,7 @@ export function ChatPromptInput({
               <span aria-hidden>↑</span>
             </InputGroupButton>
           )}
+          </div>
         </InputGroupAddon>
       </InputGroup>
 

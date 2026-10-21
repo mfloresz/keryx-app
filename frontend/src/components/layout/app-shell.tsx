@@ -54,7 +54,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset className="min-w-0">
+        {/* The inset is a fixed-height column: the chat thread scrolls inside
+            it and the composer stays pinned to the bottom of the viewport.
+            Without the height cap, the message scroller grows with its
+            content and pushes the composer off screen. */}
+        <SidebarInset className="h-svh min-w-0 overflow-hidden">
           <MobileHeader />
           {children}
         </SidebarInset>
