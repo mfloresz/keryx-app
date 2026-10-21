@@ -679,7 +679,9 @@ function ChatConversation({
     isBusy && lastMessage?.role === "assistant" && !lastMessage.parts?.length;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
+      {/* Thread and composer */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <MessageScrollerProvider>
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
@@ -725,8 +727,6 @@ function ChatConversation({
         </MessageScroller>
       </MessageScrollerProvider>
 
-      <ArtifactPanel />
-
       <ChatPromptInput
         status={status}
         preset={selectedPreset}
@@ -743,6 +743,10 @@ function ChatConversation({
         onProjectChange={setSelectedProjectId}
         onCreateProject={() => setCreateProjectOpen(true)}
       />
+      </div>
+
+      {/* The artifact panel sits beside the thread on wide screens. */}
+      <ArtifactPanel />
 
       {/* Edit message */}
       <Dialog

@@ -107,7 +107,7 @@ export function ArtifactPanel() {
   return (
     <aside
       data-slot="artifact-panel"
-      className="fixed inset-0 z-50 flex flex-col bg-background lg:static lg:z-auto lg:w-[420px] lg:max-w-[50%] lg:border-l lg:border-border"
+      className="fixed inset-0 z-50 flex flex-col bg-background lg:static lg:z-auto lg:h-full lg:w-[480px] lg:min-w-[380px] lg:max-w-[50%] lg:shrink-0 lg:border-l lg:border-border"
       aria-label={t("artifact.openPanel")}
     >
       {/* Header */}
