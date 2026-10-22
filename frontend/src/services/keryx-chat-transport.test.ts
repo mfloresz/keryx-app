@@ -245,4 +245,121 @@ describe("KeryxChatTransport", () => {
 
     fetchSpy.mockRestore();
   });
+
+  it("gives each reasoning block its own id", async () => {
+    // The model thinks, calls a tool, then thinks again. Each reasoning
+    // block must be a separate part, not one concatenated blob.
+    const { transport, fetchSpy } = transportFor(
+      sseResponse([
+        JSON.stringify({ type: "reasoning", text: "primero" }),
+        JSON.stringify({
+          type: "tool_call",
+          name: "read_file",
+          toolCallId: "call_1",
+          input: '{"path":"a.md"}',
+        }),
+        JSON.stringify({
+          type: "tool_result",
+          name: "read_file",
+          toolCallId: "call_1",
+          output: "contenido",
+        }),
+        JSON.stringify({ type: "reasoning", text: "segundo" }),
+        JSON.stringify({ type: "finish" }),
+      ]),
+    );
+
+    const stream = await transport.sendMessages({
+      trigger: "submit-message",
+      chatId: "x",
+      messageId: undefined,
+      messages: [],
+      abortSignal: undefined,
+      body: { preset: "fast" },
+    });
+
+    const chunks = await collect(stream as never);
+    const starts = chunks.filter((c) => c.type === "reasoning-start");
+    const ends = chunks.filter((c) => c.type === "reasoning-end");
+
+    // Two reasoning blocks: two starts, two ends, two distinct ids.
+    expect(starts).toHaveLength(2);
+    expect(ends).toHaveLength(2);
+    expect(starts[0].id).not.toBe(starts[1].id);
+
+    // The tool call closes the first reasoning block, so the reasoning that
+    // follows the tool is chronologically after it.
+    const toolIndex = chunks.findIndex((c) => c.type === "tool-input-available");
+    const secondStart = chunks.findIndex(
+      (c, i) => c.type === "reasoning-start" && i > toolIndex,
+    );
+    expect(secondStart).toBeGreaterThan(toolIndex);
+
+    fetchSpy.mockRestore();
+  });
+
+  it("maps a source event to a source-url chunk", async () => {
+    const { transport, fetchSpy } = transportFor(
+      sseResponse([
+        JSON.stringify({
+          type: "source",
+          title: "Example",
+          url: "https://example.com",
+        }),
+        JSON.stringify({ type: "finish" }),
+      ]),
+    );
+
+    const stream = await transport.sendMessages({
+      trigger: "submit-message",
+      chatId: "x",
+      messageId: undefined,
+      messages: [],
+      abortSignal: undefined,
+      body: { preset: "fast" },
+    });
+
+    const chunks = await collect(stream as never);
+    const source = chunks.find((c) => c.type === "source-url");
+
+    expect(source?.url).toBe("https://example.com");
+    expect(source?.title).toBe("Example");
+    expect(source?.sourceId).toBeTruthy();
+
+    fetchSpy.mockRestore();
+  });
+
+  it("maps a tool_approval event to a tool-approval-request chunk", async () => {
+    const { transport, fetchSpy } = transportFor(
+      sseResponse([
+        JSON.stringify({
+          type: "tool_approval",
+          approvalId: "appr_1",
+          toolCallId: "call_1",
+          name: "write_file",
+          input: '{"path":"a.md"}',
+          reason: "The agent wants to write a.md in the workspace.",
+        }),
+        JSON.stringify({ type: "finish" }),
+      ]),
+    );
+
+    const stream = await transport.sendMessages({
+      trigger: "submit-message",
+      chatId: "x",
+      messageId: undefined,
+      messages: [],
+      abortSignal: undefined,
+      body: { preset: "fast" },
+    });
+
+    const chunks = await collect(stream as never);
+    const approval = chunks.find((c) => c.type === "tool-approval-request");
+
+    expect(approval?.approvalId).toBe("appr_1");
+    expect(approval?.toolCallId).toBe("call_1");
+    expect(approval?.reason).toContain("a.md");
+
+    fetchSpy.mockRestore();
+  });
 });

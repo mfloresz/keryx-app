@@ -34,6 +34,10 @@ type Server struct {
 	// reloading the page mid-response.
 	activeStreams *streamRegistry
 
+	// toolApprovals holds tool calls that are waiting for the user to
+	// approve or deny them (write_file / edit_file).
+	toolApprovals *approvalRegistry
+
 	// invitationMu serializes invitation acceptance so two concurrent requests
 	// can't consume the same invitation (check-then-use race).
 	invitationMu sync.Mutex
@@ -61,6 +65,7 @@ func New(st *store.Store, cfg *config.Config) *Server {
 		Cfg:               cfg,
 		AIProviders:       make(map[string]ai.Provider),
 		activeStreams:     newStreamRegistry(),
+		toolApprovals:     newApprovalRegistry(),
 		loginLimiter:      newRateLimiter(5),  // 5 login attempts/min per IP
 		invitationLimiter: newRateLimiter(10), // 10 invitation ops/min per IP
 		streamLimiter:     newRateLimiter(10), // 10 stream starts/min per user
@@ -140,6 +145,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/chats/{id}/preset", s.withAuth(s.handleUpdateChatPreset))
 	mux.HandleFunc("PATCH /api/chats/{id}/project", s.withAuth(s.handleUpdateChatProject))
 	mux.HandleFunc("GET /api/chats/{id}/stream", s.withAuth(s.handleReconnectStream))
+	mux.HandleFunc("POST /api/chats/{id}/tool-approval", s.withAuth(s.handleToolApproval))
 	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
 

@@ -222,7 +222,15 @@
     "send": "Enviar mensaje",
     "askAboutProject": "Preguntar sobre este proyecto",
     "tools": {
-      "label": "Llamadas a herramientas"
+      "label": "Llamadas a herramientas",
+      "running": "{name} en ejecución…",
+      "failed": "{name} falló",
+      "denied": "{name} denegado",
+      "result": "Resultado",
+      "awaitingApproval": "{name} necesita tu aprobación",
+      "approvalDescription": "El agente quiere ejecutar {name}.",
+      "approve": "Aprobar",
+      "deny": "Denegar"
     },
     "attachFiles": "Adjuntar archivos",
     "addTools": "Añadir herramientas",
@@ -249,7 +257,8 @@
     "codePreview": "Vista previa HTML",
     "codePreviewDescription": "Renderizado del bloque de código en un iframe aislado.",
     "editDescription": "Edita tu mensaje y envíalo de nuevo para continuar la conversación.",
-    "sources": "fuentes"
+    "sources": "fuentes",
+    "thought": "Razonamiento"
   },
   "artifact": {
     "openPanel": "Artefactos ({count})",

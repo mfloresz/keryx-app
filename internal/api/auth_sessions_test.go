@@ -19,6 +19,9 @@ import (
 type apiTestEnv struct {
 	handler http.Handler
 	store   *store.Store
+	// server is exposed so tests can reach the server's in-memory state
+	// (e.g. the pending tool approvals).
+	server *Server
 }
 
 func newAPITestEnv(t *testing.T) *apiTestEnv {
@@ -44,7 +47,7 @@ func newAPITestEnv(t *testing.T) *apiTestEnv {
 	}
 
 	server := New(st, &config.Config{DataDir: dataDir})
-	return &apiTestEnv{handler: server.Handler(), store: st}
+	return &apiTestEnv{handler: server.Handler(), store: st, server: server}
 }
 
 func doJSONRequest(t *testing.T, h http.Handler, method, path, token string, body any) *httptest.ResponseRecorder {

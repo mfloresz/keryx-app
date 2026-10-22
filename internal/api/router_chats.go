@@ -681,6 +681,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	var (
 		partialText, partialReasoning strings.Builder
 		toolParts                     []map[string]any
+		sourceParts                   []map[string]any
 		streamStarted                 bool
 	)
 
@@ -705,7 +706,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		lastPersist = time.Now()
 		text, reasoning := active.snapshot()
 		if strings.TrimSpace(text) != "" || reasoning != "" || len(toolParts) > 0 {
-			s.appendAssistantMessage(chatID, userID, assistantMessageID, text, reasoning, toolParts)
+			s.appendAssistantMessage(chatID, userID, assistantMessageID, text, reasoning, toolParts, sourceParts)
 		}
 	}
 
@@ -724,7 +725,25 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		projectExec := projectToolExec(s, project.ID, userID)
 		toolExec = func(ctx context.Context, toolName string, input json.RawMessage) (string, error) {
 			if toolName == "web_search" {
-				return execWebSearchTool(braveAPIKey, chatID, userID, input)
+				// Each citation is streamed to the client so the answer can
+				// carry a clickable source list.
+				return execWebSearchTool(braveAPIKey, chatID, userID, input, func(title, url string) {
+					extra := map[string]string{
+						"title": title,
+						"url":   url,
+					}
+					writeSSEEvent(w, "source", extra)
+					active.broadcast("source", extra)
+					flusher.Flush()
+					// Persisted with the assistant message so the sources
+					// survive a reload.
+					sourceParts = append(sourceParts, map[string]any{
+						"type":     "source-url",
+						"sourceId": fmt.Sprintf("src_%d", len(sourceParts)+1),
+						"url":      url,
+						"title":    title,
+					})
+				})
 			}
 			return projectExec(ctx, toolName, input)
 		}
@@ -739,6 +758,8 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		CacheKey: ai.SessionForChat(chatID),
 		Tools:    tools,
 		ToolExec: toolExec,
+		// Tools that change the workspace wait for the user's approval.
+		ToolApproval: s.toolApprovalHook(w, flusher, chatID, assistantMessageID, active),
 	}, func(chunk ai.StreamChunk) {
 		// Send the start event only when the first chunk actually arrives
 		// from the provider, so the frontend doesn't create an empty
@@ -810,7 +831,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Persist the partial assistant response (if any) instead of losing it.
 		if strings.TrimSpace(fullText) != "" || fullReasoning != "" || len(toolParts) > 0 {
-			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts)
+			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts, sourceParts)
 		}
 		slog.Error("chat stream failed", "error", err, "chat", chatID, "user", userID, "model", req.Model)
 		active.broadcastFinish("error", map[string]string{"error": "The model provider returned an error. Please try again."})
@@ -887,7 +908,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Append assistant message and persist atomically with the title.
-	savedTitle := s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts, chat.Title)
+	savedTitle := s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts, sourceParts, chat.Title)
 	if savedTitle != "" {
 		writeSSEEvent(w, "finish", map[string]string{"title": savedTitle})
 		flusher.Flush()
@@ -1032,9 +1053,10 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 // appendAssistantMessage appends (or replaces, on retry) the assistant
 // message in the stored chat and returns the persisted title. toolParts are
 // the dynamic-tool parts (web search invocations) observed during the
-// stream. The read-save cycle is serialized per chat so it never clobbers
-// votes, branches, or edits saved while the stream was running.
-func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoning string, toolParts []map[string]any, titleOverride ...string) string {
+// stream. sourceParts are the citations the answer is based on. The
+// read-save cycle is serialized per chat so it never clobbers votes,
+// branches, or edits saved while the stream was running.
+func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoning string, toolParts []map[string]any, sourceParts []map[string]any, titleOverride ...string) string {
 	unlock := s.lockChat(chatID)
 	defer unlock()
 
@@ -1050,6 +1072,7 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 	if reasoning != "" {
 		parts = append(parts, map[string]any{"type": "reasoning", "text": reasoning})
 	}
+	parts = append(parts, sourceParts...)
 	parts = append(parts, toolParts...)
 	parts = append(parts, map[string]any{"type": "text", "text": text})
 	assistantMsg := map[string]any{

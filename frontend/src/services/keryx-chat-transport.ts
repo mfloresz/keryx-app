@@ -218,9 +218,17 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
     return new ReadableStream({
       async start(controller) {
         let buffer = "";
-        const reasoningId = randomUUID();
+        // Each reasoning block gets its own id, so a model that thinks,
+        // calls a tool and then thinks again produces separate reasoning
+        // parts instead of one concatenated blob.
+        let reasoningId = randomUUID();
         let reasoningOpen = false;
+        // Tracks whether a reasoning block was already closed in this
+        // stream, so the next block can be given a fresh id.
+        let closedReasoning = false;
         let startSent = false;
+        // Counter for generated source ids when the server does not send one.
+        let sourceCount = 0;
 
         // Initial chunks are emitted lazily once the backend's 'start' event
         // arrives, so the SDK can adopt the persisted assistant message id.
@@ -246,6 +254,19 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
             } as UIMessageChunk);
             reasoningOpen = false;
           }
+        };
+
+        // Opens a reasoning block. A new id is minted after the previous
+        // one closed, so consecutive reasoning blocks stay separate parts.
+        const openReasoning = () => {
+          if (reasoningOpen) return;
+          if (closedReasoning) reasoningId = randomUUID();
+          closedReasoning = true;
+          controller.enqueue({
+            type: "reasoning-start",
+            id: reasoningId,
+          } as UIMessageChunk);
+          reasoningOpen = true;
         };
         const closeAll = () => {
           closeReasoning();
@@ -293,13 +314,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                 ensureStart();
 
                 if (data.type === "reasoning" && data.text) {
-                  if (!reasoningOpen) {
-                    controller.enqueue({
-                      type: "reasoning-start",
-                      id: reasoningId,
-                    } as UIMessageChunk);
-                    reasoningOpen = true;
-                  }
+                  openReasoning();
                   controller.enqueue({
                     type: "reasoning-delta",
                     id: reasoningId,
@@ -308,19 +323,17 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                 } else if (data.type === "reasoning_snapshot" && data.text) {
                   // Full accumulated reasoning replaces whatever partial state
                   // the fresh client had (none, on a reload).
-                  if (!reasoningOpen) {
-                    controller.enqueue({
-                      type: "reasoning-start",
-                      id: reasoningId,
-                    } as UIMessageChunk);
-                    reasoningOpen = true;
-                  }
+                  openReasoning();
                   controller.enqueue({
                     type: "reasoning-delta",
                     id: reasoningId,
                     delta: data.text,
                   } as UIMessageChunk);
                 } else if (data.type === "tool_call" && data.toolCallId) {
+                  // A tool call ends the current reasoning block, so the
+                  // reasoning that follows the tool result is a separate
+                  // part with its own timeline position.
+                  closeReasoning();
                   // Live tool activity: the backend executes the tool and
                   // keeps streaming; show an input-available tool part.
                   controller.enqueue({
@@ -334,6 +347,27 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                     type: "tool-output-available",
                     toolCallId: data.toolCallId,
                     output: parseMaybeJSON(data.output),
+                  } as UIMessageChunk);
+                } else if (data.type === "tool_approval" && data.approvalId) {
+                  // The backend is blocked waiting for the user to approve
+                  // or deny this tool call.
+                  controller.enqueue({
+                    type: "tool-approval-request",
+                    approvalId: data.approvalId,
+                    toolCallId: data.toolCallId,
+                    reason: data.reason,
+                    approvalDescriptor: {
+                      toolName: data.name ?? "tool",
+                      input: parseMaybeJSON(data.input),
+                    },
+                  } as UIMessageChunk);
+                } else if (data.type === "source" && data.url) {
+                  // A citation the answer is based on.
+                  controller.enqueue({
+                    type: "source-url",
+                    sourceId: data.sourceId ?? `src_${sourceCount++}`,
+                    url: data.url,
+                    title: data.title,
                   } as UIMessageChunk);
                 } else if (
                   (data.type === "text_snapshot" || data.type === "text") &&

@@ -51,6 +51,7 @@ import { extractHtmlArtifacts } from "#/utils/html-artifacts";
 import { useArtifactStore } from "#/stores/artifact";
 import { watchChatTitle } from "#/services/title-watcher";
 import { getChatStreamApi, getChatTransportHeaders } from "#/services/chat-transport";
+import { respondToToolApproval } from "#/services/tool-approval";
 import { KeryxChatTransport } from "#/services/keryx-chat-transport";
 import { useAuth } from "#/stores/auth";
 import { useChatStore } from "#/stores/chat";
@@ -298,6 +299,13 @@ function ChatConversation({
     };
   }, [t]);
 
+  // The project list backs the composer's project picker. Without it the
+  // picker is empty after a reload, so the attached project looks lost.
+  React.useEffect(() => {
+    void projectsStore.fetchProjects();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
   // ---- The chat session ----
   const transport = React.useMemo(
@@ -309,23 +317,31 @@ function ChatConversation({
     [chatId],
   );
 
-  const { messages, sendMessage, regenerate, status, stop, setMessages } =
-    useChat<UIMessage>({
-      id: chatId,
-      messages: loaded.messages,
-      transport,
-      onError(error) {
-        let message = error.message;
-        if (typeof message === "string" && message[0] === "{") {
-          try {
-            message = JSON.parse(message).message || message;
-          } catch {
-            // Keep the original message.
-          }
+  const {
+    messages,
+    sendMessage,
+    regenerate,
+    status,
+    stop,
+    setMessages,
+    clearError,
+    addToolApprovalResponse,
+  } = useChat<UIMessage>({
+    id: chatId,
+    messages: loaded.messages,
+    transport,
+    onError(error) {
+      let message = error.message;
+      if (typeof message === "string" && message[0] === "{") {
+        try {
+          message = JSON.parse(message).message || message;
+        } catch {
+          // Keep the original message.
         }
-        toast.error(getUserFacingChatError(message, t));
-      },
-    });
+      }
+      toast.error(getUserFacingChatError(message, t));
+    },
+  });
 
   const isBusy = status === "streaming" || status === "submitted";
 
@@ -478,6 +494,29 @@ function ChatConversation({
     })();
   }, [selectedProjectId, chatId, chatRepository]);
 
+  // ---- Tool approvals ----
+  // The backend holds the stream open while a write is pending approval.
+  // Answering resumes it; the SDK then continues the model turn.
+  async function handleToolApproval(payload: {
+    approvalId: string;
+    approved: boolean;
+  }) {
+    try {
+      await respondToToolApproval(chatId, payload);
+      await addToolApprovalResponse({
+        id: payload.approvalId,
+        approved: payload.approved,
+      });
+    } catch (err) {
+      toast.error(
+        getUserFacingChatError(
+          err instanceof Error ? err.message : null,
+          t,
+        ),
+      );
+    }
+  }
+
   // ---- Request body shared by submit, edit and regenerate ----
   const buildRequestBody = React.useCallback(
     (webSearch: boolean) => ({
@@ -525,6 +564,10 @@ function ChatConversation({
         );
         fileParts = uploaded as typeof fileParts;
       }
+
+      // A previous failure leaves the chat in the "error" state; clearing
+      // it lets the user retry without reloading the page.
+      if (status === "error") clearError();
 
       void sendMessage(
         { text, files: fileParts },
@@ -704,6 +747,9 @@ function ChatConversation({
                     onVote={(message, upvoted) => void handleVote(message, upvoted)}
                     onBranchChange={(payload) =>
                       void handleBranchChange(payload)
+                    }
+                    onToolApproval={(payload) =>
+                      void handleToolApproval(payload)
                     }
                   />
                 </MessageScrollerItem>

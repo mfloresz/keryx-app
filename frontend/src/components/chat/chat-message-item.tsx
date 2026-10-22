@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { UIMessage } from "ai";
+import { getToolName, type UIMessage } from "ai";
 import {
   BotIcon,
   CheckIcon,
@@ -8,6 +8,7 @@ import {
   CopyIcon,
   GitForkIcon,
   LinkIcon,
+  PaperclipIcon,
   PencilIcon,
   RefreshCwIcon,
   ThumbsDownIcon,
@@ -16,6 +17,14 @@ import {
 } from "lucide-react";
 
 import { Markdown } from "#/components/chat/markdown";
+import {
+  Attachment,
+  AttachmentContent,
+  AttachmentDescription,
+  AttachmentGroup,
+  AttachmentMedia,
+  AttachmentTitle,
+} from "#/components/ui/attachment";
 import { Button } from "#/components/ui/button";
 import { Bubble, BubbleContent } from "#/components/ui/bubble";
 import {
@@ -35,6 +44,10 @@ import {
   TraceTitle,
 } from "#/components/ui/trace";
 import { useI18n } from "#/i18n";
+import {
+  ensureAttachmentResolved,
+  resolvedAttachmentUrl,
+} from "#/utils/attachment-url";
 
 export interface ChatMessageItemProps {
   message: UIMessage;
@@ -47,6 +60,10 @@ export interface ChatMessageItemProps {
   onBranchChange?: (payload: {
     rootMessageId: string;
     snapshotId: string;
+  }) => void;
+  onToolApproval?: (payload: {
+    approvalId: string;
+    approved: boolean;
   }) => void;
 }
 
@@ -76,21 +93,55 @@ function getMessageText(message: UIMessage): string {
 }
 
 /**
+ * Delay before a finished reasoning block folds itself away.
+ */
+const AUTO_COLLAPSE_DELAY = 1000;
+
+/**
+ * Reads the tool name from a tool part.
+ *
+ * The SDK stores live tool calls as static parts ("tool-read_file"), where
+ * the name lives in the type, and persisted calls as dynamic parts, where
+ * it lives in the toolName field. The SDK helper covers both shapes.
+ */
+function readToolName(part: unknown): string {
+  const tool = part as Parameters<typeof getToolName>[0];
+  try {
+    return getToolName(tool);
+  } catch {
+    return "tool";
+  }
+}
+
+/**
  * Reasoning is rendered as a collapsible Trace line: "Thinking" while it
  * streams, then the accumulated text on demand.
+ *
+ * The block auto-collapses a moment after the model stops thinking, so a
+ * finished answer is not buried under the reasoning that produced it.
  */
 function ReasoningPart({ text, running }: { text: string; running: boolean }) {
-  // While the model is thinking the trace stays open; once it is done the
-  // user decides. The key remounts the row per message so the collapsed
-  // state is not shared between turns.
+  const { t } = useI18n();
+  // While the model is thinking the trace stays open; once it is done it
+  // folds away on its own and the user can reopen it.
   const [open, setOpen] = React.useState(running);
+  const wasRunning = React.useRef(running);
+
+  React.useEffect(() => {
+    if (wasRunning.current && !running) {
+      const timer = setTimeout(() => setOpen(false), AUTO_COLLAPSE_DELAY);
+      wasRunning.current = false;
+      return () => clearTimeout(timer);
+    }
+    wasRunning.current = running;
+  }, [running]);
 
   const line = (
     <TraceLine status={running ? "running" : undefined}>
       <TraceIcon>
         <BotIcon />
       </TraceIcon>
-      <TraceTitle>{running ? "Thinking" : "Thought"}</TraceTitle>
+      <TraceTitle>{running ? t("chat.thinking") : t("message.thought")}</TraceTitle>
     </TraceLine>
   );
 
@@ -111,35 +162,86 @@ function ToolPart({
   state,
   input,
   output,
+  approval,
+  onApproval,
 }: {
   toolName: string;
   state: string;
   input?: unknown;
   output?: unknown;
+  approval?: {
+    id: string;
+    approved?: boolean;
+    requestReason?: string;
+  };
+  onApproval?: (payload: {
+    approvalId: string;
+    approved: boolean;
+  }) => void;
 }) {
   const { t } = useI18n();
   const isError = state === "output-error";
   const isDone = state === "output-available";
+  // The tool is waiting for the user to approve it.
+  const needsApproval = state === "approval-requested" && !approval?.approved;
+  // The user refused: the SDK records the refusal on the approval, so the
+  // state can be "approval-responded" or already carry the denial output.
+  const wasDenied = approval?.approved === false;
 
   return (
     <Trace>
-      <TraceLine status={isError ? "error" : isDone ? undefined : "running"}>
+      <TraceLine
+        status={isError ? "error" : isDone || wasDenied ? undefined : "running"}
+      >
         <TraceIcon>
           <WrenchIcon />
         </TraceIcon>
         <TraceTitle>
-          {isError
-            ? `${toolName} failed`
-            : isDone
-              ? toolName
-              : `${toolName} running…`}
+          {needsApproval
+            ? t("chat.tools.awaitingApproval", { name: toolName })
+            : wasDenied
+              ? t("chat.tools.denied", { name: toolName })
+              : isError
+                ? t("chat.tools.failed", { name: toolName })
+                : isDone
+                  ? toolName
+                  : t("chat.tools.running", { name: toolName })}
         </TraceTitle>
       </TraceLine>
+
+      {needsApproval ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            {approval?.requestReason ??
+              t("chat.tools.approvalDescription", { name: toolName })}
+          </p>
+          <div className="ms-auto flex items-center gap-1">
+            <Button
+              size="xs"
+              onClick={() =>
+                onApproval?.({ approvalId: approval!.id, approved: true })
+              }
+            >
+              {t("chat.tools.approve")}
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() =>
+                onApproval?.({ approvalId: approval!.id, approved: false })
+              }
+            >
+              {t("chat.tools.deny")}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {output !== undefined ? (
         <TraceCollapsible>
           <TraceCollapsibleTrigger>
             <TraceLine>
-              <TraceTitle>{"Result"}</TraceTitle>
+              <TraceTitle>{t("chat.tools.result")}</TraceTitle>
             </TraceLine>
           </TraceCollapsibleTrigger>
           <TraceCollapsibleContent>
@@ -214,16 +316,19 @@ export function ChatMessageItem({
   onFork,
   onVote,
   onBranchChange,
+  onToolApproval,
 }: ChatMessageItemProps) {
   const { t } = useI18n();
   const isUser = message.role === "user";
   const [copied, setCopied] = React.useState(false);
 
   const text = getMessageText(message);
-  const reasoning = message.parts
+  // Reasoning blocks are kept apart: the model can think, call a tool and
+  // then think again, and each block is its own collapsible row.
+  const reasoningBlocks = message.parts
     .filter((p) => p.type === "reasoning")
-    .map((p) => ("text" in p ? p.text : ""))
-    .join("");
+    .map((p) => ("text" in p ? (p.text ?? "") : ""))
+    .filter((t) => t.trim().length > 0);
   const tools = message.parts.filter(
     (p) => p.type === "dynamic-tool" || p.type.startsWith("tool-"),
   );
@@ -255,12 +360,13 @@ export function ChatMessageItem({
           </span>
         </MessageHeader>
 
-        {reasoning ? (
+        {reasoningBlocks.map((block, index) => (
           <ReasoningPart
-            text={reasoning}
-            running={Boolean(isStreaming) && !text}
+            key={`reasoning-${index}`}
+            text={block}
+            running={Boolean(isStreaming) && !text && index === reasoningBlocks.length - 1}
           />
-        ) : null}
+        ))}
 
         {tools.map((part, index) => {
           const tool = part as {
@@ -269,29 +375,70 @@ export function ChatMessageItem({
             state?: string;
             input?: unknown;
             output?: unknown;
+            approval?: {
+              id: string;
+              approved?: boolean;
+              requestReason?: string;
+            };
           };
           return (
             <ToolPart
               key={tool.toolCallId ?? index}
-              toolName={tool.toolName ?? "tool"}
+              toolName={readToolName(part)}
               state={tool.state ?? "input-available"}
               input={tool.input}
               output={tool.output}
+              approval={tool.approval}
+              onApproval={onToolApproval}
             />
           );
         })}
 
         {files.length > 0 ? (
-          <ul className="space-y-1 text-xs text-muted-foreground">
+          <AttachmentGroup>
             {files.map((part, index) => {
-              const file = part as { filename?: string; mediaType?: string };
+              const file = part as {
+                url?: string;
+                filename?: string;
+                mediaType?: string;
+              };
+              const url = file.url;
+              const isImage = (file.mediaType ?? "").startsWith("image/");
+              // Backend attachments need the auth header, so the bytes are
+              // fetched into an object URL for the preview to render.
+              ensureAttachmentResolved(url);
+              const previewUrl = resolvedAttachmentUrl(url) ?? url;
+
               return (
-                <li key={index}>
-                  {file.filename ?? file.mediaType ?? "attachment"}
-                </li>
+                <Attachment
+                  key={index}
+                  size="sm"
+                  className="cursor-pointer"
+                  onClick={() => {
+                    if (previewUrl) {
+                      window.open(previewUrl, "_blank", "noopener");
+                    }
+                  }}
+                >
+                  <AttachmentMedia variant={isImage ? "image" : "icon"}>
+                    {isImage && previewUrl ? (
+                      <img src={previewUrl} alt={file.filename ?? ""} />
+                    ) : (
+                      <PaperclipIcon />
+                    )}
+                  </AttachmentMedia>
+                  <AttachmentContent>
+                    <AttachmentTitle>
+                      {file.filename ?? file.mediaType ?? "attachment"}
+                    </AttachmentTitle>
+                    <AttachmentDescription>
+                      {file.mediaType ?? ""}
+                    </AttachmentDescription>
+                  </AttachmentContent>
+                </Attachment>
               );
             })}
-          </ul>
+          </AttachmentGroup>
         ) : null}
 
         {text ? (

@@ -205,7 +205,17 @@ type ChatRequest struct {
 	// If nil, tools are defined to the model but execution falls back to the
 	// provider's default behaviour (e.g. OpenRouter server-side tools).
 	ToolExec ToolExecFunc `json:"-"`
+	// ToolApproval is called before a tool runs, for tools that require the
+	// user's consent (e.g. writing files). It receives the tool call and
+	// returns whether the tool may run. A nil hook means every tool runs
+	// without asking.
+	ToolApproval ToolApprovalFunc `json:"-"`
 }
+
+// ToolApprovalFunc decides whether a tool call may proceed. It is invoked
+// before the tool executes; returning false skips the tool and feeds a
+// denial message back to the model.
+type ToolApprovalFunc func(ctx context.Context, toolCallID, toolName, input string) (approved bool, reason string)
 
 // maxToolSteps bounds the model→tool→model loop within a single request.
 // The previous engine capped it at 5; 8 leaves room for deeper research
@@ -335,14 +345,44 @@ func runToolLoopStream(ctx context.Context, cm model.BaseChatModel, msgs []*sche
 // events. Tool failures are fed back to the model as tool output instead of
 // failing the whole request, mirroring the previous engine's graceful
 // degradation for transient tool outages.
+//
+// When the request carries a ToolApproval hook, it is consulted before each
+// tool runs. A denied tool is not executed; the denial is fed back to the
+// model as the tool output so it can adapt instead of failing the stream.
 func execToolCalls(ctx context.Context, req ChatRequest, calls []schema.ToolCall, msgs []*schema.Message, onChunk func(StreamChunk)) ([]*schema.Message, error) {
 	for _, tc := range calls {
+		if req.ToolApproval != nil {
+			approved, reason := req.ToolApproval(ctx, tc.ID, tc.Function.Name, tc.Function.Arguments)
+			if !approved {
+				output := fmt.Sprintf("The user denied the %s tool.", tc.Function.Name)
+				if reason != "" {
+					output = fmt.Sprintf("%s Reason: %s", output, reason)
+				}
+				if onChunk != nil {
+					onChunk(StreamChunk{
+						Kind:       StreamChunkToolResult,
+						ToolCallID: tc.ID,
+						ToolName:   tc.Function.Name,
+						Input:      tc.Function.Arguments,
+						Output:     output,
+					})
+				}
+				msgs = append(msgs, schema.ToolMessage(output, tc.ID, schema.WithToolName(tc.Function.Name)))
+				continue
+			}
+		}
 		output, execErr := req.ToolExec(ctx, tc.Function.Name, json.RawMessage(tc.Function.Arguments))
 		if execErr != nil {
 			output = fmt.Sprintf("Tool %s failed: %v", tc.Function.Name, execErr)
 		}
 		if onChunk != nil {
-			onChunk(StreamChunk{Kind: StreamChunkToolResult, ToolCallID: tc.ID, ToolName: tc.Function.Name, Output: output})
+			onChunk(StreamChunk{
+				Kind:       StreamChunkToolResult,
+				ToolCallID: tc.ID,
+				ToolName:   tc.Function.Name,
+				Input:      tc.Function.Arguments,
+				Output:     output,
+			})
 		}
 		msgs = append(msgs, schema.ToolMessage(output, tc.ID, schema.WithToolName(tc.Function.Name)))
 	}

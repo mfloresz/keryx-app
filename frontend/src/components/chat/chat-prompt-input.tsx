@@ -484,11 +484,7 @@ export function ChatPromptInput({
                   type="submit"
                   size="icon-sm"
                   aria-label={t("chat.send")}
-                  disabled={
-                    (!text.trim() && files.length === 0) ||
-                    status === "error" ||
-                    isConverting
-                  }
+                  disabled={(!text.trim() && files.length === 0) || isConverting}
                   onClick={handleSubmit}
                 >
                   <span aria-hidden>↑</span>
