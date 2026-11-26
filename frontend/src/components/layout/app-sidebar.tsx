@@ -152,7 +152,7 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="overflow-hidden">
         <SidebarGroup>
           <SidebarGroupLabel>{"navigation"}</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -191,9 +191,9 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
+        <SidebarGroup className="min-h-0 flex-1">
           <SidebarGroupLabel>{t("sidebar.recentChats")}</SidebarGroupLabel>
-          <SidebarGroupContent>
+          <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
             {isLoading && !chats.length ? (
               <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                 {t("app.loading")}
