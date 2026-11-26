@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -23,12 +24,7 @@ func toolNames(tools []ai.ToolDefinition) []string {
 }
 
 func contains(list []string, want string) bool {
-	for _, v := range list {
-		if v == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, want)
 }
 
 // TestApplyAgentToolWhitelist: an empty whitelist keeps the defaults; a

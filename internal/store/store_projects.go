@@ -385,10 +385,7 @@ func (s *Store) ReadProjectFileLines(projectID, ownerID, path string, offset, li
 	if limit > 1000 {
 		limit = 1000
 	}
-	end := offset - 1 + limit
-	if end > total {
-		end = total
-	}
+	end := min(offset-1+limit, total)
 	return strings.Join(lines[offset-1:end], "\n"), total, offset, nil
 }
 

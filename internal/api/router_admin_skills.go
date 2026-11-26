@@ -149,11 +149,12 @@ func buildLoadSkillToolDefinition() ai.ToolDefinition {
 // available skills. Only names and descriptions go into the prompt; the full
 // instructions are fetched via load_skill when a task matches.
 func buildSkillsPrompt(skills []store.Skill) string {
-	out := "\n\n### Skills\nYou can load a skill's detailed instructions with the load_skill tool when a task matches. Available skills:\n"
+	var out strings.Builder
+	out.WriteString("\n\n### Skills\nYou can load a skill's detailed instructions with the load_skill tool when a task matches. Available skills:\n")
 	for _, sk := range skills {
-		out += "- " + sk.Name + ": " + sk.Description + "\n"
+		out.WriteString("- " + sk.Name + ": " + sk.Description + "\n")
 	}
-	return out
+	return out.String()
 }
 
 // execLoadSkillTool resolves one skill by name; unknown or disabled skills

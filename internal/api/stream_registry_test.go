@@ -206,7 +206,7 @@ func TestEventRingReplaySinceSeq(t *testing.T) {
 	as := r.register("chat_ring", "m1", cancel)
 
 	// Events emitted with no subscriber still accumulate in the ring.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		as.broadcast("tool_call", map[string]string{"n": strconv.Itoa(i)})
 	}
 	as.append("text", "hello")
@@ -239,7 +239,7 @@ func TestEventRingReplaySinceSeq(t *testing.T) {
 
 	// The ring trims to the cap, dropping the oldest.
 	total := 12
-	for i := 0; i < eventRingCap+50; i++ {
+	for range eventRingCap + 50 {
 		as.append("text", "x")
 		total++
 	}

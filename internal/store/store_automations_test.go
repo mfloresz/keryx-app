@@ -176,7 +176,7 @@ func TestAutomationsCRUDAndScoping(t *testing.T) {
 	}
 
 	// Cap: 20 per owner, 21st rejected.
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if _, err := s.CreateAutomation(&Automation{TaskPrompt: "t", Schedule: "daily:08:00"}, carol); err != nil {
 			t.Fatalf("create #%d: %v", i+2, err)
 		}
@@ -301,7 +301,7 @@ func TestMarkAutomationRan(t *testing.T) {
 	}
 
 	// Two failures: still enabled, streak counts.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := s.MarkAutomationRan(a.ID, false, next); err != nil {
 			t.Fatalf("mark failed #%d: %v", i+1, err)
 		}

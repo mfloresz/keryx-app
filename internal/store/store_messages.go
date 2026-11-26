@@ -315,14 +315,8 @@ func extractSnippet(data string, query string) (role string, snippet string) {
 		return role, fullText
 	}
 
-	start := idx - 40
-	if start < 0 {
-		start = 0
-	}
-	end := idx + len(query) + 60
-	if end > len(fullText) {
-		end = len(fullText)
-	}
+	start := max(idx-40, 0)
+	end := min(idx+len(query)+60, len(fullText))
 
 	snip := fullText[start:end]
 	if start > 0 {
