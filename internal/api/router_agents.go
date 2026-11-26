@@ -48,7 +48,11 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 		agentErrorResponse(w, err, "Failed to list agents")
 		return
 	}
-	jsonResponse(w, agents, http.StatusOK)
+	out := make([]agentJSON, 0, len(agents))
+	for i := range agents {
+		out = append(out, s.agentResponse(&agents[i], userID))
+	}
+	jsonResponse(w, out, http.StatusOK)
 }
 
 func (s *Server) handleGetAgent(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +63,17 @@ func (s *Server) handleGetAgent(w http.ResponseWriter, r *http.Request) {
 		agentErrorResponse(w, err, "Failed to get agent")
 		return
 	}
-	jsonResponse(w, ag, http.StatusOK)
+	jsonResponse(w, s.agentResponse(ag, userID), http.StatusOK)
+}
+
+// agentBundleFields is the bundle part of the agent create/update bodies.
+// Store.CreateAgent/UpdateAgent validate the values (allowed tools, sizes,
+// caps) and reject violations with store.ErrInvalid.
+type agentBundleFields struct {
+	Tools          []string `json:"tools"`
+	Skills         []string `json:"skills"`
+	Knowledge      []string `json:"knowledge"`
+	StarterPrompts []string `json:"starterPrompts"`
 }
 
 func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
@@ -69,16 +83,21 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 		Description  string `json:"description"`
 		SystemPrompt string `json:"systemPrompt"`
 		Icon         string `json:"icon"`
+		agentBundleFields
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	ag, err := s.Store.CreateAgent(&store.Agent{
-		Name:         req.Name,
-		Description:  req.Description,
-		Icon:         req.Icon,
-		SystemPrompt: req.SystemPrompt,
+		Name:           req.Name,
+		Description:    req.Description,
+		Icon:           req.Icon,
+		SystemPrompt:   req.SystemPrompt,
+		Tools:          req.Tools,
+		Skills:         req.Skills,
+		Knowledge:      req.Knowledge,
+		StarterPrompts: req.StarterPrompts,
 	}, userID, "")
 	if err != nil {
 		agentErrorResponse(w, err, "Failed to create agent")
@@ -86,7 +105,7 @@ func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	auditLog(r, "agent.create", ag.ID, "owner", userID)
 	ag.Source = store.AgentSourceUserCustom
-	jsonResponse(w, ag, http.StatusCreated)
+	jsonResponse(w, s.agentResponse(ag, userID), http.StatusCreated)
 }
 
 func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
@@ -113,6 +132,12 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		Description  string `json:"description"`
 		SystemPrompt string `json:"systemPrompt"`
 		Icon         string `json:"icon"`
+		// Bundle fields are pointers so an omitted field keeps the stored
+		// value while an explicit list (even empty) replaces it.
+		Tools          *[]string `json:"tools"`
+		Skills         *[]string `json:"skills"`
+		Knowledge      *[]string `json:"knowledge"`
+		StarterPrompts *[]string `json:"starterPrompts"`
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
@@ -133,6 +158,18 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		if req.SystemPrompt != "" {
 			next.SystemPrompt = req.SystemPrompt
 		}
+		if req.Tools != nil {
+			next.Tools = *req.Tools
+		}
+		if req.Skills != nil {
+			next.Skills = *req.Skills
+		}
+		if req.Knowledge != nil {
+			next.Knowledge = *req.Knowledge
+		}
+		if req.StarterPrompts != nil {
+			next.StarterPrompts = *req.StarterPrompts
+		}
 		return &next, nil
 	})
 	if err != nil {
@@ -146,7 +183,7 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		updated.Source = store.AgentSourceUserCustom
 	}
 	auditLog(r, "agent.update", id, "owner", view.OwnerID)
-	jsonResponse(w, updated, http.StatusOK)
+	jsonResponse(w, s.agentResponse(updated, userID), http.StatusOK)
 }
 
 func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
@@ -160,8 +197,8 @@ func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := &store.AgentRecordView{
-		ID:       record.Id,
-		OwnerID:  record.GetString("owner"),
+		ID:        record.Id,
+		OwnerID:   record.GetString("owner"),
 		BuiltinID: record.GetString("builtin_id"),
 	}
 	if !canManageAgent(view, userID, isAdmin) {
@@ -203,16 +240,21 @@ func (s *Server) handleAdminCreateAgent(w http.ResponseWriter, r *http.Request) 
 		SystemPrompt string `json:"systemPrompt"`
 		Icon         string `json:"icon"`
 		BuiltinID    string `json:"builtinId"`
+		agentBundleFields
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	ag, err := s.Store.CreateAgent(&store.Agent{
-		Name:         req.Name,
-		Description:  req.Description,
-		Icon:         req.Icon,
-		SystemPrompt: req.SystemPrompt,
+		Name:           req.Name,
+		Description:    req.Description,
+		Icon:           req.Icon,
+		SystemPrompt:   req.SystemPrompt,
+		Tools:          req.Tools,
+		Skills:         req.Skills,
+		Knowledge:      req.Knowledge,
+		StarterPrompts: req.StarterPrompts,
 	}, "", req.BuiltinID)
 	if err != nil {
 		agentErrorResponse(w, err, "Failed to create agent")
@@ -226,7 +268,8 @@ func (s *Server) handleAdminCreateAgent(w http.ResponseWriter, r *http.Request) 
 		ag.Source = store.AgentSourceGlobalCustom
 	}
 	auditLog(r, "agent.create_global", ag.ID, "builtinId", req.BuiltinID)
-	jsonResponse(w, ag, http.StatusCreated)
+	adminID, _ := userIDFromContext(r)
+	jsonResponse(w, s.agentResponse(ag, adminID), http.StatusCreated)
 }
 
 func (s *Server) handleAdminUpdateAgent(w http.ResponseWriter, r *http.Request) {

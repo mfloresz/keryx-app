@@ -1,209 +1,78 @@
-# Keryx — AI Chat Application
+# Keryx Frontend
 
-A fully client-side AI chat application built with Vue 3, TypeScript, Vite, and Tailwind CSS v4. All data is persisted locally in the browser using the Origin Private File System (OPFS) through a dedicated Web Worker. No backend server required.
+React 19 + Vite + TanStack Router frontend for Keryx, built on shadcn/ui
+(Base UI) and the shadcn AI Elements patterns.
 
-> **Status:** Active development. Originally forked from `ai-elements-vue-starter`, now significantly evolved with custom architecture, OPFS worker, branch tracking, encrypted storage, Tavily web search integration, and dual AI provider support (Vercel AI Gateway + OpenCode GO).
+The Go backend in the repository root serves this app as a static SPA and
+owns the API. The frontend talks to it over the same origin, so the session
+cookie stays first-party.
 
-## Quick Start
+## Stack
+
+| Piece | Choice | Why |
+|---|---|---|
+| Framework | React 19 (React Compiler) | No manual memoization |
+| Build | Vite 8 | Static SPA → `dist/`, embedded by the Go binary |
+| Routing | TanStack Router (file-based) | Typed routes, loaders, search params |
+| Server state | TanStack Query | Available for the non-chat pages |
+| UI | shadcn/ui, `base-nova` style, Base UI primitives | Components live in this repo |
+| AI UI | shadcn AI Elements patterns | `Trace` unifies Reasoning/Tool/Plan |
+| Chat runtime | `ai` v7 + `@ai-sdk/react` v4 | `useChat` + a custom `ChatTransport` |
+| Styling | Tailwind v4 (CSS-first) | Design tokens in `src/styles.css` |
+| Lint | oxlint + oxfmt | Fast, type-aware |
+
+## Commands
 
 ```bash
-# Install dependencies
-bun install
-
-# Start dev server (http://localhost:5173)
-bun dev
-
-# Typecheck + production build
-bun build
-
-# Preview production build
-bun preview
-
-# Run tests
-bun test        # once
-bun test:watch  # watch mode
+npm install
+npm run dev        # Vite dev server on :5173, proxies /api to :5176
+npm run build      # typecheck + production build to dist/
+npm run preview    # serve the production build
+npm run test       # vitest
+npm run typecheck  # tsc --noEmit
+npm run lint       # oxlint
+npm run format     # oxfmt
 ```
 
 ## Architecture
 
 ```
-User Input → ChatInput → AI SDK Chat → fetch intercept → clientApi.ts
-                                                             │
-                    ┌────────────────────────────────────────┤
-                    ▼                                        ▼
-          ┌──────────────────┐                     ┌────────────────────┐
-          │  OPFS Worker     │                     │  Vercel AI Gateway │
-          │  (opfs.worker.ts)│                     │  /api/ai-gateway/* │
-          │  opfsWorkerClient│                     └────────────────────┘
-          │  chats/ + atts/  │                     ┌────────────────────┐
-          └──────────────────┘                     │  OpenCode GO       │
-                                                   │  /api/opencode/*   │
-                                                   └────────────────────┘
-```
-
-### Key Design Decisions
-
-- **Fully client-side** — No backend, no database, no auth. Everything runs in the browser.
-- **OPFS Worker** — OPFS I/O runs in a dedicated Web Worker (`src/workers/opfs.worker.ts`) to avoid blocking the main thread. Communication happens via `opfsWorkerClient.ts` using a structured message protocol (`opfs-protocol.ts`).
-- **Dual AI Provider** — Settings let users choose between **Vercel AI Gateway** and **OpenCode GO**, each with its own API key field and model list. Requests are routed through the appropriate Vite dev proxy.
-- **AI SDK v6** — Uses `@ai-sdk/vue` `Chat` class for streaming, with `@ai-sdk/openai-compatible` for OpenCode GO compatibility.
-- **Branch tracking** — Edits and regenerations create snapshots; users can navigate between branches per message.
-- **AES-GCM encryption** — API keys encrypted via Web Crypto before storage in localStorage (`secureStorage.ts`).
-- **shadcn-vue (New York)** — UI component library, configured in `components.json`.
-
-## Tech Stack
-
-| Category | Technology |
-|----------|------------|
-| **Framework** | Vue 3 + TypeScript (strict mode) |
-| **Build** | Vite 7 + vue-tsc 3 |
-| **Styling** | Tailwind CSS v4 (`@tailwindcss/vite` plugin) |
-| **State** | Pinia |
-| **Routing** | Vue Router 4 (web history) |
-| **AI** | AI SDK v6 (`@ai-sdk/vue`, `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/gateway`, `@ai-sdk/openai-compatible`) |
-| **AI Gateway** | Vercel AI Gateway + OpenCode GO (dev proxies in `vite.config.ts`) |
-| **UI Library** | shadcn-vue (New York style) |
-| **AI UI** | AI Elements Vue (source components under `src/components/ai-elements/`) |
-| **Icons** | lucide-vue-next |
-| **i18n** | vue-i18n (en/es) |
-| **Persistence** | OPFS (Origin Private File System) via Web Worker |
-| **Encryption** | Web Crypto API (AES-256-GCM) |
-| **Diagrams (future)** | vue-flow/\* |
-| **Testing** | Vitest + jsdom |
-| **Container** | Docker (nginx, port 3000) |
-
-## Project Structure
-
-```
 src/
-├── main.ts                         # App bootstrap + fetch interception
-├── App.vue                         # Root layout (Suspense + toast, useAppFont)
-├── style.css                       # Tailwind v4 + CSS custom properties
-├── router/index.ts                 # Routes: / and /chat/:id
-├── pages/
-│   ├── index.vue                   # New chat (welcome + input)
-│   └── chat/[id].vue               # Existing chat (streaming, editing, voting)
-├── components/
-│   ├── ai-elements/                # ~35 AI Elements component categories
-│   ├── chat/                       # ChatInput, ChatMessages, ChatMessageItem
-│   ├── layout/                     # AppLayout, AppSidebar
-│   ├── settings/                   # SettingsModal (General, Search, Privacy)
-│   └── ui/                         # shadcn-vue components (~25 categories)
-├── composables/
-│   ├── useTheme.ts                 # Light/dark/system theme toggle
-│   ├── useLanguage.ts              # i18n locale (en/es)
-│   ├── useModels.ts                # Selected AI model (localStorage)
-│   ├── useAppFont.ts               # App font family/size (6 fonts, CSS custom props)
-│   ├── useSearchSettings.ts        # Web search engine + Tavily config
-│   └── useToast.ts                 # Global toast notifications
-├── stores/
-│   └── chat.ts                     # Pinia store: chat list + date grouping
-├── workers/
-│   ├── opfs.worker.ts              # OPFS Web Worker (I/O off the main thread)
-│   └── opfs-protocol.ts            # Structured message protocol for worker comms
-├── utils/
-│   ├── clientApi.ts                # API handler + AI streaming orchestration
-│   ├── opfs.ts                     # OPFS CRUD operations (legacy direct access)
-│   ├── opfsWorkerClient.ts         # Client-side proxy to the OPFS Worker
-│   ├── secureStorage.ts            # AES-GCM encrypted localStorage
-│   ├── chatAttachments.ts          # Attachment persistence helper
-│   └── tavilyTools.ts              # Tavily search/extract AI tools
-├── shared/utils/
-│   └── models.ts                   # AI model definitions
-├── lib/utils.ts                    # cn() utility (clsx + tailwind-merge)
-├── locales/
-│   ├── en.json                     # English translations
-│   └── es.json                     # Spanish translations
-├── test/
-│   ├── setup.ts                    # Test environment (OPFS mock, localStorage)
-│   └── mock-opfs.ts                # In-memory OPFS mock
-└── assets/                         # Static assets
+  adapters/api/   HTTP adapters for the backend (auth, chats, models, attachments)
+  app/            Root component and providers
+  components/
+    chat/         Chat page pieces: prompt input, message item, markdown
+    layout/       App shell, sidebar, command palette, user menu
+    ui/           shadcn/ui primitives (vendored from the registry)
+  composables/    Theme provider
+  domain/         Types and ports (the backend contract, framework-free)
+  i18n/           Locale provider and messages (en, es)
+  routes/         File-based routes
+  services/       KeryxChatTransport and other backend glue
+  stores/         React context providers (auth, chat, agents, projects)
+  utils/          Shared helpers
 ```
 
-## Key Features
+### The chat transport
 
-- **AI Chat** — Stream responses from multiple AI models (GPT, Gemini, DeepSeek, Mimo, Qwen) via Vercel AI Gateway or OpenCode GO
-- **Provider Selection** — Choose between Vercel AI Gateway and OpenCode GO, each with its own API key and model list
-- **Model Selection** — Pick from 7 models in the input area
-- **File Attachments** — Upload images, documents, and code files (max 3 per message)
-- **Web Search** — Toggle web search per message; supports native (GPT models) and Tavily (all models)
-- **Message Editing** — Edit user messages to regenerate AI responses
-- **Branch History** — Navigate between snapshots of regenerations per message
-- **Voting** — Upvote/downvote assistant responses
-- **Chat Organization** — Sidebar with date-grouped chat history (Today, Yesterday, Last 7 Days, Last 30 Days, older months)
-- **Search** — Ctrl+K command palette to search and jump to chats
-- **Dark Mode** — Theme toggle (light/dark/system)
-- **Internationalization** — English and Spanish
-- **Font Customization** — 6 fonts with size options (spectral — default, open-sans, montserrat, merriweather, geist, sn-pro)
-- **Encrypted Storage** — API keys encrypted with AES-256-GCM via Web Crypto
-- **Fully Offline** — All data stored locally in the browser
+The backend speaks a custom SSE dialect (`type: start / reasoning / text /
+tool_call / tool_result / finish / error`). `src/services/keryxChatTransport.ts`
+adapts it to the AI SDK's `UIMessageChunk` stream, which `useChat` consumes.
+The interface is unchanged, so the transport is the only place that knows
+about the wire format.
 
-## AI Models
+Its contract is pinned by `src/services/keryxChatTransport.test.ts` — if the
+backend's event names change, those tests fail first.
 
-| Model | Provider ID | Images | Search |
-|-------|-------------|--------|--------|
-| GPT-5.4 Nano | `openai/gpt-5.4-nano` | ✅ | ✅ |
-| Gemini 3 Flash | `google/gemini-3-flash` | ✅ | ❌ |
-| GPT-5 Nano | `openai/gpt-5-nano` | ✅ | ✅ |
-| DeepSeek V4 Flash | `deepseek/deepseek-v4-flash` | ❌ | ❌ |
-| Mimo V2.5 | `opencode/mimo-v2.5` | ✅ | ❌ |
-| Qwen 3.5 Plus | `opencode/qwen3.5-plus` | ✅ | ❌ |
-| DeepSeek V4 Flash | `opencode/deepseek-v4-flash` | ❌ | ❌ |
+### Adding a shadcn component
 
-## Development
-
-### Dev Server Proxy
-
-In `vite.config.ts`, two proxies are configured:
-
-| Proxy path | Target |
-|---|---|
-| `/api/ai-gateway` | `https://ai-gateway.vercel.sh` |
-| `/api/opencode` | `https://opencode.ai/zen` |
-
-Both use `changeOrigin: true`. Only works in dev.
-
-### Docker
+The registry CLI is not a dependency (it pulls an advisory with no upstream
+fix). Run it on demand:
 
 ```bash
-docker compose up
+npx shadcn@latest add <component>
 ```
 
-Serves production build on port 3000 via nginx. See `Dockerfile` and `default.conf`.
-
-### Cross-Origin Isolation
-
-The app requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` for OPFS SharedArrayBuffer support. A `coi-serviceworker.js` is loaded from `index.html`. The same headers are set in:
-
-- `vercel.json` (for Vercel deployments)
-- `default.conf` (for Docker/nginx)
-
-A **Content Security Policy** is also defined in `index.html` via a `<meta>` tag to restrict resource loading and mitigate XSS risks.
-
-## Testing
-
-- **Runner:** Vitest with `jsdom` environment
-- **OPFS mock:** In-memory implementation in `src/test/mock-opfs.ts`
-- **Storage mocks:** `localStorage` and `navigator.storage` stubbed globally in `src/test/setup.ts`
-- **Key tests:**
-  - `opfs.test.ts` — Persistence layer (CRUD, attachments)
-  - `clientApi.test.ts` — API routing and message preparation
-  - `chat.test.ts` — Pinia store logic (grouping by date, mutations)
-  - `useAppFont.test.ts` — Font composable (family/size, CSS custom properties)
-  - `useSearchSettings.test.ts` — Search settings composable
-
-## Documentation
-
-- [Architecture Overview](docs/CODEMAPS/INDEX.md) — Complete codemap index
-- [Frontend Codemap](docs/CODEMAPS/frontend.md) — Component architecture
-- [Client API & Storage Codemap](docs/CODEMAPS/backend.md) — API interception, OPFS persistence
-- [AI Integration Codemap](docs/CODEMAPS/ai-integration.md) — AI SDK, models, tools
-- [Agent Rules](AGENTS.md) — Project conventions for AI agents
-
-## Planned Features
-
-- [Bible query system](docs/PLAN_MIGRACION_BIBLIA_SQLITE.md) — SQLite-based Bible study tools via `sql.js-httpvfs`
-
-## License
-
-Private project.
+Components are copied into `src/components/ui/`, so the app does not depend
+on the CLI at build time. The AI Elements patterns live in the shadcn docs
+under `docs/ai-elements/` and are adapted into `src/components/chat/`.

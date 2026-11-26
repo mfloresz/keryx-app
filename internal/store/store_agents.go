@@ -1,6 +1,9 @@
 package store
 
 import (
+	"encoding/json"
+	"strings"
+
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase/core"
 	"keryx-server/internal/config"
@@ -10,39 +13,154 @@ import (
 type AgentSource string
 
 const (
-	AgentSourceBuiltin     AgentSource = "builtin"
-	AgentSourceOverride    AgentSource = "override"
+	AgentSourceBuiltin      AgentSource = "builtin"
+	AgentSourceOverride     AgentSource = "override"
 	AgentSourceGlobalCustom AgentSource = "global_custom"
-	AgentSourceUserCustom  AgentSource = "user_custom"
+	AgentSourceUserCustom   AgentSource = "user_custom"
 )
 
 // Agent is an effective agent (merged view of catalog + DB).
 type Agent struct {
-	ID           string      `json:"id"`
-	BuiltinID    string      `json:"builtinId,omitempty"`
-	OwnerID      string      `json:"ownerId,omitempty"`
-	Name         string      `json:"name"`
-	Description  string      `json:"description,omitempty"`
-	Icon         string      `json:"icon,omitempty"`
-	SystemPrompt string      `json:"systemPrompt"`
-	Source       AgentSource `json:"source"`
-	CreatedAt    string      `json:"createdAt,omitempty"`
-	UpdatedAt    string      `json:"updatedAt,omitempty"`
+	ID             string      `json:"id"`
+	BuiltinID      string      `json:"builtinId,omitempty"`
+	OwnerID        string      `json:"ownerId,omitempty"`
+	Name           string      `json:"name"`
+	Description    string      `json:"description,omitempty"`
+	Icon           string      `json:"icon,omitempty"`
+	SystemPrompt   string      `json:"systemPrompt"`
+	Source         AgentSource `json:"source"`
+	Tools          []string    `json:"tools,omitempty"`     // subset of {"web_search","update_artifact"}
+	Skills         []string    `json:"skills,omitempty"`    // skill names whose instructions are preloaded
+	Knowledge      []string    `json:"knowledge,omitempty"` // attachment ids (owner-scoped)
+	StarterPrompts []string    `json:"starterPrompts,omitempty"`
+	CreatedAt      string      `json:"createdAt,omitempty"`
+	UpdatedAt      string      `json:"updatedAt,omitempty"`
 }
 
 const maxAgentsPerUser = 50
 
+// Agent tool names allowed in Agent.Tools.
+const (
+	AgentToolWebSearch      = "web_search"
+	AgentToolUpdateArtifact = "update_artifact"
+)
+
+// Bundle limits enforced on every agent create/update.
+const (
+	maxAgentTools      = 2
+	maxAgentSkills     = 10
+	maxAgentSkillLen   = 100
+	maxAgentKnowledge  = 20
+	maxAgentStarters   = 4
+	maxAgentStarterLen = 200
+)
+
+var agentAllowedTools = map[string]bool{
+	AgentToolWebSearch:      true,
+	AgentToolUpdateArtifact: true,
+}
+
+// validateAgentBundles validates the JSON bundle fields in place (dedup, trim
+// starter prompts) and returns ErrInvalid on any violation.
+func validateAgentBundles(ag *Agent) error {
+	ag.Tools = dedupStrings(ag.Tools)
+	if len(ag.Tools) > maxAgentTools {
+		return ErrInvalid
+	}
+	for _, t := range ag.Tools {
+		if !agentAllowedTools[t] {
+			return ErrInvalid
+		}
+	}
+	ag.Skills = dedupStrings(ag.Skills)
+	if len(ag.Skills) > maxAgentSkills {
+		return ErrInvalid
+	}
+	for _, s := range ag.Skills {
+		if s == "" || len(s) > maxAgentSkillLen {
+			return ErrInvalid
+		}
+	}
+	if len(ag.Knowledge) > maxAgentKnowledge {
+		return ErrInvalid
+	}
+	starters := make([]string, 0, len(ag.StarterPrompts))
+	for _, sp := range ag.StarterPrompts {
+		sp = strings.TrimSpace(sp)
+		if sp == "" {
+			continue
+		}
+		if len(sp) > maxAgentStarterLen {
+			return ErrInvalid
+		}
+		starters = append(starters, sp)
+	}
+	if len(starters) > maxAgentStarters {
+		return ErrInvalid
+	}
+	ag.StarterPrompts = starters
+	return nil
+}
+
+// dedupStrings removes duplicates keeping first-occurrence order.
+func dedupStrings(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
+}
+
+// recordStringSlice decodes a JSON string-list column; absent/null columns
+// decode to nil (builtin catalog agents carry empty bundles).
+func recordStringSlice(r *core.Record, key string) []string {
+	raw := r.GetString(key)
+	if isEmptyJSONValue(raw) {
+		return nil
+	}
+	var out []string
+	if json.Unmarshal([]byte(raw), &out) != nil {
+		return nil
+	}
+	return out
+}
+
+// jsonFieldString encodes a string list for a JSON column; empty lists store
+// as "" (PocketBase normalizes to null).
+func jsonFieldString(v []string) string {
+	if len(v) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 func agentFromRecord(r *core.Record) *Agent {
 	return &Agent{
-		ID:           r.Id,
-		BuiltinID:    r.GetString("builtin_id"),
-		OwnerID:      r.GetString("owner"),
-		Name:         r.GetString("name"),
-		Description:  r.GetString("description"),
-		Icon:         r.GetString("icon"),
-		SystemPrompt: r.GetString("system_prompt"),
-		CreatedAt:    r.GetString("created"),
-		UpdatedAt:    r.GetString("updated"),
+		ID:             r.Id,
+		BuiltinID:      r.GetString("builtin_id"),
+		OwnerID:        r.GetString("owner"),
+		Name:           r.GetString("name"),
+		Description:    r.GetString("description"),
+		Icon:           r.GetString("icon"),
+		SystemPrompt:   r.GetString("system_prompt"),
+		Tools:          recordStringSlice(r, "tools"),
+		Skills:         recordStringSlice(r, "skills"),
+		Knowledge:      recordStringSlice(r, "knowledge"),
+		StarterPrompts: recordStringSlice(r, "starter_prompts"),
+		CreatedAt:      r.GetString("created"),
+		UpdatedAt:      r.GetString("updated"),
 	}
 }
 
@@ -179,6 +297,9 @@ func (s *Store) CreateAgent(ag *Agent, ownerID, builtinID string) (*Agent, error
 	if len(ag.Description) > 300 || len(ag.Icon) > 40 || len(builtinID) > 80 {
 		return nil, ErrInvalid
 	}
+	if err := validateAgentBundles(ag); err != nil {
+		return nil, err
+	}
 
 	if ownerID != "" {
 		count, err := s.App.CountRecords(AgentsCollection, dbx.NewExp("owner = {:o}", dbx.Params{"o": ownerID}))
@@ -203,6 +324,10 @@ func (s *Store) CreateAgent(ag *Agent, ownerID, builtinID string) (*Agent, error
 	record.Set("description", ag.Description)
 	record.Set("icon", ag.Icon)
 	record.Set("system_prompt", ag.SystemPrompt)
+	record.Set("tools", jsonFieldString(ag.Tools))
+	record.Set("skills", jsonFieldString(ag.Skills))
+	record.Set("knowledge", jsonFieldString(ag.Knowledge))
+	record.Set("starter_prompts", jsonFieldString(ag.StarterPrompts))
 	if err := s.App.Save(record); err != nil {
 		return nil, err
 	}
@@ -227,10 +352,17 @@ func (s *Store) UpdateAgent(id string, mutate func(*Agent) (*Agent, error)) (*Ag
 	if len(next.SystemPrompt) == 0 || len(next.SystemPrompt) > 10000 {
 		return nil, ErrInvalid
 	}
+	if err := validateAgentBundles(next); err != nil {
+		return nil, err
+	}
 	record.Set("name", next.Name)
 	record.Set("description", next.Description)
 	record.Set("icon", next.Icon)
 	record.Set("system_prompt", next.SystemPrompt)
+	record.Set("tools", jsonFieldString(next.Tools))
+	record.Set("skills", jsonFieldString(next.Skills))
+	record.Set("knowledge", jsonFieldString(next.Knowledge))
+	record.Set("starter_prompts", jsonFieldString(next.StarterPrompts))
 	if err := s.App.Save(record); err != nil {
 		return nil, err
 	}

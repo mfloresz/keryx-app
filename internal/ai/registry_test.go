@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"slices"
 	"testing"
 )
 
@@ -25,12 +24,13 @@ func TestResolveModel(t *testing.T) {
 		{name: "opencode-go reasoning variant keeps effort", modelID: "opencode-go/gpt-5.6-luna (reasoning: medium)", wantProvider: "opencode-go", wantUpstream: "gpt-5.6-luna (reasoning: medium)"},
 		{name: "lmstudio local model", modelID: "lmstudio/local-model", wantProvider: "lmstudio", wantUpstream: "local-model"},
 		{name: "google gemma model", modelID: "google/gemma-4-31b-it", wantProvider: "google", wantUpstream: "gemma-4-31b-it"},
-		{name: "openrouter nemotron model", modelID: "openrouter/nvidia/nemotron-3.5-lightning", wantProvider: "openrouter", wantUpstream: "nvidia/nemotron-3.5-lightning"},
-		{name: "openrouter glimmer image model", modelID: "openrouter/meta/muse-glimmer-30b", wantProvider: "openrouter", wantUpstream: "meta/muse-glimmer-30b"},
-		{name: "openrouter ministral model", modelID: "openrouter/mistralai/ministral-3b-2512", wantProvider: "openrouter", wantUpstream: "mistralai/ministral-3b-2512"},
-		{name: "openrouter mistral small model", modelID: "openrouter/mistralai/mistral-small-2603", wantProvider: "openrouter", wantUpstream: "mistralai/mistral-small-2603"},
-		{name: "openrouter glm flash model", modelID: "openrouter/z-ai/glm-5.3-flash", wantProvider: "openrouter", wantUpstream: "z-ai/glm-5.3-flash"},
+		{name: "openrouter hy4 flash model", modelID: "openrouter/tencent/hy4-flash", wantProvider: "openrouter", wantUpstream: "tencent/hy4-flash"},
+		{name: "openrouter muse spark model", modelID: "openrouter/meta/muse-spark-1.3-contributor", wantProvider: "openrouter", wantUpstream: "meta/muse-spark-1.3-contributor"},
+		{name: "openrouter claude haiku model", modelID: "openrouter/anthropic/claude-haiku-5.5", wantProvider: "openrouter", wantUpstream: "anthropic/claude-haiku-5.5"},
+		{name: "openrouter muse ember model", modelID: "openrouter/meta/muse-ember", wantProvider: "openrouter", wantUpstream: "meta/muse-ember"},
+		{name: "openrouter inkling mini model", modelID: "openrouter/thinkingmachines/inkling-2-mini", wantProvider: "openrouter", wantUpstream: "thinkingmachines/inkling-2-mini"},
 		{name: "openrouter reasoning variant keeps effort", modelID: "openrouter/openai/gpt-6-luna (reasoning: medium)", wantProvider: "openrouter", wantUpstream: "openai/gpt-6-luna (reasoning: medium)"},
+		{name: "liquid lfm3 model", modelID: "liquid/lfm3-1.7b", wantProvider: "liquid", wantUpstream: "lfm3-1.7b"},
 		{name: "unknown prefix errors", modelID: "unknown/model-x", wantErr: true},
 		{name: "unprefixed errors (no gateway)", modelID: "gpt-5.4-nano", wantErr: true},
 		{name: "empty model errors", modelID: " ", wantErr: true},
@@ -73,8 +73,8 @@ func TestProviderByID(t *testing.T) {
 
 func TestModelCatalogCoversSeeds(t *testing.T) {
 	catalog := ModelCatalog()
-	if len(catalog) != 45 {
-		t.Fatalf("catalog len = %d, want 45", len(catalog))
+	if len(catalog) != 42 {
+		t.Fatalf("catalog len = %d, want 42", len(catalog))
 	}
 	for _, m := range catalog {
 		if info, ok := ProviderByID(m.Provider); !ok {
@@ -142,25 +142,29 @@ func TestOpenRouterCatalogMetadata(t *testing.T) {
 		byID[m.ID] = m
 	}
 
-	if m := byID["openrouter/meta/muse-glimmer-30b"]; !m.SupportsImages {
-		t.Error("meta/muse-glimmer-30b should support images")
+	if m := byID["openrouter/tencent/hy4-flash"]; !m.SupportsImages {
+		t.Error("tencent/hy4-flash should support images")
 	}
-	if m := byID["openrouter/mistralai/ministral-3b-2512"]; !m.SupportsImages {
-		t.Error("mistralai/ministral-3b-2512 should support images")
+	if m := byID["openrouter/meta/muse-spark-1.3-contributor"]; !m.SupportsImages {
+		t.Error("meta/muse-spark-1.3-contributor should support images")
 	}
-	if m := byID["openrouter/mistralai/mistral-small-2603"]; !m.SupportsImages {
-		t.Error("mistralai/mistral-small-2603 should support images")
+	if m := byID["openrouter/anthropic/claude-haiku-5.5"]; !m.SupportsImages {
+		t.Error("anthropic/claude-haiku-5.5 should support images")
 	}
-	if m := byID["openrouter/z-ai/glm-5.3-flash"]; !m.SupportsImages {
-		t.Error("z-ai/glm-5.3-flash should support images")
+	if m := byID["openrouter/meta/muse-ember"]; !m.SupportsImages {
+		t.Error("meta/muse-ember should support images")
 	}
-	for _, id := range []string{
-		"openrouter/nvidia/nemotron-3.5-lightning",
-		"openrouter/inclusionai/ling-3.0-flash",
-	} {
-		if m := byID[id]; m.SupportsImages {
-			t.Errorf("%s should not support images", id)
-		}
+	if m := byID["openrouter/thinkingmachines/inkling-2-mini"]; !m.SupportsImages {
+		t.Error("thinkingmachines/inkling-2-mini should support images")
+	}
+	if m := byID["openrouter/tencent/hy4-flash"]; m.MaxContext != 512000 {
+		t.Errorf("tencent/hy4-flash MaxContext = %d, want 512000", m.MaxContext)
+	}
+	if m := byID["openrouter/meta/muse-spark-1.3-contributor"]; m.MaxContext != 750000 {
+		t.Errorf("meta/muse-spark-1.3-contributor MaxContext = %d, want 750000", m.MaxContext)
+	}
+	if m := byID["openrouter/openai/gpt-6-luna (reasoning: medium)"]; m.MaxContext != 262000 {
+		t.Errorf("gpt-6-luna MaxContext = %d, want 262000", m.MaxContext)
 	}
 	for _, id := range []string{
 		"openrouter/openai/gpt-6-luna (reasoning: none)",
@@ -182,10 +186,8 @@ func TestOpenCodeGoCatalogMetadata(t *testing.T) {
 		byID[m.ID] = m
 	}
 
-	if info, ok := ProviderByID("opencode-go"); !ok {
+	if _, ok := ProviderByID("opencode-go"); !ok {
 		t.Error("missing opencode-go provider")
-	} else if !slices.Contains(info.ResponsesAPIModels, "gpt-5.6-luna") {
-		t.Errorf("opencode-go should route gpt-5.6-luna over the Responses API, got %v", info.ResponsesAPIModels)
 	}
 
 	if m := byID["opencode-go/minimax-m3"]; !m.SupportsImages {
@@ -204,5 +206,38 @@ func TestOpenCodeGoCatalogMetadata(t *testing.T) {
 		} else if !m.SupportsImages {
 			t.Errorf("%s should support images", id)
 		}
+	}
+}
+
+func TestLiquidCatalogMetadata(t *testing.T) {
+	info, ok := ProviderByID("liquid")
+	if !ok {
+		t.Fatal("missing liquid provider")
+	}
+	if info.BaseURL != "https://api.liquid.ai/openai/v1" {
+		t.Errorf("BaseURL = %q", info.BaseURL)
+	}
+	if !info.OpenAICompat {
+		t.Error("liquid should be OpenAI compatible")
+	}
+	if info.DefaultModel != "lfm3-1.7b" {
+		t.Errorf("DefaultModel = %q, want lfm3-1.7b", info.DefaultModel)
+	}
+
+	catalog := ModelCatalog()
+	byID := make(map[string]ModelInfo, len(catalog))
+	for _, m := range catalog {
+		byID[m.ID] = m
+	}
+
+	m, ok := byID["liquid/lfm3-1.7b"]
+	if !ok {
+		t.Fatal("missing liquid/lfm3-1.7b")
+	}
+	if m.SupportsImages {
+		t.Error("liquid/lfm3-1.7b should not support images")
+	}
+	if m.MaxContext != 256000 {
+		t.Errorf("liquid/lfm3-1.7b MaxContext = %d, want 256000", m.MaxContext)
 	}
 }

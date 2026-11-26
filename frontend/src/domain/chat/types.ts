@@ -1,8 +1,10 @@
+import type { LanguageModelUsage } from "ai";
+
 export interface ChatBranchSnapshot {
   id: string;
   label: string;
   createdAt: string;
-  messages: any[];
+  messages: unknown[];
 }
 
 export interface ChatBranchState {
@@ -12,18 +14,17 @@ export interface ChatBranchState {
   snapshots: ChatBranchSnapshot[];
 }
 
-import type { LanguageModelUsage } from "ai";
-
 export interface ChatRecord {
   id: string;
   title: string | null;
   visibility: "public" | "private";
   createdAt: string;
-  messages: any[];
-  votes: any[];
+  messages: unknown[];
+  votes: unknown[];
   webSearch?: boolean;
   agentId?: string | null;
   preset?: string | null;
+  projectId?: string | null;
   lastUsage?: LanguageModelUsage;
   branches?: Record<string, ChatBranchState>;
 }
@@ -31,6 +32,15 @@ export interface ChatRecord {
 export interface ChatIndexEntry {
   id: string;
   title: string | null;
+  visibility: "public" | "private";
+  createdAt: string;
+}
+
+/** Read-only view of a shared chat, served to unauthenticated visitors. */
+export interface PublicChatRecord {
+  id: string;
+  title: string;
+  messages: unknown[];
   createdAt: string;
 }
 

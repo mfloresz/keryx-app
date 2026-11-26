@@ -25,6 +25,10 @@ func (s *Store) ensureAgentsCollection(users *core.Collection) (*core.Collection
 	c.Fields.Add(&core.TextField{Name: "description", Max: 300})
 	c.Fields.Add(&core.TextField{Name: "system_prompt", Required: true, Max: 10000})
 	c.Fields.Add(&core.TextField{Name: "icon", Max: 40})
+	c.Fields.Add(&core.JSONField{Name: "tools"})
+	c.Fields.Add(&core.JSONField{Name: "skills"})
+	c.Fields.Add(&core.JSONField{Name: "knowledge"})
+	c.Fields.Add(&core.JSONField{Name: "starter_prompts"})
 	addSystemDateFields(c)
 
 	// One override per builtin per owner; unique name per owner. SQLite partial
@@ -47,4 +51,21 @@ func (s *Store) migrateChatsCollectionForAgents(c *core.Collection) error {
 		return err
 	}
 	return s.ensureField(c, &core.TextField{Name: "preset", Max: 30})
+}
+
+// migrateAgentsCollectionForBundles adds the JSON bundle columns (tools,
+// skills, knowledge, starter_prompts) to an existing agents collection.
+// No-op when they already exist (fresh installs get them at creation).
+func (s *Store) migrateAgentsCollectionForBundles(c *core.Collection) error {
+	for _, f := range []core.Field{
+		&core.JSONField{Name: "tools"},
+		&core.JSONField{Name: "skills"},
+		&core.JSONField{Name: "knowledge"},
+		&core.JSONField{Name: "starter_prompts"},
+	} {
+		if err := s.ensureField(c, f); err != nil {
+			return err
+		}
+	}
+	return nil
 }

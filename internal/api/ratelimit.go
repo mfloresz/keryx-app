@@ -10,9 +10,9 @@ import (
 
 // bucket is a simple token-bucket rate limiter state for a single key.
 type bucket struct {
-	tokens    float64
-	last      time.Time
-	seenLast  time.Time
+	tokens   float64
+	last     time.Time
+	seenLast time.Time
 }
 
 // rateLimiter implements a per-key token bucket. It has no external

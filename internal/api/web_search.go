@@ -119,11 +119,45 @@ func (s *Server) handleWebSearchConfig(w http.ResponseWriter, r *http.Request) {
 	}, http.StatusOK)
 }
 
+// execWebSearchTool runs one web_search tool call with graceful degradation:
+// a Brave failure is handed to the model as tool output instead of failing
+// the whole stream (which would also kill title generation after the error).
+//
+// The citations are reported through onSource so the client can render a
+// source list next to the answer.
+func execWebSearchTool(braveAPIKey, chatID, userID string, rawInput json.RawMessage, onSource func(title, url string)) (string, error) {
+	var params struct {
+		Query string `json:"query"`
+	}
+	if err := json.Unmarshal(rawInput, &params); err != nil {
+		return "", fmt.Errorf("invalid web_search params: %w", err)
+	}
+	result, err := callBraveSearch(braveAPIKey, params.Query, 10)
+	if err != nil {
+		slog.Warn("Brave search tool call failed", "error", err, "chat", chatID, "user", userID)
+		return "Web search is temporarily unavailable. Continue answering from your own knowledge and mention that the live search failed.", nil
+	}
+	if onSource != nil {
+		for _, c := range result.Citations {
+			onSource(c.Title, c.URL)
+		}
+	}
+	return result.Results, nil
+}
+
 // ---- Brave Search Integration ----
+
+// searchCitation is a single web result, reported to the client so it can
+// render a clickable source list.
+type searchCitation struct {
+	Title string
+	URL   string
+}
 
 // braveSearchResult holds the formatted search results from Brave.
 type braveSearchResult struct {
-	Results string // Formatted text with search results
+	Results   string // Formatted text with search results
+	Citations []searchCitation
 }
 
 // callBraveSearch performs a Brave Web Search API call with the given query.
@@ -167,6 +201,16 @@ func callBraveSearch(apiKey, query string, count int) (*braveSearchResult, error
 		return nil, fmt.Errorf("read brave response: %w", err)
 	}
 
+	result, err := parseBraveResponse(body)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// parseBraveResponse turns a raw Brave payload into the formatted text the
+// model receives and the citations the client renders as a source list.
+func parseBraveResponse(body []byte) (*braveSearchResult, error) {
 	var braveResp struct {
 		Query struct {
 			Original string `json:"original"`
@@ -196,6 +240,8 @@ func callBraveSearch(apiKey, query string, count int) (*braveSearchResult, error
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Web search results for query: %s\n\n", braveResp.Query.Original))
 
+	var citations []searchCitation
+
 	if braveResp.Web != nil && len(braveResp.Web.Results) > 0 {
 		sb.WriteString("=== Web Results ===\n")
 		for i, r := range braveResp.Web.Results {
@@ -203,6 +249,7 @@ func callBraveSearch(apiKey, query string, count int) (*braveSearchResult, error
 			sb.WriteString(fmt.Sprintf("   URL: %s\n", r.URL))
 			sb.WriteString(fmt.Sprintf("   Snippet: %s\n", r.Snippet))
 			sb.WriteString("\n")
+			citations = append(citations, searchCitation{Title: r.Title, URL: r.URL})
 		}
 	}
 
@@ -215,10 +262,11 @@ func callBraveSearch(apiKey, query string, count int) (*braveSearchResult, error
 			sb.WriteString(fmt.Sprintf("   URL: %s\n", r.URL))
 			sb.WriteString(fmt.Sprintf("   Snippet: %s\n", r.Snippet))
 			sb.WriteString("\n")
+			citations = append(citations, searchCitation{Title: r.Title, URL: r.URL})
 		}
 	}
 
-	return &braveSearchResult{Results: sb.String()}, nil
+	return &braveSearchResult{Results: sb.String(), Citations: citations}, nil
 }
 
 // searchPrompt returns a system prompt section instructing the model

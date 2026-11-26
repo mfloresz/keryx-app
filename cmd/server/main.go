@@ -49,6 +49,7 @@ func main() {
 
 	server := api.New(st, cfg)
 	handler := server.Handler()
+	server.StartScheduler()
 
 	slog.Info("keryx-server listening", "addr", cfg.Addr, "dataDir", cfg.DataDir)
 	slog.Warn("serving plain HTTP; terminate TLS at a reverse proxy (Caddy, nginx, cloud LB) before exposing this server", "addr", cfg.Addr)

@@ -33,7 +33,7 @@ compress:
 
 dev:
 	@echo "Run in two terminals:"
-	@echo "  1) cd frontend && npm run dev:cloud"
+	@echo "  1) cd frontend && npm run dev"
 	@echo "  2) go run ./cmd/server --addr :5176 --static-dir ./frontend/dist"
 
 run:

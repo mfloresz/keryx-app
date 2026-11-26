@@ -9,18 +9,16 @@ import (
 // This is the single source of truth for provider and model metadata;
 // the database model catalog is seeded from this list.
 type ProviderInfo struct {
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	BaseURL      string         `json:"baseUrl"`
-	Models       []ModelInfo    `json:"models"`
-	DefaultModel string         `json:"defaultModel"`
-	OpenAICompat bool           `json:"openaiCompat"`
-	GoAIOptions  map[string]any `json:"goaiOptions,omitempty"`
-	// ResponsesAPIModels lists base upstream model IDs (reasoning-suffix
-	// stripped) that must use the OpenAI Responses API instead of Chat
-	// Completions. Some gateways (e.g. opencode-go) only stream these models
-	// in real time over /responses.
-	ResponsesAPIModels []string `json:"responsesApiModels,omitempty"`
+	ID           string      `json:"id"`
+	Name         string      `json:"name"`
+	BaseURL      string      `json:"baseUrl"`
+	Models       []ModelInfo `json:"models"`
+	DefaultModel string      `json:"defaultModel"`
+	OpenAICompat bool        `json:"openaiCompat"`
+	// Options are static wire extras forwarded with every request to this
+	// provider (e.g. venice_parameters). Behavior toggles from the previous
+	// engine (useResponsesAPI, strictJsonSchema) no longer apply.
+	Options map[string]any `json:"options,omitempty"`
 }
 
 // ModelInfo describes a single model exposed by a provider.
@@ -45,9 +43,7 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://api.venice.ai/api/v1",
 		OpenAICompat: true,
 		DefaultModel: "e2ee-deepseek-v4-flash",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": true,
+		Options: map[string]any{
 			"venice_parameters": map[string]any{
 				"include_venice_system_prompt": false,
 			},
@@ -75,13 +71,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://opencode.ai/zen/go/v1",
 		OpenAICompat: true,
 		DefaultModel: "mimo-v2.5",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": true,
-		},
-		// Luna only streams in real time over the Responses API on this
-		// gateway; Chat Completions buffers the full response.
-		ResponsesAPIModels: []string{"gpt-5.6-luna"},
 		Models: []ModelInfo{
 			{ID: "opencode-go/mimo-v2.5", UpstreamID: "mimo-v2.5", Provider: "opencode-go", DisplayName: "Mimo V2.5", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "opencode-go/deepseek-v4-flash", UpstreamID: "deepseek-v4-flash", Provider: "opencode-go", DisplayName: "DeepSeek V4 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
@@ -98,10 +87,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "http://localhost:1234/v1",
 		OpenAICompat: true,
 		DefaultModel: "local-model",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": false,
-		},
 		Models: []ModelInfo{
 			{ID: "lmstudio/local-model", UpstreamID: "local-model", Provider: "lmstudio", DisplayName: "Local Model", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 		},
@@ -112,9 +97,6 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://llm.chutes.ai/v1",
 		OpenAICompat: true,
 		DefaultModel: "google/gemma-4-31B-turbo-TEE",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-		},
 		Models: []ModelInfo{
 			{ID: "chutes/gemma-4-31B-turbo-TEE", UpstreamID: "google/gemma-4-31B-turbo-TEE", Provider: "chutes", DisplayName: "Google Gemma 4 31B Turbo", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "chutes/nemotron-3-nano-omni-30B-TEE", UpstreamID: "Nemotron-3-Nano-Omni-30B-TEE", Provider: "chutes", DisplayName: "Nemotron 3 Nano Omni 30B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
@@ -128,26 +110,18 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://openrouter.ai/api/v1",
 		OpenAICompat: true,
 		DefaultModel: "openrouter/openai/gpt-6-luna (reasoning: medium)",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI":  false,
-			"strictJsonSchema": true,
-		},
 		Models: []ModelInfo{
-			{ID: "openrouter/nvidia/nemotron-3.5-lightning", UpstreamID: "nvidia/nemotron-3.5-lightning", Provider: "openrouter", DisplayName: "Nemotron 3.5 Lightning", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/meta/muse-glimmer-30b", UpstreamID: "meta/muse-glimmer-30b", Provider: "openrouter", DisplayName: "Muse Glimmer", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/inclusionai/ling-3.0-flash", UpstreamID: "inclusionai/ling-3.0-flash", Provider: "openrouter", DisplayName: "Ling 3.0 Flash", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/z-ai/glm-5.3-flash", UpstreamID: "z-ai/glm-5.3-flash", Provider: "openrouter", DisplayName: "GLM 5.3 Flash", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/mistralai/ministral-3b-2512", UpstreamID: "mistralai/ministral-3b-2512", Provider: "openrouter", DisplayName: "Mistral Ministral 3B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/mistralai/ministral-8b-2512", UpstreamID: "mistralai/ministral-8b-2512", Provider: "openrouter", DisplayName: "Mistral Ministral 8B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-		{ID: "openrouter/mistralai/ministral-14b-2512", UpstreamID: "mistralai/ministral-14b-2512", Provider: "openrouter", DisplayName: "Mistral Ministral 14B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/mistralai/mistral-small-2603", UpstreamID: "mistralai/mistral-small-2603", Provider: "openrouter", DisplayName: "Mistral Small 4", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/inception/mercury-2.5", UpstreamID: "inception/mercury-2.5", Provider: "openrouter", DisplayName: "Mercury 2.5", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			// The reasoning effort is exposed as a distinct model per level
 			// (mirroring Yara), so the level is fixed per catalog entry and can
 			// only be granted by an admin — never selected from the prompt input.
-			{ID: "openrouter/openai/gpt-6-luna (reasoning: none)", UpstreamID: "openai/gpt-6-luna (reasoning: none)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: none)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/openai/gpt-6-luna (reasoning: low)", UpstreamID: "openai/gpt-6-luna (reasoning: low)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: low)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
-			{ID: "openrouter/openai/gpt-6-luna (reasoning: medium)", UpstreamID: "openai/gpt-6-luna (reasoning: medium)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: medium)", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+			{ID: "openrouter/openai/gpt-6-luna (reasoning: none)", UpstreamID: "openai/gpt-6-luna (reasoning: none)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: none)", SupportsImages: true, SupportsSearch: true, MaxContext: 262000, MaxOutput: 0},
+			{ID: "openrouter/openai/gpt-6-luna (reasoning: low)", UpstreamID: "openai/gpt-6-luna (reasoning: low)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: low)", SupportsImages: true, SupportsSearch: true, MaxContext: 262000, MaxOutput: 0},
+			{ID: "openrouter/openai/gpt-6-luna (reasoning: medium)", UpstreamID: "openai/gpt-6-luna (reasoning: medium)", Provider: "openrouter", DisplayName: "GPT-6 Luna (reasoning: medium)", SupportsImages: true, SupportsSearch: true, MaxContext: 262000, MaxOutput: 0},
+			{ID: "openrouter/tencent/hy4-flash", UpstreamID: "tencent/hy4-flash", Provider: "openrouter", DisplayName: "HY4 Flash", SupportsImages: true, SupportsSearch: true, MaxContext: 512000, MaxOutput: 0},
+			{ID: "openrouter/meta/muse-spark-1.3-contributor", UpstreamID: "meta/muse-spark-1.3-contributor", Provider: "openrouter", DisplayName: "Meta Muse Spark 1.3 Contributor", SupportsImages: true, SupportsSearch: true, MaxContext: 750000, MaxOutput: 0},
+			{ID: "openrouter/anthropic/claude-haiku-5.5", UpstreamID: "anthropic/claude-haiku-5.5", Provider: "openrouter", DisplayName: "Anthropic Claude Haiku 5.5", SupportsImages: true, SupportsSearch: true, MaxContext: 100000, MaxOutput: 0},
+			{ID: "openrouter/meta/muse-ember", UpstreamID: "meta/muse-ember", Provider: "openrouter", DisplayName: "Meta Muse Ember", SupportsImages: true, SupportsSearch: true, MaxContext: 524288, MaxOutput: 0},
+			{ID: "openrouter/thinkingmachines/inkling-2-mini", UpstreamID: "thinkingmachines/inkling-2-mini", Provider: "openrouter", DisplayName: "Inkling 2 Mini", SupportsImages: true, SupportsSearch: true, MaxContext: 524288, MaxOutput: 0},
 		},
 	},
 	{
@@ -156,15 +130,22 @@ var knownProviders = []ProviderInfo{
 		BaseURL:      "https://model.inferx.net/endpoints/v1",
 		OpenAICompat: true,
 		DefaultModel: "deepseek-v4-flash-0731",
-		GoAIOptions: map[string]any{
-			"useResponsesAPI": false,
-		},
 		Models: []ModelInfo{
 			{ID: "inferx/deepseek-v4-flash-0731", UpstreamID: "deepseek-v4-flash-0731", Provider: "inferx", DisplayName: "DeepSeek V4 Flash 0731", SupportsImages: false, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "inferx/gemma-4-31B-it-fp8", UpstreamID: "gemma-4-31B-it-fp8", Provider: "inferx", DisplayName: "Gemma 4 31B IT FP8", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "inferx/Qwen3.6-35B-A3B-FP8", UpstreamID: "Qwen3.6-35B-A3B-FP8", Provider: "inferx", DisplayName: "Qwen 3.6 35B A3B FP8", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "inferx/Qwen3.8-27B-FP8", UpstreamID: "Qwen3.8-27B-FP8", Provider: "inferx", DisplayName: "Qwen3.8-27B", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
 			{ID: "inferx/glm-5.3-flash", UpstreamID: "glm-5.3-flash", Provider: "inferx", DisplayName: "GLM 5.3 Flash", SupportsImages: true, SupportsSearch: true, MaxContext: 0, MaxOutput: 0},
+		},
+	},
+	{
+		ID:           "liquid",
+		Name:         "Liquid AI",
+		BaseURL:      "https://api.liquid.ai/openai/v1",
+		OpenAICompat: true,
+		DefaultModel: "lfm3-1.7b",
+		Models: []ModelInfo{
+			{ID: "liquid/lfm3-1.7b", UpstreamID: "lfm3-1.7b", Provider: "liquid", DisplayName: "LFM3 1.7B", SupportsImages: false, SupportsSearch: true, MaxContext: 256000, MaxOutput: 0},
 		},
 	},
 	{
@@ -205,7 +186,6 @@ func ModelCatalog() []ModelInfo {
 	}
 	return out
 }
-
 
 // ResolveModel maps a public model ID to its provider and upstream model ID.
 //

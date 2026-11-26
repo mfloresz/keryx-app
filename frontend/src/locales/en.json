@@ -42,7 +42,9 @@
     "userMenu": "User menu",
     "logout": "Log out",
     "rename": "Rename",
-    "delete": "Delete"
+    "delete": "Delete",
+    "projects": "Projects",
+    "actions": "Actions"
   },
   "settings": {
     "title": "Settings",
@@ -115,7 +117,9 @@
       "confirmNewPasswordPlaceholder": "Confirm your new password",
       "changing": "Changing...",
       "updatePassword": "Update Password"
-    }
+    },
+    "fontLabel": "Font",
+    "fontSizeLabel": "Font size"
   },
   "favorites": {
     "title": "Favorites",
@@ -139,47 +143,30 @@
     "byMe": "By me",
     "byGlobal": "Global",
     "byCatalog": "Catalog",
-    "preview": {
-      "personalize": "Customize",
-      "chat": "Chat",
-      "duplicate": "Duplicate",
-      "delete": "Delete",
-      "deleteConfirm": "Delete this agent? Chats using it will fall back to the base prompt."
+    "preview": "Chat with agent",
+    "editor": "Edit agent",
+    "toolsSection": {
+      "label": "Tools",
+      "webSearch": "Web search",
+      "updateArtifact": "Update artifacts",
+      "hint": "Leave empty to keep the agent's defaults. Selecting any tool restricts the agent to just those."
     },
-    "editor": {
-      "breadcrumb": "Agents",
-      "purpose": "Purpose of this agent",
-      "nameLabel": "Name",
-      "namePlaceholder": "e.g. Bible Study",
-      "descriptionLabel": "Description",
-      "descriptionPlaceholder": "Describe what this agent does...",
-      "iconLabel": "Icon",
-      "instructions": "Instructions",
-      "instructionsHint": "Define the system prompt for this agent. Use {language}, {username}, {date} (cache-friendly) or {datetime} as placeholders.",
-      "knowledge": "Knowledge",
-      "knowledgeHint": "Coming soon: add files and sources.",
-      "guardrails": "Add guardrails",
-      "guardrailsHint": "Coming soon",
-      "tone": "Adjust tone",
-      "toneHint": "Coming soon",
-      "saved": "Saved",
-      "private": "Private",
-      "global": "Global",
-      "previewTitle": "Preview your agent",
-      "openChat": "Open new chat",
-      "save": "Save",
-      "saving": "Saving...",
-      "savedSuccess": "Agent saved",
-      "savedError": "Could not save agent",
-      "createdSuccess": "Agent created",
-      "deletedSuccess": "Agent deleted",
-      "deletedError": "Could not delete agent",
-      "duplicatedSuccess": "Agent duplicated",
-      "limitReached": "You reached the agent limit (50)",
-      "nameRequired": "Name is required",
-      "promptRequired": "Instructions are required",
-      "promptTooLong": "Instructions cannot exceed 10000 characters",
-      "charsUsed": "{used}/10000 characters"
+    "skillsSection": {
+      "label": "Skills",
+      "emptyHint": "No skills available yet. Skills are configured by the admin."
+    },
+    "starterPrompts": {
+      "label": "Starter prompts",
+      "placeholder": "e.g. Summarize my week",
+      "add": "Add prompt"
+    },
+    "knowledge": {
+      "label": "Knowledge",
+      "hint": "Files the agent can consult on every conversation. They share a context budget, so keep the list small.",
+      "add": "Add files",
+      "uploading": "Uploading...",
+      "uploadFailed": "Failed to upload the files",
+      "deleteFailed": "Failed to delete the file"
     }
   },
   "chat": {
@@ -214,6 +201,7 @@
     "failedSwitchBranch": "Failed to switch branch",
     "failedFork": "Failed to create new chat from message",
     "failedVote": "Failed to vote",
+    "showEarlier": "Show earlier messages",
     "unsupportedImageTitle": "Image not supported",
     "unsupportedImageDescription": "The selected model does not support images. Only text documents are allowed.",
     "unsupportedCloudAttachmentDescription": "In cloud mode, attachments must be uploaded as embedded local files. Please reattach the file and try again.",
@@ -240,7 +228,46 @@
       "missing": "The agent for this chat is no longer available",
       "limitReached": "You reached the agent limit (50)",
       "menuLabel": "Agents"
-    }
+    },
+    "project": {
+      "menuLabel": "Projects",
+      "clear": "Remove project",
+      "missing": "This chat's project is no longer available",
+      "files": "Files",
+      "filesEmpty": "No files yet. Ask the assistant to create one.",
+      "createItem": "New project",
+      "createTitle": "New project",
+      "createDescription": "Creates a closed workspace where the assistant can read, create and edit files.",
+      "namePlaceholder": "Name (e.g. My novel)",
+      "descriptionPlaceholder": "Description (optional)",
+      "create": "Create",
+      "createFailed": "Failed to create the project"
+    },
+    "send": "Send message",
+    "askAboutProject": "Ask about this project",
+    "tools": {
+      "label": "Tool calls",
+      "running": "{name} running…",
+      "failed": "{name} failed",
+      "denied": "{name} denied",
+      "result": "Result",
+      "awaitingApproval": "{name} needs your approval",
+      "approvalDescription": "The agent wants to run {name}.",
+      "approve": "Approve",
+      "deny": "Deny"
+    },
+    "attachFiles": "Attach files",
+    "addTools": "Add tools",
+    "share": "Share",
+    "unshare": "Stop sharing",
+    "shareLinkCopied": "Share link copied to clipboard",
+    "failedShare": "Failed to update sharing",
+    "skills": {
+      "menuLabel": "Skills",
+      "remove": "Remove skill"
+    },
+    "removeAttachment": "Remove attachment",
+    "dropFiles": "Drop files to attach"
   },
   "message": {
     "user": "User",
@@ -260,13 +287,20 @@
     "forkTooltip": "Start a new chat from this message",
     "preview": "Preview",
     "codePreview": "HTML preview",
-    "codePreviewDescription": "Rendered from the code block in an isolated iframe."
+    "codePreviewDescription": "Rendered from the code block in an isolated iframe.",
+    "editDescription": "Edit your message and resend it to continue the conversation.",
+    "sources": "sources",
+    "thought": "Thought"
   },
   "artifact": {
     "openPanel": "Artifacts ({count})",
     "version": "Artifact version",
     "previous": "Previous artifact",
     "next": "Next artifact",
+    "previousVersion": "Previous version",
+    "nextVersion": "Next version",
+    "loading": "Loading artifact…",
+    "fetchError": "Could not load the artifact.",
     "code": "Code",
     "download": "Download HTML",
     "openNewTab": "Open in new tab",
@@ -275,7 +309,8 @@
     "isolatedNote": "Isolated iframe · network allowed",
     "publishing": "Publishing preview…",
     "publishError": "Could not publish the preview.",
-    "retry": "Retry"
+    "retry": "Retry",
+    "close": "Close"
   },
   "reasoning": {
     "thinking": "Thinking...",
@@ -308,6 +343,10 @@
       "roleAdmin": "Admin"
     },
     "invitations": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Please enter a valid email address",
+      "copyLink": "Copy",
+      "copySuccess": "Copied",
       "title": "Invitations",
       "description": "Create invitation-only accounts for cloud mode.",
       "createTitle": "Invite user",
@@ -336,6 +375,13 @@
       "actionsColumn": "Actions"
     },
     "models": {
+      "titleGeneration": "Title Generation",
+      "titleGenerationDescription": "Choose which model writes the chat titles.",
+      "useChatModel": "Use the same model as the chat",
+      "useDedicatedModel": "Use a dedicated lightweight model",
+      "chooseModel": "Choose a model",
+      "modelPresets": "Model Presets",
+      "modelPresetsDescription": "Map each user-facing preset to a real model.",
       "title": "Models",
       "description": "Control which models remain available to the user role. Admins always retain access to the full catalog.",
       "modelColumn": "Model",
@@ -418,7 +464,13 @@
     },
     "prompts": {
       "title": "System prompts",
-      "description": "Edit the global Base and Title prompts. If there is no DB override, the embedded defaults are used.",
+      "description": "Override the prompts the server sends to the model.",
+      "base": "Base prompt (chat)",
+      "titlePrompt": "Title prompt",
+      "embedded": "Embedded",
+      "override": "Override",
+      "reset": "Reset",
+      "resetDescription": "This restores the embedded default.",
       "baseLabel": "Base prompt (chat)",
       "titleLabel": "Title prompt",
       "availableTags": "Available tags",
@@ -439,8 +491,12 @@
       "charsUsed": "{used}/{max} characters"
     },
     "agents": {
-      "title": "Global Agents",
-      "description": "Manage agents visible to everyone. Users can duplicate them but not edit them.",
+      "title": "Global agents",
+      "description": "Agents available to every user.",
+      "create": "Create agent",
+      "edit": "Edit agent",
+      "delete": "Delete agent",
+      "empty": "No global agents yet.",
       "createTitle": "Create agent",
       "editTitle": "Edit agent",
       "nameLabel": "Name",
@@ -461,6 +517,25 @@
       "deleteAction": "Delete",
       "deleteConfirm": "Delete this agent? Chats using it will fall back to the base prompt.",
       "builtinHint": "This will create a DB override"
+    },
+    "connections": {
+      "title": "Connections",
+      "description": "Provider API keys and web search.",
+      "configured": "Configured",
+      "notConfigured": "Not configured",
+      "updatedAt": "Updated: {date}",
+      "saveKey": "Save Key",
+      "update": "Update",
+      "deleteKey": "Delete Key",
+      "setKey": "Set API Key",
+      "keyNeverShown": "The key is never shown again once saved.",
+      "saved": "Saved",
+      "webSearch": "Web Search",
+      "braveKey": "Brave Search API Key",
+      "enableWebSearch": "Enable web search"
+    },
+    "behavior": {
+      "title": "Behavior"
     }
   },
   "auth": {
@@ -507,7 +582,127 @@
       "error": "Unable to accept invitation",
       "requestTimedOut": "The request timed out. Please try again.",
       "passwordRequired": "Password is required.",
-      "confirmPasswordRequired": "Please confirm your password."
+      "confirmPasswordRequired": "Please confirm your password.",
+      "acceptButton": "Create account",
+      "loadError": "Could not load the invitation"
+    },
+    "validation": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Please enter a valid email address",
+      "passwordRequired": "Password is required"
+    }
+  },
+  "share": {
+    "badge": "Shared",
+    "untitled": "Untitled chat",
+    "notFound": "This conversation is no longer available or was never shared.",
+    "loadError": "Could not load the shared conversation."
+  },
+  "projects": {
+    "title": "Projects",
+    "subtitle": "Closed workspaces where your assistants read, create and edit files.",
+    "search": "Search a project",
+    "create": "New project",
+    "createTitle": "New project",
+    "createDescription": "Creates a closed workspace where the assistant can read, create and edit files.",
+    "createFailed": "Failed to create the project",
+    "limitReached": "You reached the project limit",
+    "edit": "Edit",
+    "editTitle": "Edit project",
+    "updateFailed": "Failed to update the project",
+    "delete": "Delete",
+    "deleteTitle": "Delete project {name}?",
+    "deleteDescription": "The project and all its files will be deleted. This action cannot be undone.",
+    "deleteFailed": "Failed to delete the project",
+    "emptyTitle": "No projects yet",
+    "emptyDescription": "Create a project to give your chats a file workspace.",
+    "noResults": "No results",
+    "updated": "Updated {when}",
+    "noFiles": "No files",
+    "fileCount": "{count} files",
+    "notFound": "Project not found",
+    "ask": "Ask a question",
+    "newFile": "New file",
+    "newFileDescription": "The path is relative to the project root; directories are implicit.",
+    "createFile": "Create file",
+    "filterFiles": "Filter files",
+    "filesEmpty": "No files yet. Create one or ask the assistant.",
+    "openFile": "Open",
+    "renameFile": "Rename",
+    "renameFileFailed": "Failed to rename the file",
+    "downloadFile": "Download",
+    "deleteFileTitle": "Delete {path}?",
+    "deleteFileDescription": "The file will be removed from the project. This action cannot be undone.",
+    "deleteFileFailed": "Failed to delete the file",
+    "readFileFailed": "Failed to read the file",
+    "writeFileFailed": "Failed to save the file",
+    "fileTooLarge": "The file exceeds the size limit"
+  },
+  "automations": {
+    "title": "Automations",
+    "description": "Run this agent on a schedule or via webhook.",
+    "empty": "No automations yet.",
+    "create": "New automation",
+    "createTitle": "New automation",
+    "schedule": "Schedule",
+    "daily": "Daily",
+    "dailyTime": "Time",
+    "everyMinutes": "Every {value} min",
+    "everyHour": "Every hour",
+    "everyHours": "Every {value} h",
+    "dailyAt": "Daily at {time}",
+    "taskPrompt": "Task prompt",
+    "taskPromptPlaceholder": "What should the agent do? Use {date} and {time} to insert the current date and time.",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlPlaceholder": "https://example.com/hook (optional)",
+    "allowWriteTools": "Allow write tools",
+    "allowWriteToolsWarning": "Allows writing files without your approval.",
+    "enabled": "Enabled",
+    "runNow": "Run now",
+    "runTriggered": "Automation triggered",
+    "runFailed": "Failed to trigger the automation",
+    "openChat": "Open chat",
+    "failures": "{count} consecutive failures",
+    "statusSuccess": "Last run OK",
+    "statusError": "Failing",
+    "statusPaused": "Paused",
+    "statusPending": "Never run",
+    "deleteTitle": "Delete this automation?",
+    "deleteDescription": "The schedule will stop running. The chat and its messages are kept.",
+    "loadFailed": "Failed to load automations",
+    "createFailed": "Failed to create the automation",
+    "updateFailed": "Failed to update the automation",
+    "deleteFailed": "Failed to delete the automation"
+  },
+  "markdown": {
+    "copy": "Copy code",
+    "copied": "Copied",
+    "download": "Download code",
+    "diagram": "Diagram",
+    "drawingDiagram": "Drawing diagram…",
+    "diagramFailed": "Diagram could not be drawn: {reason}",
+    "enlarge": "Enlarge diagram",
+    "showSource": "Show source",
+    "showDiagram": "Show diagram",
+    "copySource": "Copy source",
+    "downloadSvg": "Download SVG",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to window",
+    "actualSize": "Actual size",
+    "close": "Close",
+    "fileTree": "File tree",
+    "scrollableTable": "Scrollable table",
+    "scrollableCode": "Scrollable code",
+    "variants": "Variants",
+    "taskDone": "Completed task",
+    "taskOpen": "Incomplete task",
+    "callouts": {
+      "note": "Note",
+      "tip": "Tip",
+      "important": "Important",
+      "warning": "Warning",
+      "caution": "Caution"
     }
   }
 }

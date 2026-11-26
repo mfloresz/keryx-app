@@ -65,3 +65,40 @@ func (s *Server) handleUpdateChatPreset(w http.ResponseWriter, r *http.Request) 
 	}
 	jsonResponse(w, map[string]any{"success": true, "preset": chat.Preset}, http.StatusOK)
 }
+
+// handleUpdateChatProject persists (or clears) the project workspace
+// attached to a chat. Body: {"projectId": string|null}. Owner-only, same
+// pattern as agent/preset. A non-empty projectId must be owned by the user.
+func (s *Server) handleUpdateChatProject(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	chatID := r.PathValue("id")
+
+	var req struct {
+		ProjectID *string `json:"projectId"`
+	}
+	if err := readJSONBody(r, &req); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	projectID := ""
+	if req.ProjectID != nil {
+		projectID = *req.ProjectID
+		if projectID != "" {
+			if _, err := s.Store.GetProjectForOwner(projectID, userID); err != nil {
+				errorResponse(w, "Project not found", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
+	unlock := s.lockChat(chatID)
+	defer unlock()
+
+	chat, err := s.Store.UpdateChatProject(chatID, userID, projectID)
+	if err != nil {
+		errorResponse(w, "Chat not found", http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, map[string]any{"success": true, "projectId": chat.ProjectID}, http.StatusOK)
+}
