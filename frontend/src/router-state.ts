@@ -16,6 +16,8 @@ declare module "@tanstack/history" {
     pendingWebSearch?: boolean;
     /** Persisted attachment parts for that message. */
     pendingFiles?: unknown[];
+    /** Skills pinned for that message (next-message-only scope). */
+    pendingPinnedSkills?: string[];
   }
 }
 

@@ -5,24 +5,20 @@ import (
 	"testing"
 )
 
-func TestBaseSystemPromptHasComarkCapabilities(t *testing.T) {
+func TestBaseSystemPromptHasFlowdownCapabilities(t *testing.T) {
 	p := defaultBaseSystemPrompt
 
 	required := []string{
-		"### Output Capabilities (Comark Rendering)",
-		"> [!NOTE]", "> [!TIP]", "> [!IMPORTANT]", "> [!WARNING]", "> [!CAUTION]",
-		":smile:",
+		"# Answer formatting",
+		"> [!KIND]", "[!NOTE]", "[!TIP]", "[!IMPORTANT]", "[!WARNING]", "[!CAUTION]",
+		"> [!TABS]", "> [!PROS]", "> [!CONS]",
+		"> [!STEPS]", "> [!STATS]", "> [!DETAILS]", "> [!SOURCES]",
 		"```mermaid",
-		"::component{prop=\"value\"}",
-		":component{prop=\"value\"}",
-		"[text]{...}",
-		"{1-3,5}",
-		"#slot-name",
-		"$inline math$",
-		"$$block math$$",
-		"KaTeX",
-		"only the `alert` component",
-		"render as plain text",
+		"```tree",
+		"```diff",
+		"```ts title=\"src/app.ts\"",
+		"$…$ math",
+		"— Author",
 	}
 	for _, s := range required {
 		if !strings.Contains(p, s) {

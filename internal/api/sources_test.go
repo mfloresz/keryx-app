@@ -30,7 +30,7 @@ func TestAssistantMessagePersistsSources(t *testing.T) {
 
 	env.server.appendAssistantMessage(
 		chatID, u.User.ID, "msg_1",
-		"La respuesta", "", nil, sources,
+		"La respuesta", "", nil, sources, nil,
 	)
 
 	chat, err := env.store.GetChat(chatID, u.User.ID)
@@ -78,7 +78,7 @@ func TestAssistantMessageWithoutSourcesKeepsShape(t *testing.T) {
 
 	env.server.appendAssistantMessage(
 		chatID, u.User.ID, "msg_1",
-		"La respuesta", "el razonamiento", nil, nil,
+		"La respuesta", "el razonamiento", nil, nil, nil,
 	)
 
 	chat, err := env.store.GetChat(chatID, u.User.ID)

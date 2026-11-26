@@ -10,7 +10,6 @@ function toHeaderRecord(headers?: HeadersInit): Record<string, string> {
   return headers as Record<string, string>;
 }
 
-
 async function authHeaders(): Promise<Record<string, string>> {
   const auth = await getAuthAdapter();
   return await auth.getAuthorizationHeaders();
@@ -53,6 +52,13 @@ export const apiChatRepository: ChatRepository = {
 
   async getChat(chatId) {
     const response = await apiFetch(`/api/chats/${chatId}`);
+    if (response.status === 404) return null;
+    return readJson(response);
+  },
+
+  async getPublicChat(chatId) {
+    // No auth headers: this endpoint is readable by anonymous visitors.
+    const response = await fetch(`/api/public/chats/${chatId}`);
     if (response.status === 404) return null;
     return readJson(response);
   },
@@ -144,9 +150,7 @@ export const apiChatRepository: ChatRepository = {
   },
 
   async getVotes(chatId) {
-    return readJson<ChatVote[]>(
-      await apiFetch(`/api/chats/${chatId}/votes`),
-    );
+    return readJson<ChatVote[]>(await apiFetch(`/api/chats/${chatId}/votes`));
   },
 
   async saveVote(chatId, payload) {

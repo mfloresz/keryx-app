@@ -1,6 +1,7 @@
-import * as React from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import * as React from "react";
 
+import { AuthShell } from "#/components/auth/auth-shell";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
@@ -126,98 +127,79 @@ function InvitePage() {
   }
 
   return (
-    <div className="box-border flex h-[100dvh] overflow-hidden bg-muted p-6 sm:p-8 lg:p-10">
-      <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-center">
-        <div className="grid w-full overflow-hidden rounded-[28px] border border-border/70 bg-background md:aspect-[4/3] md:h-[calc(100dvh-6rem)] md:w-auto md:grid-cols-2">
-          <div className="flex min-h-0 items-center justify-center px-5 py-6 sm:px-10 sm:py-8 md:aspect-[2/3] md:px-12 md:py-10">
-            <div className="w-full max-w-[28rem] space-y-7">
-              <div className="space-y-2 text-center md:text-left">
-                <p className="text-xs font-semibold uppercase tracking-[0.32em] text-muted-foreground">
-                  Keryx
-                </p>
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">
-                  {t("auth.invite.title")}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {t("auth.invite.subtitle", { appName: "Keryx" })}
-                </p>
-              </div>
-
-              {isLoading ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("app.loading")}
-                </p>
-              ) : loadError ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {loadError}
-                </p>
-              ) : (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void handleAccept();
-                  }}
-                  className="space-y-4"
-                >
-                  {invitation?.email ? (
-                    <p className="text-sm">
-                      {t("auth.invite.emailLabel", {
-                        email: invitation.email,
-                      })}
-                    </p>
-                  ) : null}
-
-                  {error ? (
-                    <p role="alert" className="text-sm text-destructive">
-                      {error}
-                    </p>
-                  ) : null}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-password">Password</Label>
-                    <Input
-                      id="invite-password"
-                      type="password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      autoComplete="new-password"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-confirm-password">
-                      Confirm password
-                    </Label>
-                    <Input
-                      id="invite-confirm-password"
-                      type="password"
-                      value={confirmPassword}
-                      onChange={(event) =>
-                        setConfirmPassword(event.target.value)
-                      }
-                      autoComplete="new-password"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting
-                      ? t("app.loading")
-                      : t("auth.invite.acceptButton")}
-                  </Button>
-                </form>
-              )}
-            </div>
-          </div>
-
-          <div className="relative hidden min-h-0 overflow-hidden bg-[linear-gradient(180deg,rgba(255,255,255,0.7),rgba(250,246,239,0.95))] md:aspect-[2/3] md:flex">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,250,235,0.96),rgba(240,241,235,0.72)_40%,rgba(225,236,228,0.38)_100%)]" />
-          </div>
+    <AuthShell
+      imageAlt={t("auth.login.heroAlt")}
+      imageSrc="/auth/login-hero.webp"
+    >
+      <div className="space-y-7">
+        <div className="space-y-2 text-center md:text-left">
+          <p className="text-xs font-semibold tracking-[0.32em] text-muted-foreground uppercase">
+            Keryx
+          </p>
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+            {t("auth.invite.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t("auth.invite.subtitle", { appName: "Keryx" })}
+          </p>
         </div>
+
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">{t("app.loading")}</p>
+        ) : loadError ? (
+          <p role="alert" className="text-sm text-destructive">
+            {loadError}
+          </p>
+        ) : (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleAccept();
+            }}
+            className="space-y-4"
+          >
+            {invitation?.email ? (
+              <p className="text-sm">
+                {t("auth.invite.emailLabel", {
+                  email: invitation.email,
+                })}
+              </p>
+            ) : null}
+
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+
+            <div className="space-y-2">
+              <Label htmlFor="invite-password">Password</Label>
+              <Input
+                id="invite-password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="invite-confirm-password">Confirm password</Label>
+              <Input
+                id="invite-confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? t("app.loading") : t("auth.invite.acceptButton")}
+            </Button>
+          </form>
+        )}
       </div>
-    </div>
+    </AuthShell>
   );
 }

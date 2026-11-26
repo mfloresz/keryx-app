@@ -149,12 +149,23 @@ func (s *Store) ensureChatsCollection(users *core.Collection) (*core.Collection,
 	c.Fields.Add(&core.TextField{Name: "agent_id", Max: 80})
 	c.Fields.Add(&core.TextField{Name: "preset", Max: 30})
 	c.Fields.Add(&core.TextField{Name: "project_id", Max: 80})
+	c.Fields.Add(&core.TextField{Name: "summary"})
+	c.Fields.Add(&core.TextField{Name: "summary_through"})
 	addSystemDateFields(c)
 	c.AddIndex("idx_chats_owner", false, "owner", "")
 	if err := s.App.Save(c); err != nil {
 		return nil, err
 	}
 	return c, nil
+}
+
+// migrateChatsCollectionForSummary adds summary and summary_through to an
+// existing chats collection (conversation summarization).
+func (s *Store) migrateChatsCollectionForSummary(c *core.Collection) error {
+	if err := s.ensureField(c, &core.TextField{Name: "summary"}); err != nil {
+		return err
+	}
+	return s.ensureField(c, &core.TextField{Name: "summary_through"})
 }
 
 func (s *Store) ensureProjectsCollection(users *core.Collection) (*core.Collection, error) {

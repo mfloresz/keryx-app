@@ -8,6 +8,8 @@ export interface ChatListItem {
   label: string;
   to: string;
   createdAt: string;
+  /** Sharing state; undefined is treated as private. */
+  visibility?: "public" | "private";
 }
 
 export interface ChatGroup {
@@ -35,7 +37,11 @@ const ChatContext = React.createContext<ChatContextValue | null>(null);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function startOfDay(date: Date): number {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  ).getTime();
 }
 
 /**
@@ -91,11 +97,23 @@ function groupChats(chats: ChatListItem[]): ChatGroup[] {
   if (today.length)
     groups.push({ id: "today", labelKey: "sidebar.today", items: today });
   if (yesterday.length)
-    groups.push({ id: "yesterday", labelKey: "sidebar.yesterday", items: yesterday });
+    groups.push({
+      id: "yesterday",
+      labelKey: "sidebar.yesterday",
+      items: yesterday,
+    });
   if (lastWeek.length)
-    groups.push({ id: "last-week", labelKey: "sidebar.last7Days", items: lastWeek });
+    groups.push({
+      id: "last-week",
+      labelKey: "sidebar.last7Days",
+      items: lastWeek,
+    });
   if (lastMonth.length)
-    groups.push({ id: "last-month", labelKey: "sidebar.last30Days", items: lastMonth });
+    groups.push({
+      id: "last-month",
+      labelKey: "sidebar.last30Days",
+      items: lastMonth,
+    });
   for (const monthYear of sortedMonthYears) {
     if (older[monthYear]?.length) {
       groups.push({ id: monthYear, label: monthYear, items: older[monthYear] });
@@ -120,6 +138,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           label: chat.title || "Untitled",
           to: `/chat/${chat.id}`,
           createdAt: String(chat.createdAt),
+          visibility:
+            chat.visibility === "public"
+              ? ("public" as const)
+              : ("private" as const),
         })),
       );
       return true;

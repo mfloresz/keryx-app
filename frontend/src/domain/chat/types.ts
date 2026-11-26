@@ -32,6 +32,15 @@ export interface ChatRecord {
 export interface ChatIndexEntry {
   id: string;
   title: string | null;
+  visibility: "public" | "private";
+  createdAt: string;
+}
+
+/** Read-only view of a shared chat, served to unauthenticated visitors. */
+export interface PublicChatRecord {
+  id: string;
+  title: string;
+  messages: unknown[];
   createdAt: string;
 }
 

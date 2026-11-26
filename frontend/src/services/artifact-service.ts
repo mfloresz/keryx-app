@@ -6,6 +6,8 @@
  * parent's DOM, cookies or storage: the document is served from a separate
  * origin without `allow-same-origin`.
  */
+import { getChatTransportHeaders } from "#/services/chat-transport";
+
 export interface PublishedArtifact {
   token: string;
   url: string;
@@ -32,4 +34,36 @@ export async function publishArtifact(html: string): Promise<PublishedArtifact> 
     token: payload.token,
     url: `/api/artifacts/${payload.token}`,
   };
+}
+
+/** Payload of GET /api/chats/{chatId}/artifacts/{artifactId}. */
+export interface ChatArtifact {
+  artifactId: string;
+  title: string;
+  type: "html" | "markdown";
+  version: number;
+  content: string;
+  createdAt: string;
+}
+
+/**
+ * Fetches a model-produced artifact's content. Version is optional: when
+ * omitted the backend returns the latest one.
+ */
+export async function fetchChatArtifact(
+  chatId: string,
+  artifactId: string,
+  version?: number,
+): Promise<ChatArtifact> {
+  const params = typeof version === "number" ? `?version=${version}` : "";
+  const response = await fetch(
+    `/api/chats/${encodeURIComponent(chatId)}/artifacts/${encodeURIComponent(artifactId)}${params}`,
+    { headers: await getChatTransportHeaders() },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch artifact (${response.status})`);
+  }
+
+  return (await response.json()) as ChatArtifact;
 }

@@ -97,7 +97,6 @@ func (s *Store) CountAdmins() (int, error) {
 	return len(records), nil
 }
 
-
 func (s *Store) UpdateUserName(userID, name string) (*User, error) {
 	record, err := s.App.FindRecordById(UsersCollection, userID)
 	if err != nil {

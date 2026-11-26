@@ -222,10 +222,10 @@ func projectToolExec(s *Server, projectID, userID string) ai.ToolExecFunc {
 
 		case "edit_file":
 			var p struct {
-				Path        string `json:"path"`
-				OldString   string `json:"old_string"`
-				NewString   string `json:"new_string"`
-				ReplaceAll  bool   `json:"replace_all"`
+				Path       string `json:"path"`
+				OldString  string `json:"old_string"`
+				NewString  string `json:"new_string"`
+				ReplaceAll bool   `json:"replace_all"`
 			}
 			if err := json.Unmarshal(input, &p); err != nil {
 				return "", fmt.Errorf("invalid edit_file params: %w", err)
@@ -257,9 +257,9 @@ func projectToolExec(s *Server, projectID, userID string) ai.ToolExecFunc {
 
 		case "grep":
 			var p struct {
-				Pattern        string `json:"pattern"`
-				PathPrefix     string `json:"path_prefix"`
-				CaseInsensitive bool  `json:"case_insensitive"`
+				Pattern         string `json:"pattern"`
+				PathPrefix      string `json:"path_prefix"`
+				CaseInsensitive bool   `json:"case_insensitive"`
 			}
 			if err := json.Unmarshal(input, &p); err != nil {
 				return "", fmt.Errorf("invalid grep params: %w", err)

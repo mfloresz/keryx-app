@@ -28,6 +28,17 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, { ...init, headers });
 }
 
+/** Fields the create/update agent endpoints accept. */
+interface AgentPayload {
+  name: string;
+  description?: string;
+  icon?: string;
+  systemPrompt: string;
+  tools?: string[];
+  skills?: string[];
+  starterPrompts?: string[];
+}
+
 interface AgentsContextValue {
   agents: Agent[];
   mine: Agent[];
@@ -37,21 +48,8 @@ interface AgentsContextValue {
   error: string | null;
   fetchAgents: () => Promise<void>;
   getAgent: (id: string) => Promise<Agent | null>;
-  createAgent: (payload: {
-    name: string;
-    description?: string;
-    icon?: string;
-    systemPrompt: string;
-  }) => Promise<Agent>;
-  updateAgent: (
-    id: string,
-    payload: Partial<{
-      name: string;
-      description?: string;
-      icon?: string;
-      systemPrompt: string;
-    }>,
-  ) => Promise<Agent>;
+  createAgent: (payload: AgentPayload) => Promise<Agent>;
+  updateAgent: (id: string, payload: Partial<AgentPayload>) => Promise<Agent>;
   deleteAgent: (id: string) => Promise<void>;
   duplicateAgent: (id: string) => Promise<Agent>;
 }
@@ -115,12 +113,7 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const createAgent = React.useCallback(
-    async (payload: {
-      name: string;
-      description?: string;
-      icon?: string;
-      systemPrompt: string;
-    }): Promise<Agent> => {
+    async (payload: AgentPayload): Promise<Agent> => {
       const res = await apiFetch("/api/agents", {
         method: "POST",
         body: JSON.stringify(payload),
@@ -139,15 +132,7 @@ export function AgentsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateAgent = React.useCallback(
-    async (
-      id: string,
-      payload: Partial<{
-        name: string;
-        description?: string;
-        icon?: string;
-        systemPrompt: string;
-      }>,
-    ): Promise<Agent> => {
+    async (id: string, payload: Partial<AgentPayload>): Promise<Agent> => {
       const res = await apiFetch(`/api/agents/${encodeURIComponent(id)}`, {
         method: "PUT",
         body: JSON.stringify(payload),

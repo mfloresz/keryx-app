@@ -21,9 +21,10 @@ func (s *Store) ListChats(ownerID string) ([]ChatIndexEntry, error) {
 	out := make([]ChatIndexEntry, 0, len(records))
 	for _, r := range records {
 		out = append(out, ChatIndexEntry{
-			ID:        r.Id,
-			Title:     r.GetString("title"),
-			CreatedAt: r.GetString("created"),
+			ID:         r.Id,
+			Title:      r.GetString("title"),
+			Visibility: r.GetString("visibility"),
+			CreatedAt:  r.GetString("created"),
 		})
 	}
 	return out, nil
@@ -38,7 +39,49 @@ func (s *Store) GetChat(chatID, ownerID string) (*ChatRecord, error) {
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	return chatFromRecord(record), nil
+	chat := chatFromRecord(record)
+	// Messages live in chat_messages rows, not the legacy chats blob.
+	msgs, err := s.ChatMessages(record.Id)
+	if err != nil {
+		return nil, err
+	}
+	if len(msgs) == 0 {
+		chat.Messages = json.RawMessage("[]")
+	} else {
+		raw, err := json.Marshal(msgs)
+		if err != nil {
+			return nil, err
+		}
+		chat.Messages = raw
+	}
+	return chat, nil
+}
+
+// GetPublicChat loads a chat with visibility = "public" without owner scoping.
+func (s *Store) GetPublicChat(chatID string) (*ChatRecord, error) {
+	record, err := s.App.FindFirstRecordByFilter(
+		ChatsCollection,
+		"id = {:id} && visibility = {:visibility}",
+		dbx.Params{"id": chatID, "visibility": VisibilityPublic},
+	)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	chat := chatFromRecord(record)
+	msgs, err := s.ChatMessages(record.Id)
+	if err != nil {
+		return nil, err
+	}
+	if len(msgs) == 0 {
+		chat.Messages = json.RawMessage("[]")
+	} else {
+		raw, err := json.Marshal(msgs)
+		if err != nil {
+			return nil, err
+		}
+		chat.Messages = raw
+	}
+	return chat, nil
 }
 
 // SaveChat creates or updates a chat record. For new records, PocketBase
@@ -76,10 +119,15 @@ func (s *Store) SaveChat(chat *ChatRecord, ownerID string) (*ChatRecord, error) 
 	if v := record.Collection().Fields.GetByName("project_id"); v != nil {
 		record.Set("project_id", chat.ProjectID)
 	}
-
-	if chat.Messages != nil {
-		record.Set("messages", string(chat.Messages))
+	if v := record.Collection().Fields.GetByName("summary"); v != nil {
+		record.Set("summary", chat.Summary)
 	}
+	if v := record.Collection().Fields.GetByName("summary_through"); v != nil {
+		record.Set("summary_through", chat.SummaryThrough)
+	}
+
+	// Messages now live in the chat_messages collection — never persist the
+	// legacy `messages` column (kept in the schema only for rollback).
 	if chat.Votes != nil {
 		record.Set("votes", string(chat.Votes))
 	}
@@ -180,12 +228,8 @@ func (s *Store) ListFavorites(ownerID string) ([]FavoriteMessageEntry, error) {
 
 	var favorites []FavoriteMessageEntry
 	for _, r := range records {
-		messagesJSON := r.GetString("messages")
-		if messagesJSON == "" {
-			continue
-		}
-		var messages []map[string]any
-		if err := json.Unmarshal([]byte(messagesJSON), &messages); err != nil {
+		messages, err := s.ChatMessages(r.Id)
+		if err != nil {
 			continue
 		}
 
@@ -223,11 +267,11 @@ func (s *Store) ListFavorites(ownerID string) ([]FavoriteMessageEntry, error) {
 			}
 
 			favorites = append(favorites, FavoriteMessageEntry{
-				ChatID:          r.Id,
-				ChatTitle:       r.GetString("title"),
-				ChatCreatedAt:   r.GetString("created"),
-				MessageID:       msgID,
-				MessagePreview:  preview,
+				ChatID:           r.Id,
+				ChatTitle:        r.GetString("title"),
+				ChatCreatedAt:    r.GetString("created"),
+				MessageID:        msgID,
+				MessagePreview:   preview,
 				MessageCreatedAt: createdAt,
 			})
 		}
@@ -237,16 +281,18 @@ func (s *Store) ListFavorites(ownerID string) ([]FavoriteMessageEntry, error) {
 
 func chatFromRecord(r *core.Record) *ChatRecord {
 	c := &ChatRecord{
-		ID:         r.Id,
-		OwnerID:    r.GetString("owner"),
-		Title:      r.GetString("title"),
-		Visibility: r.GetString("visibility"),
-		WebSearch:  r.GetBool("web_search"),
-		AgentID:    r.GetString("agent_id"),
-		Preset:     r.GetString("preset"),
-		ProjectID:  r.GetString("project_id"),
-		CreatedAt:  r.GetString("created"),
-		UpdatedAt:  r.GetString("updated"),
+		ID:             r.Id,
+		OwnerID:        r.GetString("owner"),
+		Title:          r.GetString("title"),
+		Visibility:     r.GetString("visibility"),
+		WebSearch:      r.GetBool("web_search"),
+		AgentID:        r.GetString("agent_id"),
+		Preset:         r.GetString("preset"),
+		ProjectID:      r.GetString("project_id"),
+		Summary:        r.GetString("summary"),
+		SummaryThrough: r.GetString("summary_through"),
+		CreatedAt:      r.GetString("created"),
+		UpdatedAt:      r.GetString("updated"),
 	}
 
 	if msg := r.GetString("messages"); msg != "" {

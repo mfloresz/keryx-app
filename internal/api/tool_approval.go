@@ -25,10 +25,11 @@ const approvalTimeout = 5 * time.Minute
 
 // toolApprovalHook returns an approval function for the given stream.
 //
-// The hook runs inside the provider's tool loop, so it can block: it writes
-// a tool_approval SSE event, then waits for the client to answer through
+// The hook runs inside the provider's tool loop (in the run goroutine), so it
+// can block: it broadcasts a tool_approval event to the stream's subscribers,
+// then waits for the client to answer through
 // POST /api/chats/{id}/tool-approval.
-func (s *Server) toolApprovalHook(w http.ResponseWriter, flusher http.Flusher, chatID, assistantMessageID string, active *activeStream) ai.ToolApprovalFunc {
+func (s *Server) toolApprovalHook(chatID string, active *activeStream) ai.ToolApprovalFunc {
 	return func(ctx context.Context, toolCallID, toolName, input string) (bool, string) {
 		if !toolsRequiringApproval[toolName] {
 			return true, ""
@@ -36,7 +37,7 @@ func (s *Server) toolApprovalHook(w http.ResponseWriter, flusher http.Flusher, c
 
 		approvalID := generateID()
 
-		// The approval is registered before the event is written: a fast
+		// The approval is registered before the event is broadcast: a fast
 		// client could answer before the registration existed, and the
 		// answer would be dropped.
 		pending := s.toolApprovals.register(chatID, approvalID, toolCallID, toolName, input)
@@ -51,9 +52,15 @@ func (s *Server) toolApprovalHook(w http.ResponseWriter, flusher http.Flusher, c
 			"input":      input,
 			"reason":     approvalReason(toolName, input),
 		}
-		writeSSEEvent(w, "tool_approval", extra)
+		// The event goes to the stream's subscribers only — the HTTP request
+		// that started the run is just another observer now. It is also
+		// recorded on the stream so a client that subscribes while the
+		// approval is pending sees the prompt again (see followStream).
+		active.setPendingApproval(extra)
+		// Cleared no matter how the wait ends (decision, cancellation, stream
+		// end, timeout) so late subscribers never see a stale prompt.
+		defer active.clearPendingApproval()
 		active.broadcast("tool_approval", extra)
-		flusher.Flush()
 
 		select {
 		case decision := <-pending.ch:

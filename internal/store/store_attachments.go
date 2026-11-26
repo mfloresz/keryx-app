@@ -54,7 +54,6 @@ func (s *Store) SaveAttachment(chatID, ownerID, filename, mediaType string, data
 	return attachmentInfoFromRecord(record), nil
 }
 
-
 // GetAttachmentData returns the metadata and raw bytes of an attachment
 // owned by the user.
 func (s *Store) GetAttachmentData(attachmentID, ownerID string) (*AttachmentInfo, []byte, error) {
@@ -62,7 +61,33 @@ func (s *Store) GetAttachmentData(attachmentID, ownerID string) (*AttachmentInfo
 	if err != nil {
 		return nil, nil, err
 	}
+	return s.readAttachmentData(record)
+}
 
+// GetPublicChatAttachment returns an attachment's metadata and bytes when it
+// belongs to a chat that is currently public. It backs the read-only share
+// page so unauthenticated visitors can load images from shared chats.
+func (s *Store) GetPublicChatAttachment(chatID, attachmentID string) (*AttachmentInfo, []byte, error) {
+	if _, err := s.App.FindFirstRecordByFilter(
+		ChatsCollection,
+		"id = {:id} && visibility = {:visibility}",
+		dbx.Params{"id": chatID, "visibility": VisibilityPublic},
+	); err != nil {
+		return nil, nil, ErrNotFound
+	}
+	record, err := s.App.FindFirstRecordByFilter(
+		AttachmentsCollection,
+		"id = {:id} && chat = {:chat}",
+		dbx.Params{"id": attachmentID, "chat": chatID},
+	)
+	if err != nil {
+		return nil, nil, ErrNotFound
+	}
+	return s.readAttachmentData(record)
+}
+
+// readAttachmentData loads an attachment record's metadata and raw bytes.
+func (s *Store) readAttachmentData(record *core.Record) (*AttachmentInfo, []byte, error) {
 	fsys, err := s.App.NewFilesystem()
 	if err != nil {
 		return nil, nil, err

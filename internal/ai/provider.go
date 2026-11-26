@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"slices"
@@ -32,9 +33,9 @@ type Provider interface {
 type StreamChunkKind string
 
 const (
-	StreamChunkText      StreamChunkKind = "text"
-	StreamChunkReasoning StreamChunkKind = "reasoning"
-	StreamChunkToolCall  StreamChunkKind = "tool_call"
+	StreamChunkText       StreamChunkKind = "text"
+	StreamChunkReasoning  StreamChunkKind = "reasoning"
+	StreamChunkToolCall   StreamChunkKind = "tool_call"
 	StreamChunkToolResult StreamChunkKind = "tool_result"
 )
 
@@ -82,11 +83,27 @@ func (u *Usage) add(meta *schema.ResponseMeta) {
 	u.CacheWriteTokens += meta.Usage.PromptTokenDetails.CacheWriteTokens
 }
 
+// ToolCall carries a tool invocation in a chat message history.
+type ToolCall struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ToolResult carries a tool execution result in a chat message history.
+type ToolResult struct {
+	ToolCallID string `json:"toolCallId"`
+	ToolName   string `json:"toolName"`
+	Output     string `json:"output"`
+}
+
 // ChatMessage represents a single message in a chat conversation.
 type ChatMessage struct {
 	Role        string           `json:"role"`
 	Content     string           `json:"content"`
 	Attachments []ChatAttachment `json:"attachments,omitempty"`
+	ToolCalls   []ToolCall       `json:"toolCalls,omitempty"`
+	ToolResults []ToolResult     `json:"toolResults,omitempty"`
 }
 
 // ChatAttachment is a file attached to a message, already resolved to bytes.
@@ -217,6 +234,33 @@ type ChatRequest struct {
 // denial message back to the model.
 type ToolApprovalFunc func(ctx context.Context, toolCallID, toolName, input string) (approved bool, reason string)
 
+// Sentinel errors surfaced by the model→tool loop. Callers match them with
+// errors.Is; partial output (text already streamed) stays in the returned
+// ChatStreamResult so it can be persisted.
+var (
+	// ErrTruncated means text was already streamed and then the connection
+	// died with a transport error.
+	ErrTruncated = errors.New("the response ended unexpectedly")
+	// ErrOutputLimit means the provider reported finish_reason "length".
+	ErrOutputLimit = errors.New("the response was cut off by the model's output token limit")
+	// ErrContentFilter means the provider reported finish_reason "content_filter".
+	ErrContentFilter = errors.New("the response was blocked by the provider's content filter")
+	// ErrIdleTimeout means no chunk arrived within the idle window.
+	ErrIdleTimeout = errors.New("the model stopped sending data")
+	// ErrEmptyResponse means the model streamed only reasoning and then ended
+	// without producing an answer, even after a retry.
+	ErrEmptyResponse = errors.New("the model finished its reasoning without producing an answer")
+)
+
+// idleChunkTimeout is how long the stream may go without receiving any chunk
+// before the request is aborted with ErrIdleTimeout. It is a var so tests can
+// shrink it.
+var idleChunkTimeout = 120 * time.Second
+
+// totalLoopBudget is the default whole-request budget for a model→tool loop
+// (generous enough for thinking models plus several tool round-trips).
+const totalLoopBudget = 10 * time.Minute
+
 // maxToolSteps bounds the model→tool→model loop within a single request.
 // The previous engine capped it at 5; 8 leaves room for deeper research
 // flows (search → read → refine → search …) without enabling runaway loops.
@@ -254,6 +298,8 @@ func bindTools(tools []*schema.ToolInfo, opts []model.Option) []model.Option {
 // runToolLoopGenerate drives the non-streaming model→tool→model loop. It ends
 // when the model answers without tool calls, when maxToolSteps is reached
 // (returning whatever content was produced) or on the first transport error.
+// Provider finish reasons map to ErrOutputLimit / ErrContentFilter, and a
+// message that carries only reasoning content maps to ErrEmptyResponse.
 func runToolLoopGenerate(ctx context.Context, cm model.BaseChatModel, msgs []*schema.Message, tools []*schema.ToolInfo, req ChatRequest, opts []model.Option) (ChatStreamResult, error) {
 	var result ChatStreamResult
 	opts = bindTools(tools, opts)
@@ -266,6 +312,19 @@ func runToolLoopGenerate(ctx context.Context, cm model.BaseChatModel, msgs []*sc
 		if len(msg.ToolCalls) == 0 || req.ToolExec == nil || step+1 >= maxToolSteps {
 			result.Text = strings.TrimSpace(msg.Content)
 			result.Reasoning = strings.TrimSpace(msg.ReasoningContent)
+			finishReason := ""
+			if msg.ResponseMeta != nil {
+				finishReason = msg.ResponseMeta.FinishReason
+			}
+			switch finishReason {
+			case "length":
+				return result, fmt.Errorf("%w", ErrOutputLimit)
+			case "content_filter":
+				return result, fmt.Errorf("%w", ErrContentFilter)
+			}
+			if result.Text == "" && len(msg.ToolCalls) == 0 && result.Reasoning != "" {
+				return result, fmt.Errorf("%w", ErrEmptyResponse)
+			}
 			return result, nil
 		}
 		msgs = append(msgs, msg)
@@ -280,6 +339,16 @@ func runToolLoopGenerate(ctx context.Context, cm model.BaseChatModel, msgs []*sc
 // reasoning deltas stream through onChunk as they arrive; tool calls and
 // results are emitted as StreamChunkToolCall / StreamChunkToolResult events
 // so callers can surface live tool activity.
+//
+// The eino-ext go-openai fork reports io.EOF both for the real "[DONE]"
+// sentinel and for a connection that died gracefully, so the loop inspects
+// each step's finish reason and content: a stream that ends after only
+// reasoning (no text, no tool calls, no finish reason) is retried once with
+// the same messages; "length" and "content_filter" finish reasons map to
+// ErrOutputLimit / ErrContentFilter while keeping any partial text in the
+// result for persistence. An idle watchdog cancels the stream when the
+// provider stops sending chunks (ErrIdleTimeout); it is paused while tools
+// execute, since approval can legitimately block for minutes.
 func runToolLoopStream(ctx context.Context, cm model.BaseChatModel, msgs []*schema.Message, tools []*schema.ToolInfo, req ChatRequest, opts []model.Option, onChunk func(StreamChunk)) (ChatStreamResult, error) {
 	var result ChatStreamResult
 	opts = bindTools(tools, opts)
@@ -288,19 +357,46 @@ func runToolLoopStream(ctx context.Context, cm model.BaseChatModel, msgs []*sche
 			onChunk(c)
 		}
 	}
+
+	// Idle watchdog: a fresh context canceled only when no chunk arrives
+	// within the idle window, so Recv cannot block forever on a dead
+	// connection that the provider closed gracefully.
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	idleTimer := time.AfterFunc(idleChunkTimeout, cancel)
+	defer idleTimer.Stop()
+	resetIdle := func() { idleTimer.Reset(idleChunkTimeout) }
+	// idleFired reports whether the watchdog (not the caller's context)
+	// canceled the stream.
+	idleFired := func() bool {
+		return streamCtx.Err() != nil && ctx.Err() == nil
+	}
+
+	retriedThinkingStep := false
 	for step := 0; ; step++ {
-		sr, err := cm.Stream(ctx, msgs, opts...)
+		sr, err := cm.Stream(streamCtx, msgs, opts...)
 		if err != nil {
 			return result, fmt.Errorf("chat stream: %w", err)
 		}
+		resetIdle()
 		var chunks []*schema.Message
+		var sawText bool
 		for {
 			m, recvErr := sr.Recv()
+			resetIdle()
 			if recvErr == io.EOF {
 				break
 			}
 			if recvErr != nil {
 				sr.Close()
+				if idleFired() {
+					return result, fmt.Errorf("%w", ErrIdleTimeout)
+				}
+				if result.Text != "" {
+					// Partial text and then the connection died: surface the
+					// truncation, keeping what was already emitted.
+					return result, fmt.Errorf("%w: %w", ErrTruncated, recvErr)
+				}
 				return result, fmt.Errorf("stream error: %w", recvErr)
 			}
 			if m == nil {
@@ -312,31 +408,71 @@ func runToolLoopStream(ctx context.Context, cm model.BaseChatModel, msgs []*sche
 			}
 			if m.Content != "" {
 				result.Text += m.Content
+				sawText = true
 				emit(StreamChunk{Kind: StreamChunkText, Text: m.Content})
 			}
 			chunks = append(chunks, m)
 		}
 		sr.Close()
+		if idleFired() {
+			// The watchdog canceled the stream and Recv surfaced it as a
+			// clean EOF — do not mistake that for a complete response.
+			return result, fmt.Errorf("%w", ErrIdleTimeout)
+		}
 
 		final, err := schema.ConcatMessages(chunks)
 		if err != nil {
 			return result, fmt.Errorf("concat stream chunks: %w", err)
 		}
 		result.Usage.add(final.ResponseMeta)
-		if len(final.ToolCalls) == 0 || req.ToolExec == nil || step+1 >= maxToolSteps {
-			result.Text = strings.TrimSpace(result.Text)
-			result.Reasoning = strings.TrimSpace(result.Reasoning)
-			return result, nil
+		if len(final.ToolCalls) > 0 && req.ToolExec != nil && step+1 < maxToolSteps {
+			msgs = append(msgs, final)
+			for _, tc := range final.ToolCalls {
+				emit(StreamChunk{Kind: StreamChunkToolCall, ToolCallID: tc.ID, ToolName: tc.Function.Name, Input: tc.Function.Arguments})
+			}
+			// Tool execution (including approval) may block for minutes with
+			// no model activity; pause the watchdog meanwhile.
+			idleTimer.Stop()
+			msgs, err = execToolCalls(ctx, req, final.ToolCalls, msgs, onChunk)
+			resetIdle()
+			if err != nil {
+				return result, err
+			}
+			continue
 		}
 
-		msgs = append(msgs, final)
-		for _, tc := range final.ToolCalls {
-			emit(StreamChunk{Kind: StreamChunkToolCall, ToolCallID: tc.ID, ToolName: tc.Function.Name, Input: tc.Function.Arguments})
+		finishReason := ""
+		if final.ResponseMeta != nil {
+			finishReason = final.ResponseMeta.FinishReason
 		}
-		msgs, err = execToolCalls(ctx, req, final.ToolCalls, msgs, onChunk)
-		if err != nil {
-			return result, err
+		switch finishReason {
+		case "length":
+			result.Text = strings.TrimSpace(result.Text)
+			result.Reasoning = strings.TrimSpace(result.Reasoning)
+			return result, fmt.Errorf("%w", ErrOutputLimit)
+		case "content_filter":
+			result.Text = strings.TrimSpace(result.Text)
+			result.Reasoning = strings.TrimSpace(result.Reasoning)
+			return result, fmt.Errorf("%w", ErrContentFilter)
 		}
+
+		// Thinking-model death: the stream "ended cleanly" after emitting only
+		// reasoning — no text, no tool calls, no finish reason. Retry this
+		// step once with the same messages (nothing is appended between
+		// attempts); reasoning from the failed attempt stays accumulated.
+		if !sawText && len(final.ToolCalls) == 0 && strings.TrimSpace(result.Reasoning) != "" {
+			if !retriedThinkingStep {
+				retriedThinkingStep = true
+				continue
+			}
+			return result, fmt.Errorf("%w", ErrEmptyResponse)
+		}
+
+		// Ambiguous ending (some text, empty finish reason): accept it as a
+		// completion — retrying would duplicate the text already emitted.
+		result.Text = strings.TrimSpace(result.Text)
+		result.Reasoning = strings.TrimSpace(result.Reasoning)
+		return result, nil
 	}
 }
 

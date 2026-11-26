@@ -18,14 +18,14 @@ func (s *Store) ListModels() ([]ModelRecord, error) {
 	out := make([]ModelRecord, 0, len(records))
 	for _, r := range records {
 		out = append(out, ModelRecord{
-			ID:            r.GetString("key"),
-			Provider:      r.GetString("provider"),
-			DisplayName:   r.GetString("display_name"),
+			ID:             r.GetString("key"),
+			Provider:       r.GetString("provider"),
+			DisplayName:    r.GetString("display_name"),
 			SupportsImages: r.GetBool("supports_images"),
 			SupportsSearch: r.GetBool("supports_search"),
-			Enabled:       r.GetBool("enabled"),
-			CreatedAt:     r.GetString("created"),
-			UpdatedAt:     r.GetString("updated"),
+			Enabled:        r.GetBool("enabled"),
+			CreatedAt:      r.GetString("created"),
+			UpdatedAt:      r.GetString("updated"),
 		})
 	}
 	return out, nil
@@ -118,9 +118,9 @@ func (s *Store) GetAllowedModels(userID string) ([]AllowedModel, error) {
 				continue
 			}
 			out = append(out, AllowedModel{
-				ID:            m.ID,
-				Provider:      m.Provider,
-				DisplayName:   m.DisplayName,
+				ID:             m.ID,
+				Provider:       m.Provider,
+				DisplayName:    m.DisplayName,
 				SupportsImages: m.SupportsImages,
 				SupportsSearch: m.SupportsSearch,
 			})
@@ -140,9 +140,9 @@ func (s *Store) GetAllowedModels(userID string) ([]AllowedModel, error) {
 				continue
 			}
 			out = append(out, AllowedModel{
-				ID:            m.ID,
-				Provider:      m.Provider,
-				DisplayName:   m.DisplayName,
+				ID:             m.ID,
+				Provider:       m.Provider,
+				DisplayName:    m.DisplayName,
 				SupportsImages: m.SupportsImages,
 				SupportsSearch: m.SupportsSearch,
 			})
@@ -164,9 +164,9 @@ func (s *Store) GetAllowedModels(userID string) ([]AllowedModel, error) {
 			continue
 		}
 		out = append(out, AllowedModel{
-			ID:            m.ID,
-			Provider:      m.Provider,
-			DisplayName:   m.DisplayName,
+			ID:             m.ID,
+			Provider:       m.Provider,
+			DisplayName:    m.DisplayName,
 			SupportsImages: m.SupportsImages,
 			SupportsSearch: m.SupportsSearch,
 		})

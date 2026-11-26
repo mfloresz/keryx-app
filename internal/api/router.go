@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
-	"time"
 
 	"keryx-server/internal/ai"
 	"keryx-server/internal/config"
@@ -23,6 +22,7 @@ type Server struct {
 	Store       *store.Store
 	Cfg         *config.Config
 	AIProviders map[string]ai.Provider
+	providersMu sync.RWMutex
 
 	// chatLocks serializes read-modify-write cycles per chat so concurrent
 	// handlers (stream persist, votes, message edits) can't clobber each
@@ -105,8 +105,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/invitations/validate", s.withRateLimit(s.invitationLimiter, clientIP, s.handleInvitationValidate))
 	mux.HandleFunc("POST /api/invitations/accept", s.withRateLimit(s.invitationLimiter, clientIP, s.handleInvitationAccept))
 
+	// Public chat routes
+	mux.HandleFunc("GET /api/public/chats/{id}", s.handleGetPublicChat)
+	mux.HandleFunc("GET /api/public/chats/{id}/attachments/{attachmentId}", s.handleGetPublicChatAttachment)
+
 	// Protected chat routes
 	mux.HandleFunc("GET /api/chats", s.withAuth(s.handleListChats))
+	mux.HandleFunc("GET /api/chats/search", s.withAuth(s.handleSearchChatMessages))
 	mux.HandleFunc("POST /api/chats", s.withAuth(s.handleSaveChat))
 
 	// Agent routes (user)
@@ -116,6 +121,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/agents/{id}", s.withAuth(s.handleUpdateAgent))
 	mux.HandleFunc("DELETE /api/agents/{id}", s.withAuth(s.handleDeleteAgent))
 	mux.HandleFunc("POST /api/agents/{id}/duplicate", s.withAuth(s.handleDuplicateAgent))
+	mux.HandleFunc("POST /api/agents/{id}/knowledge", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleUploadAgentKnowledge)))
+	mux.HandleFunc("GET /api/agents/{id}/knowledge", s.withAuth(s.handleListAgentKnowledge))
+	mux.HandleFunc("DELETE /api/agents/{id}/knowledge/{attachmentId}", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleDeleteAgentKnowledge)))
+
+	// Skills (user): enabled skills available for pinning into a stream.
+	mux.HandleFunc("GET /api/skills", s.withAuth(s.handleListSkills))
+
+	// Automation routes (user)
+	mux.HandleFunc("GET /api/automations", s.withAuth(s.handleListAutomations))
+	mux.HandleFunc("POST /api/automations", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleCreateAutomation)))
+	mux.HandleFunc("PUT /api/automations/{id}", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleUpdateAutomation)))
+	mux.HandleFunc("DELETE /api/automations/{id}", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleDeleteAutomation)))
+	mux.HandleFunc("POST /api/automations/{id}/trigger", s.withAuth(s.withRateLimit(s.accountLimiter, userKey, s.handleTriggerAutomation)))
+	mux.HandleFunc("GET /api/automations/{id}/runs", s.withAuth(s.handleListAutomationRuns))
 
 	// Project workspace routes (user)
 	mux.HandleFunc("GET /api/projects", s.withAuth(s.handleListProjects))
@@ -141,12 +160,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/chats/{id}/votes", s.withAuth(s.handleGetVotes))
 	mux.HandleFunc("POST /api/chats/{id}/votes", s.withAuth(s.handleSaveVote))
 	mux.HandleFunc("POST /api/chats/{id}/stream", s.withAuth(s.withRateLimit(s.streamLimiter, userKey, s.handleChatStream)))
+	// Cancel is deliberately NOT behind the stream limiter: stopping a
+	// stream must never be rate-limited away.
+	mux.HandleFunc("POST /api/chats/{id}/cancel", s.withAuth(s.handleCancelStream))
 	mux.HandleFunc("PATCH /api/chats/{id}/agent", s.withAuth(s.handleUpdateChatAgent))
 	mux.HandleFunc("PATCH /api/chats/{id}/preset", s.withAuth(s.handleUpdateChatPreset))
 	mux.HandleFunc("PATCH /api/chats/{id}/project", s.withAuth(s.handleUpdateChatProject))
 	mux.HandleFunc("GET /api/chats/{id}/stream", s.withAuth(s.handleReconnectStream))
 	mux.HandleFunc("POST /api/chats/{id}/tool-approval", s.withAuth(s.handleToolApproval))
 	mux.HandleFunc("POST /api/chats/{id}/attachments", s.withAuth(s.handleUploadAttachments))
+	mux.HandleFunc("GET /api/chats/{id}/artifacts/{artifactId}", s.withAuth(s.handleGetChatArtifact))
 	mux.HandleFunc("GET /api/attachments/{id}", s.withAuth(s.handleGetAttachment))
 
 	// Model routes
@@ -191,6 +214,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/admin/agents/{id}", s.adminRoute(s.handleAdminUpdateAgent))
 	mux.HandleFunc("DELETE /api/admin/agents/{id}", s.adminRoute(s.handleAdminDeleteAgent))
 
+	// Admin skill routes (instruction packs injected into chat streams)
+	mux.HandleFunc("GET /api/admin/skills", s.adminRoute(s.handleAdminListSkills))
+	mux.HandleFunc("POST /api/admin/skills", s.adminRoute(s.handleAdminCreateSkill))
+	mux.HandleFunc("PUT /api/admin/skills/{id}", s.adminRoute(s.handleAdminUpdateSkill))
+	mux.HandleFunc("DELETE /api/admin/skills/{id}", s.adminRoute(s.handleAdminDeleteSkill))
+
 	// Public web search config endpoint (no auth required — exposes only a
 	// boolean feature flag, and chat pages fetch it without auth headers)
 	mux.HandleFunc("GET /api/web-search/config", s.handleWebSearchConfig)
@@ -225,8 +254,8 @@ func withSecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; "+
 				"frame-src 'self' blob: data:; child-src 'self' blob: data:; "+
-				"img-src 'self' blob: data: attachment: https://models.dev; font-src 'self' data:; "+
-				"media-src 'self' blob: data: attachment:; "+
+				"img-src 'self' blob: data: https:; font-src 'self' data:; "+
+				"media-src 'self' blob: data: https:; "+
 				"connect-src 'self' https://ai-gateway.vercel.sh https://*.supabase.co ws: wss: blob: data:; "+
 				"worker-src 'self' blob:; object-src 'none'; "+
 				"base-uri 'self'; frame-ancestors 'none'; form-action 'self'; manifest-src 'self'")
@@ -313,7 +342,10 @@ func (s *Server) getProviderForModel(modelID, sessionID string) (ai.Provider, st
 	}
 
 	if !ai.IsOpencodeProvider(info.ID) {
-		if p, ok := s.AIProviders[info.ID]; ok {
+		s.providersMu.RLock()
+		p, ok := s.AIProviders[info.ID]
+		s.providersMu.RUnlock()
+		if ok {
 			return p, upstreamModel, nil
 		}
 	}
@@ -325,10 +357,11 @@ func (s *Server) getProviderForModel(modelID, sessionID string) (ai.Provider, st
 
 	var p ai.Provider
 	if info.ID == "google" {
+		// No explicit Timeout: the provider's default (10 minutes) applies,
+		// sized for the full model→tool generation loop.
 		p = &ai.GoogleProvider{
-			APIKey:  apiKey,
-			Model:   upstreamModel,
-			Timeout: 120 * time.Second,
+			APIKey: apiKey,
+			Model:  upstreamModel,
 		}
 	} else {
 		// The OpenCode session groups a chat's requests for prompt-cache
@@ -341,16 +374,24 @@ func (s *Server) getProviderForModel(modelID, sessionID string) (ai.Provider, st
 			APIKey:     apiKey,
 			BaseURL:    info.BaseURL,
 			Model:      upstreamModel,
-			Timeout:    120 * time.Second,
 			Options:    info.Options,
 			SessionID:  session,
 			OpenRouter: info.ID == "openrouter",
 		}
 	}
 	if !ai.IsOpencodeProvider(info.ID) {
+		s.providersMu.Lock()
 		s.AIProviders[info.ID] = p
+		s.providersMu.Unlock()
 	}
 	return p, upstreamModel, nil
+}
+
+// InvalidateProvider clears a cached provider instance (e.g. after API key change).
+func (s *Server) InvalidateProvider(providerID string) {
+	s.providersMu.Lock()
+	delete(s.AIProviders, providerID)
+	s.providersMu.Unlock()
 }
 
 // apiKeyForProvider returns the API key for a provider.
@@ -396,6 +437,11 @@ func (s *Server) apiKeyForProvider(providerID string) (string, error) {
 			return "", fmt.Errorf("InferX API key not configured (set INFERX_API_KEY or configure via admin UI)")
 		}
 		return s.Cfg.InferXAPIKey, nil
+	case "liquid":
+		if s.Cfg.LiquidAPIKey == "" {
+			return "", fmt.Errorf("Liquid AI API key not configured (set LIQUID_API_KEY or configure via admin UI)")
+		}
+		return s.Cfg.LiquidAPIKey, nil
 	case "lmstudio":
 		return "", nil // local, no API key needed
 	default:

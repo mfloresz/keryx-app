@@ -6,6 +6,20 @@ export interface HtmlArtifact {
   code: string;
 }
 
+/**
+ * A model-produced artifact announced by the backend (SSE `artifact` event,
+ * persisted as a `data-artifact` message part). Unlike HtmlArtifact it does
+ * NOT carry the content locally — it is fetched lazily from the backend.
+ */
+export interface ModelArtifact {
+  /** Stable key: the artifactId itself. */
+  key: string;
+  artifactId: string;
+  title: string;
+  type: "html" | "markdown";
+  version: number;
+}
+
 const HTML_FENCE_RE = /```html[^\n]*\n([\s\S]*?)```/g;
 
 /** djb2 hash rendered as unsigned hex — enough to key inline previews. */
@@ -56,4 +70,53 @@ export function extractHtmlArtifacts(
     }
   }
   return out;
+}
+
+interface DataArtifactPart {
+  type: string;
+  data?: {
+    artifactId?: unknown;
+    title?: unknown;
+    artifactType?: unknown;
+    version?: unknown;
+  };
+}
+
+/**
+ * Collect every `data-artifact` part across messages, deduped by artifactId
+ * keeping the max version (a regenerated answer can announce the same
+ * artifact again with a newer version). Order follows first appearance.
+ */
+export function extractModelArtifacts(
+  messages: Array<{ id: string; parts: unknown }>,
+): ModelArtifact[] {
+  const byId = new Map<string, ModelArtifact>();
+  for (const message of messages) {
+    if (!Array.isArray(message?.parts)) continue;
+    for (const part of message.parts as DataArtifactPart[]) {
+      if (part?.type !== "data-artifact") continue;
+      const data = part.data ?? {};
+      const artifactId =
+        typeof data.artifactId === "string" ? data.artifactId : null;
+      if (!artifactId) continue;
+      const version =
+        typeof data.version === "number" ? Math.floor(data.version) : 1;
+      const existing = byId.get(artifactId);
+      if (existing) {
+        if (version > existing.version) existing.version = version;
+        continue;
+      }
+      byId.set(artifactId, {
+        key: artifactId,
+        artifactId,
+        title:
+          typeof data.title === "string" && data.title
+            ? data.title
+            : artifactId,
+        type: data.artifactType === "markdown" ? "markdown" : "html",
+        version: Math.max(1, version),
+      });
+    }
+  }
+  return [...byId.values()];
 }

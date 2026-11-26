@@ -133,6 +133,79 @@ func validateAttachment(filename string, data []byte) (mediaType string, ok bool
 	}
 	return "", false
 }
+
+// saveUploadedFiles validates and stores the multipart files of an upload
+// request (field "files" or "file", up to 3 files, optional Markdown
+// conversions in "converted_{i}"). chatID may be empty for files not bound to
+// a chat (e.g. agent knowledge). On failure it writes the error response and
+// returns nil, false.
+func (s *Server) saveUploadedFiles(w http.ResponseWriter, r *http.Request, chatID, ownerID string) ([]*store.AttachmentInfo, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentsPerRequest*(maxAttachmentBytes+maxConvertedBytes)+(1<<20))
+	if err := r.ParseMultipartForm(maxAttachmentsPerRequest * maxAttachmentBytes); err != nil {
+		errorResponse(w, "Request too large or invalid multipart body", http.StatusBadRequest)
+		return nil, false
+	}
+
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
+		files = r.MultipartForm.File["file"]
+	}
+	if len(files) == 0 || len(files) > maxAttachmentsPerRequest {
+		errorResponse(w, "Provide between 1 and 3 files", http.StatusBadRequest)
+		return nil, false
+	}
+
+	uploaded := make([]*store.AttachmentInfo, 0, len(files))
+	for i, fh := range files {
+		if fh.Size > maxAttachmentBytes {
+			errorResponse(w, "File exceeds the 20MB limit: "+fh.Filename, http.StatusBadRequest)
+			return nil, false
+		}
+
+		f, err := fh.Open()
+		if err != nil {
+			errorResponse(w, "Failed to read file: "+fh.Filename, http.StatusBadRequest)
+			return nil, false
+		}
+		data, err := io.ReadAll(io.LimitReader(f, maxAttachmentBytes+1))
+		f.Close()
+		if err != nil {
+			errorResponse(w, "Failed to read file: "+fh.Filename, http.StatusBadRequest)
+			return nil, false
+		}
+
+		mediaType, ok := validateAttachment(fh.Filename, data)
+		if !ok {
+			errorResponse(w, "File type not allowed: "+sanitizeAttachmentFilename(fh.Filename), http.StatusBadRequest)
+			return nil, false
+		}
+
+		safeName := sanitizeAttachmentFilename(fh.Filename)
+		var convertedName string
+		var converted []byte
+		if vals := r.MultipartForm.Value["converted_"+strconv.Itoa(i)]; len(vals) > 0 && vals[0] != "" {
+			if !utf8.ValidString(vals[0]) {
+				errorResponse(w, "Converted document is not valid UTF-8: "+safeName, http.StatusBadRequest)
+				return nil, false
+			}
+			if len(vals[0]) > maxConvertedBytes {
+				errorResponse(w, "Converted document exceeds the 50MB limit: "+safeName, http.StatusBadRequest)
+				return nil, false
+			}
+			converted = []byte(vals[0])
+			convertedName = safeName + ".md"
+		}
+
+		info, err := s.Store.SaveAttachment(chatID, ownerID, safeName, mediaType, data, convertedName, converted)
+		if err != nil {
+			internalError(w, r, "Failed to save attachment", err)
+			return nil, false
+		}
+		uploaded = append(uploaded, info)
+	}
+	return uploaded, true
+}
+
 // handleUploadAttachments accepts a multipart form with up to 3 files under
 // the "files" field, each optionally paired with a Markdown conversion in the
 // "converted_{i}" field (same index), stores them in PocketBase, and returns
@@ -146,68 +219,9 @@ func (s *Server) handleUploadAttachments(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxAttachmentsPerRequest*(maxAttachmentBytes+maxConvertedBytes)+(1<<20))
-	if err := r.ParseMultipartForm(maxAttachmentsPerRequest * maxAttachmentBytes); err != nil {
-		errorResponse(w, "Request too large or invalid multipart body", http.StatusBadRequest)
+	uploaded, ok := s.saveUploadedFiles(w, r, chatID, userID)
+	if !ok {
 		return
-	}
-
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		files = r.MultipartForm.File["file"]
-	}
-	if len(files) == 0 || len(files) > maxAttachmentsPerRequest {
-		errorResponse(w, "Provide between 1 and 3 files", http.StatusBadRequest)
-		return
-	}
-
-	uploaded := make([]*store.AttachmentInfo, 0, len(files))
-	for i, fh := range files {
-		if fh.Size > maxAttachmentBytes {
-			errorResponse(w, "File exceeds the 20MB limit: "+fh.Filename, http.StatusBadRequest)
-			return
-		}
-
-		f, err := fh.Open()
-		if err != nil {
-			errorResponse(w, "Failed to read file: "+fh.Filename, http.StatusBadRequest)
-			return
-		}
-		data, err := io.ReadAll(io.LimitReader(f, maxAttachmentBytes+1))
-		f.Close()
-		if err != nil {
-			errorResponse(w, "Failed to read file: "+fh.Filename, http.StatusBadRequest)
-			return
-		}
-
-		mediaType, ok := validateAttachment(fh.Filename, data)
-		if !ok {
-			errorResponse(w, "File type not allowed: "+sanitizeAttachmentFilename(fh.Filename), http.StatusBadRequest)
-			return
-		}
-
-		safeName := sanitizeAttachmentFilename(fh.Filename)
-		var convertedName string
-		var converted []byte
-		if vals := r.MultipartForm.Value["converted_"+strconv.Itoa(i)]; len(vals) > 0 && vals[0] != "" {
-			if !utf8.ValidString(vals[0]) {
-				errorResponse(w, "Converted document is not valid UTF-8: "+safeName, http.StatusBadRequest)
-				return
-			}
-			if len(vals[0]) > maxConvertedBytes {
-				errorResponse(w, "Converted document exceeds the 50MB limit: "+safeName, http.StatusBadRequest)
-				return
-			}
-			converted = []byte(vals[0])
-			convertedName = safeName + ".md"
-		}
-
-		info, err := s.Store.SaveAttachment(chatID, userID, safeName, mediaType, data, convertedName, converted)
-		if err != nil {
-			internalError(w, r, "Failed to save attachment", err)
-			return
-		}
-		uploaded = append(uploaded, info)
 	}
 
 	jsonResponse(w, map[string]any{"attachments": uploaded}, http.StatusOK)
@@ -238,6 +252,36 @@ func (s *Server) handleGetAttachment(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": info.Filename}))
 	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Write(data)
+}
+
+// handleGetPublicChatAttachment serves an attachment that belongs to a public
+// chat to unauthenticated visitors. It powers the read-only share page, where
+// images must load without a session.
+func (s *Server) handleGetPublicChatAttachment(w http.ResponseWriter, r *http.Request) {
+	chatID := r.PathValue("id")
+	attachmentID := r.PathValue("attachmentId")
+
+	info, data, err := s.Store.GetPublicChatAttachment(chatID, attachmentID)
+	if err != nil {
+		errorResponse(w, "Attachment not found", http.StatusNotFound)
+		return
+	}
+
+	mediaType := info.MediaType
+	if mediaType == "" {
+		mediaType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mediaType)
+	// Only images render inline; anything else downloads so e.g. a PDF can't
+	// execute script in the app's origin.
+	disposition := "attachment"
+	if strings.HasPrefix(mediaType, "image/") {
+		disposition = "inline"
+	}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": info.Filename}))
+	w.Header().Set("Cache-Control", "public, max-age=3600")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Write(data)
 }

@@ -144,7 +144,30 @@
     "byGlobal": "Global",
     "byCatalog": "Catálogo",
     "preview": "Chatear con el agente",
-    "editor": "Editar agente"
+    "editor": "Editar agente",
+    "toolsSection": {
+      "label": "Herramientas",
+      "webSearch": "Búsqueda web",
+      "updateArtifact": "Actualizar artefactos",
+      "hint": "Déjalo vacío para mantener los valores por defecto del agente. Si eliges alguna, el agente se restringe solo a esas."
+    },
+    "skillsSection": {
+      "label": "Skills",
+      "emptyHint": "Aún no hay skills disponibles. Las skills las configura el administrador."
+    },
+    "starterPrompts": {
+      "label": "Prompts iniciales",
+      "placeholder": "p. ej. Resume mi semana",
+      "add": "Añadir prompt"
+    },
+    "knowledge": {
+      "label": "Conocimiento",
+      "hint": "Archivos que el agente puede consultar en cada conversación. Comparten un presupuesto de contexto, así que mantén la lista corta.",
+      "add": "Añadir archivos",
+      "uploading": "Subiendo...",
+      "uploadFailed": "No se pudieron subir los archivos",
+      "deleteFailed": "No se pudo eliminar el archivo"
+    }
   },
   "chat": {
     "welcomeTitle": "Hola soy Keryx, ¿En qué puedo ayudarte?",
@@ -178,6 +201,7 @@
     "failedSwitchBranch": "Error al cambiar de rama",
     "failedFork": "Error al crear nuevo chat desde el mensaje",
     "failedVote": "Error al votar",
+    "showEarlier": "Mostrar mensajes anteriores",
     "unsupportedImageTitle": "Imagen no soportada",
     "unsupportedImageDescription": "El modelo seleccionado no soporta imagenes. Solo se permiten documentos de texto.",
     "unsupportedCloudAttachmentDescription": "En modo cloud, los adjuntos deben cargarse como archivos locales integrados. Vuelve a adjuntar el archivo e intentalo de nuevo.",
@@ -234,6 +258,14 @@
     },
     "attachFiles": "Adjuntar archivos",
     "addTools": "Añadir herramientas",
+    "share": "Compartir",
+    "unshare": "Dejar de compartir",
+    "shareLinkCopied": "Enlace de acceso copiado al portapapeles",
+    "failedShare": "No se pudo actualizar el acceso compartido",
+    "skills": {
+      "menuLabel": "Skills",
+      "remove": "Quitar skill"
+    },
     "removeAttachment": "Quitar adjunto",
     "dropFiles": "Suelta los archivos para adjuntarlos"
   },
@@ -265,6 +297,10 @@
     "version": "Versión del artefacto",
     "previous": "Artefacto anterior",
     "next": "Artefacto siguiente",
+    "previousVersion": "Versión anterior",
+    "nextVersion": "Versión siguiente",
+    "loading": "Cargando artefacto…",
+    "fetchError": "No se pudo cargar el artefacto.",
     "code": "Código",
     "download": "Descargar HTML",
     "openNewTab": "Abrir en pestaña nueva",
@@ -556,6 +592,12 @@
       "passwordRequired": "La contraseña es obligatoria"
     }
   },
+  "share": {
+    "badge": "Compartido",
+    "untitled": "Chat sin título",
+    "notFound": "Esta conversación ya no está disponible o nunca se compartió.",
+    "loadError": "No se pudo cargar la conversación compartida."
+  },
   "projects": {
     "title": "Proyectos",
     "subtitle": "Espacios de trabajo cerrados donde tus asistentes leen, crean y editan archivos.",
@@ -595,5 +637,72 @@
     "readFileFailed": "No se pudo leer el archivo",
     "writeFileFailed": "No se pudo guardar el archivo",
     "fileTooLarge": "El archivo supera el límite de tamaño"
+  },
+  "automations": {
+    "title": "Automatizaciones",
+    "description": "Ejecuta este agente en un horario o mediante webhook.",
+    "empty": "Aún no hay automatizaciones.",
+    "create": "Nueva automatización",
+    "createTitle": "Nueva automatización",
+    "schedule": "Horario",
+    "daily": "Diario",
+    "dailyTime": "Hora",
+    "everyMinutes": "Cada {value} min",
+    "everyHour": "Cada hora",
+    "everyHours": "Cada {value} h",
+    "dailyAt": "Diario a las {time}",
+    "taskPrompt": "Prompt de la tarea",
+    "taskPromptPlaceholder": "¿Qué debe hacer el agente? Usa {date} y {time} para insertar la fecha y hora actuales.",
+    "webhookUrl": "URL de webhook",
+    "webhookUrlPlaceholder": "https://example.com/hook (opcional)",
+    "allowWriteTools": "Permitir herramientas de escritura",
+    "allowWriteToolsWarning": "Permite escribir archivos sin tu aprobación.",
+    "enabled": "Habilitada",
+    "runNow": "Ejecutar ahora",
+    "runTriggered": "Automatización ejecutada",
+    "runFailed": "No se pudo ejecutar la automatización",
+    "openChat": "Abrir chat",
+    "failures": "{count} fallos consecutivos",
+    "statusSuccess": "Última ejecución OK",
+    "statusError": "Con fallos",
+    "statusPaused": "Pausada",
+    "statusPending": "Sin ejecutar",
+    "deleteTitle": "¿Eliminar esta automatización?",
+    "deleteDescription": "El horario dejará de ejecutarse. El chat y sus mensajes se conservan.",
+    "loadFailed": "No se pudieron cargar las automatizaciones",
+    "createFailed": "No se pudo crear la automatización",
+    "updateFailed": "No se pudo actualizar la automatización",
+    "deleteFailed": "No se pudo eliminar la automatización"
+  },
+  "markdown": {
+    "copy": "Copiar código",
+    "copied": "Copiado",
+    "download": "Descargar código",
+    "diagram": "Diagrama",
+    "drawingDiagram": "Dibujando diagrama…",
+    "diagramFailed": "No se pudo dibujar el diagrama: {reason}",
+    "enlarge": "Ampliar diagrama",
+    "showSource": "Mostrar código",
+    "showDiagram": "Mostrar diagrama",
+    "copySource": "Copiar código",
+    "downloadSvg": "Descargar SVG",
+    "zoomIn": "Acercar",
+    "zoomOut": "Alejar",
+    "fit": "Ajustar a la ventana",
+    "actualSize": "Tamaño real",
+    "close": "Cerrar",
+    "fileTree": "Árbol de archivos",
+    "scrollableTable": "Tabla desplazable",
+    "scrollableCode": "Código desplazable",
+    "variants": "Variantes",
+    "taskDone": "Tarea completada",
+    "taskOpen": "Tarea incompleta",
+    "callouts": {
+      "note": "Nota",
+      "tip": "Consejo",
+      "important": "Importante",
+      "warning": "Advertencia",
+      "caution": "Precaución"
+    }
   }
 }

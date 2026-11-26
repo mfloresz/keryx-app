@@ -38,10 +38,23 @@ func buildSchemaMessages(req ChatRequest, inlineFileParts bool) []*schema.Messag
 	for _, m := range req.Messages {
 		switch m.Role {
 		case "assistant":
-			if strings.TrimSpace(m.Content) == "" {
+			if strings.TrimSpace(m.Content) == "" && len(m.ToolCalls) == 0 {
 				continue
 			}
-			msgs = append(msgs, schema.AssistantMessage(m.Content, nil))
+			var toolCalls []schema.ToolCall
+			for _, tc := range m.ToolCalls {
+				toolCalls = append(toolCalls, schema.ToolCall{
+					ID: tc.ID,
+					Function: schema.FunctionCall{
+						Name:      tc.Name,
+						Arguments: tc.Arguments,
+					},
+				})
+			}
+			msgs = append(msgs, schema.AssistantMessage(m.Content, toolCalls))
+			for _, tr := range m.ToolResults {
+				msgs = append(msgs, schema.ToolMessage(tr.Output, tr.ToolCallID, schema.WithToolName(tr.ToolName)))
+			}
 		case "user":
 			msg := userSchemaMessage(m, inlineFileParts)
 			if msg == nil {

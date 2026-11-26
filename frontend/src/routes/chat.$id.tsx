@@ -6,6 +6,8 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import { useAISDKRuntime } from "@assistant-ui/ai-sdk";
 import type { FileUIPart, UIMessage } from "ai";
 import { toast } from "sonner";
 
@@ -47,10 +49,14 @@ import {
 import { useI18n } from "#/i18n";
 import { getChatRepository, getAuthAdapter } from "#/services/runtime";
 import { annotateBranchMetadata } from "#/shared/chat-core";
-import { extractHtmlArtifacts } from "#/utils/html-artifacts";
+import { extractHtmlArtifacts, extractModelArtifacts } from "#/utils/html-artifacts";
 import { useArtifactStore } from "#/stores/artifact";
 import { watchChatTitle } from "#/services/title-watcher";
-import { getChatStreamApi, getChatTransportHeaders } from "#/services/chat-transport";
+import {
+  cancelChatStream,
+  getChatStreamApi,
+  getChatTransportHeaders,
+} from "#/services/chat-transport";
 import { respondToToolApproval } from "#/services/tool-approval";
 import { KeryxChatTransport } from "#/services/keryx-chat-transport";
 import { useAuth } from "#/stores/auth";
@@ -58,6 +64,7 @@ import { useChatStore } from "#/stores/chat";
 import { useProjectsStore } from "#/stores/projects";
 import { chatSearchSchema } from "#/routes/-search";
 import { getUserFacingChatError } from "#/utils/chat-errors";
+import { buildChatRequestBody } from "#/utils/chat-request";
 
 export const Route = createFileRoute("/chat/$id")({
   validateSearch: chatSearchSchema,
@@ -101,6 +108,12 @@ interface LoadedChat {
   /** True when the server has not generated a title yet. */
   titleIsEmpty: boolean;
 }
+
+/**
+ * How many trailing messages render by default; "Show earlier messages"
+ * extends the window by the same amount per click.
+ */
+const MESSAGE_WINDOW = 30;
 
 /**
  * Outer component: resolves the chat before the conversation mounts.
@@ -243,6 +256,12 @@ function ChatConversation({
 
   const [editMessage, setEditMessage] = React.useState<UIMessage | null>(null);
   const [editText, setEditText] = React.useState("");
+  // Starter prompt chips fill the composer on click; the nonce makes each
+  // click unique so re-clicking the same chip still re-fills the text.
+  const [prefill, setPrefill] = React.useState<{
+    text: string;
+    nonce: number;
+  } | null>(null);
   const [createProjectOpen, setCreateProjectOpen] = React.useState(false);
   const [newProjectName, setNewProjectName] = React.useState("");
   const [newProjectDescription, setNewProjectDescription] = React.useState("");
@@ -308,28 +327,42 @@ function ChatConversation({
 
 
   // ---- The chat session ----
-  const transport = React.useMemo(
-    () =>
-      new KeryxChatTransport({
-        api: getChatStreamApi(chatId),
-        headers: getChatTransportHeaders,
-      }),
-    [chatId],
-  );
+  // A page reload no longer cancels a server-side generation, so the
+  // transport carries how much assistant text the rehydrated transcript
+  // already contains: the reconnect then asks the backend to stream only
+  // the remainder instead of replaying the full accumulated text.
+  const transport = React.useMemo(() => {
+    const lastLoaded = loaded.messages.at(-1);
+    // The backend `since` cursor counts UTF-8 bytes (Go string length), so
+    // the client must count bytes too — JS `.length` (UTF-16 code units)
+    // would slice non-ASCII answers mid-character on resume.
+    const resumeTextLength =
+      lastLoaded?.role === "assistant"
+        ? (lastLoaded.parts ?? [])
+            .filter((p) => p.type === "text")
+            .reduce(
+              (sum, p) =>
+                sum +
+                ("text" in p
+                  ? new TextEncoder().encode(p.text ?? "").length
+                  : 0),
+              0,
+            )
+        : 0;
+    return new KeryxChatTransport({
+      api: getChatStreamApi(chatId),
+      headers: getChatTransportHeaders,
+      resumeTextLength,
+    });
+  }, [chatId, loaded.messages]);
 
-  const {
-    messages,
-    sendMessage,
-    regenerate,
-    status,
-    stop,
-    setMessages,
-    clearError,
-    addToolApprovalResponse,
-  } = useChat<UIMessage>({
+  const chat = useChat<UIMessage>({
     id: chatId,
     messages: loaded.messages,
     transport,
+    // Opt-in to automatic reconnection on mount when a server-side run is
+    // still streaming (the transport implements reconnectToStream).
+    resume: true,
     onError(error) {
       let message = error.message;
       if (typeof message === "string" && message[0] === "{") {
@@ -342,6 +375,21 @@ function ChatConversation({
       toast.error(getUserFacingChatError(message, t));
     },
   });
+  const {
+    messages,
+    sendMessage,
+    status,
+    setMessages,
+    clearError,
+    addToolApprovalResponse,
+  } = chat;
+
+  // assistant-ui runtime over the AI SDK chat. The transport remains the
+  // single streaming path; the runtime lends its cancel bookkeeping and
+  // branch-aware regeneration (startRun) to the existing UI below. The
+  // provider also makes assistant-ui primitives available for incremental
+  // adoption in the message rows.
+  const runtime = useAISDKRuntime(chat);
 
   const isBusy = status === "streaming" || status === "submitted";
 
@@ -381,13 +429,16 @@ function ChatConversation({
     }
   }, [messages, branches, chatId]);
 
-  // Artifacts are derived from the message text, so they stay consistent
-  // with the transcript as it streams.
+  // Artifacts are derived from the message text and the data-artifact
+  // parts, so they stay consistent with the transcript as it streams.
   React.useEffect(() => {
-    const artifacts = extractHtmlArtifacts(
-      (annotatedMessages as unknown as Array<{ id: string; parts: unknown }>) ?? [],
+    const rawMessages =
+      (annotatedMessages as unknown as Array<{ id: string; parts: unknown }>) ??
+      [];
+    artifactStore.syncItems(
+      extractHtmlArtifacts(rawMessages),
+      extractModelArtifacts(rawMessages),
     );
-    artifactStore.syncItems(artifacts);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [annotatedMessages]);
 
@@ -414,6 +465,7 @@ function ChatConversation({
         pendingText?: string;
         pendingWebSearch?: boolean;
         pendingFiles?: unknown[];
+        pendingPinnedSkills?: string[];
       }
     | undefined;
   const pendingSent = React.useRef(false);
@@ -425,8 +477,25 @@ function ChatConversation({
 
     void sendMessage(
       { text, files: (pending.pendingFiles ?? []) as never[] },
-      { body: buildRequestBody(pending.pendingWebSearch ?? false) },
+      {
+        body: buildRequestBody(
+          pending.pendingWebSearch ?? false,
+          pending.pendingPinnedSkills ?? [],
+        ),
+      },
     );
+
+    // The pending message lives in the history entry's state, which the
+    // browser restores on a reload — and a fresh mount resets the ref
+    // above, so the send would replay. Replacing the entry with empty
+    // state consumes the message for good.
+    void navigate({
+      to: "/chat/$id",
+      params: { id: chatId },
+      search: true,
+      replace: true,
+      state: {},
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending?.pendingText]);
 
@@ -497,120 +566,146 @@ function ChatConversation({
   // ---- Tool approvals ----
   // The backend holds the stream open while a write is pending approval.
   // Answering resumes it; the SDK then continues the model turn.
-  async function handleToolApproval(payload: {
-    approvalId: string;
-    approved: boolean;
-  }) {
-    try {
-      await respondToToolApproval(chatId, payload);
-      await addToolApprovalResponse({
-        id: payload.approvalId,
-        approved: payload.approved,
-      });
-    } catch (err) {
-      toast.error(
-        getUserFacingChatError(
-          err instanceof Error ? err.message : null,
-          t,
-        ),
-      );
-    }
-  }
+  // Stabilized with useCallback: the callback is a prop of every message
+  // row, and a new identity would break ChatMessageItem's memoization on
+  // every streamed token.
+  const handleToolApproval = React.useCallback(
+    (payload: { approvalId: string; approved: boolean }) => {
+      void (async () => {
+        try {
+          await respondToToolApproval(chatId, payload);
+          await addToolApprovalResponse({
+            id: payload.approvalId,
+            approved: payload.approved,
+          });
+        } catch (err) {
+          toast.error(
+            getUserFacingChatError(
+              err instanceof Error ? err.message : null,
+              t,
+            ),
+          );
+        }
+      })();
+    },
+    [chatId, addToolApprovalResponse, t],
+  );
 
   // ---- Request body shared by submit, edit and regenerate ----
   const buildRequestBody = React.useCallback(
-    (webSearch: boolean) => ({
-      preset: selectedPreset,
-      webSearch,
-      language: locale,
-      // Dynamic user context the backend injects into its system prompt.
-      username: userName || userEmail || "",
-      datetime: new Date().toISOString(),
-      timezone:
-        Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-      ...(selectedAgentId ? { agentId: selectedAgentId } : {}),
-      ...(selectedProjectId ? { projectId: selectedProjectId } : {}),
-    }),
+    (webSearch: boolean, pinnedSkills: string[] = []) =>
+      buildChatRequestBody({
+        preset: selectedPreset,
+        webSearch,
+        language: locale,
+        username: userName || userEmail || "",
+        agentId: selectedAgentId,
+        projectId: selectedProjectId,
+        pinnedSkills,
+      }),
     [selectedPreset, locale, userName, userEmail, selectedAgentId, selectedProjectId],
   );
 
-  async function handleSubmit({
-    text,
-    files,
-    webSearch,
-  }: {
-    text: string;
-    files: PendingAttachment[];
-    webSearch: boolean;
-  }) {
-    try {
-      // Files are uploaded against the chat, then referenced by storage
-      // key: the transport maps the parts to attachment references and the
-      // backend resolves the bytes.
-      let fileParts: FileUIPart[] = [];
+  // All handlers below are message-row props: stable identities are what
+  // let React.memo skip re-rendering every message on each streamed token.
+  const handleSubmit = React.useCallback(
+    ({
+      text,
+      files,
+      webSearch,
+      pinnedSkills,
+    }: {
+      text: string;
+      files: PendingAttachment[];
+      webSearch: boolean;
+      pinnedSkills: string[];
+    }) => {
+      void (async () => {
+        try {
+          // Files are uploaded against the chat, then referenced by storage
+          // key: the transport maps the parts to attachment references and the
+          // backend resolves the bytes.
+          let fileParts: FileUIPart[] = [];
 
-      if (files.length) {
-        const attachmentRepo = await import(
-          "#/adapters/api/api-attachment-repository"
-        ).then((m) => m.apiAttachmentRepository);
-        const uploaded = await attachmentRepo.persistFiles(
-          chatId,
-          files.map((file) => ({
-            file: file.file,
-            filename: file.filename,
-            mediaType: file.mediaType,
-            convertedMarkdown: file.convertedMarkdown,
-          })),
-        );
-        fileParts = uploaded as typeof fileParts;
-      }
+          if (files.length) {
+            const attachmentRepo = await import(
+              "#/adapters/api/api-attachment-repository"
+            ).then((m) => m.apiAttachmentRepository);
+            const uploaded = await attachmentRepo.persistFiles(
+              chatId,
+              files.map((file) => ({
+                file: file.file,
+                filename: file.filename,
+                mediaType: file.mediaType,
+                convertedMarkdown: file.convertedMarkdown,
+              })),
+            );
+            fileParts = uploaded as typeof fileParts;
+          }
 
-      // A previous failure leaves the chat in the "error" state; clearing
-      // it lets the user retry without reloading the page.
-      if (status === "error") clearError();
+          // A previous failure leaves the chat in the "error" state; clearing
+          // it lets the user retry without reloading the page.
+          if (status === "error") clearError();
 
-      void sendMessage(
-        { text, files: fileParts },
-        { body: buildRequestBody(webSearch) },
-      );
-    } catch (err) {
-      toast.error(
-        getUserFacingChatError(
-          err instanceof Error ? err.message : null,
-          t,
-        ),
-      );
-    }
-  }
+          void sendMessage(
+            { text, files: fileParts },
+            { body: buildRequestBody(webSearch, pinnedSkills) },
+          );
+        } catch (err) {
+          toast.error(
+            getUserFacingChatError(
+              err instanceof Error ? err.message : null,
+              t,
+            ),
+          );
+        }
+      })();
+    },
+    [chatId, status, clearError, sendMessage, buildRequestBody, t],
+  );
 
-  async function handleRegenerate(message: UIMessage) {
-    try {
-      const repo = await chatRepository;
-      await repo.deleteMessage(chatId, {
-        messageId: message.id,
-        type: "regenerate",
-      });
-    } catch {
-      toast.error(t("chat.failedRegenerate"));
-      return;
-    }
-    void regenerate({
-      messageId: message.id,
-      body: buildRequestBody(false),
-    });
-    // The branch snapshot is written server-side; pick it up once the
-    // regeneration has settled.
-    setTimeout(() => void refreshBranches(), 800);
-  }
+  const handleRegenerate = React.useCallback(
+    (message: UIMessage) => {
+      void (async () => {
+        try {
+          const repo = await chatRepository;
+          await repo.deleteMessage(chatId, {
+            messageId: message.id,
+            type: "regenerate",
+          });
+        } catch {
+          toast.error(t("chat.failedRegenerate"));
+          return;
+        }
+        // Regenerate runs through the runtime so the replaced response is
+        // recorded as a branch instead of a foreign delete. The parent (the
+        // turn the response answers) is read from the runtime state — not
+        // the messages prop — so the callback identity stays stable across
+        // streamed tokens. The request config travels as runConfig, which
+        // the transport picks up from metadata.
+        const threadMessages = runtime.thread.getState().messages;
+        const index = threadMessages.findIndex((m) => m.id === message.id);
+        const parentId = index > 0 ? threadMessages[index - 1]!.id : null;
+        runtime.thread.startRun({
+          parentId,
+          runConfig: { custom: buildRequestBody(false) },
+        });
+        // The branch snapshot is written server-side; pick it up once the
+        // regeneration has settled.
+        setTimeout(() => void refreshBranches(), 800);
+      })();
+    },
+    [chatRepository, chatId, t, buildRequestBody, refreshBranches, runtime],
+  );
 
-  async function handleEdit(message: UIMessage) {
+  const handleEdit = React.useCallback((message: UIMessage) => {
     const text = message.parts
       .filter((p) => p.type === "text")
       .map((p) => ("text" in p ? p.text : ""))
       .join("");
     setEditMessage(message);
     setEditText(text);
-  }
+  }, []);
 
   async function confirmEdit() {
     if (!editMessage) return;
@@ -650,52 +745,64 @@ function ChatConversation({
     }
   }, [chatRepository, chatId]);
 
-  async function handleBranchChange(payload: {
-    rootMessageId: string;
-    snapshotId: string;
-  }) {
-    try {
-      const repo = await chatRepository;
-      const updated = await repo.switchBranch(chatId, payload);
-      setMessages((updated.messages ?? []) as unknown as UIMessage[]);
-      // The active snapshot moved, so the navigator has to follow.
-      setBranches((updated?.branches ?? undefined) as
-        | Record<string, unknown>
-        | undefined);
-      await loadVotes();
-    } catch {
-      toast.error(t("chat.failedSwitchBranch"));
-    }
-  }
+  const handleBranchChange = React.useCallback(
+    (payload: { rootMessageId: string; snapshotId: string }) => {
+      void (async () => {
+        try {
+          const repo = await chatRepository;
+          const updated = await repo.switchBranch(chatId, payload);
+          setMessages((updated.messages ?? []) as unknown as UIMessage[]);
+          // The active snapshot moved, so the navigator has to follow.
+          setBranches((updated?.branches ?? undefined) as
+            | Record<string, unknown>
+            | undefined);
+          await loadVotes();
+        } catch {
+          toast.error(t("chat.failedSwitchBranch"));
+        }
+      })();
+    },
+    [chatRepository, chatId, setMessages, loadVotes, t],
+  );
 
-  async function handleFork(message: UIMessage) {
-    try {
-      const repo = await chatRepository;
-      const newChat = await repo.forkChat(chatId, message.id);
-      chatStore.addChat({
-        id: newChat.id,
-        label: newChat.title || "Untitled",
-        to: `/chat/${newChat.id}`,
-        createdAt: newChat.createdAt || new Date().toISOString(),
-      });
-      void navigate({ to: "/chat/$id", params: { id: newChat.id } });
-    } catch {
-      toast.error(t("chat.failedFork"));
-    }
-  }
+  const handleFork = React.useCallback(
+    (message: UIMessage) => {
+      void (async () => {
+        try {
+          const repo = await chatRepository;
+          const newChat = await repo.forkChat(chatId, message.id);
+          chatStore.addChat({
+            id: newChat.id,
+            label: newChat.title || "Untitled",
+            to: `/chat/${newChat.id}`,
+            createdAt: newChat.createdAt || new Date().toISOString(),
+          });
+          void navigate({ to: "/chat/$id", params: { id: newChat.id } });
+        } catch {
+          toast.error(t("chat.failedFork"));
+        }
+      })();
+    },
+    [chatRepository, chatId, chatStore, navigate, t],
+  );
 
-  async function handleVote(message: UIMessage, isUpvoted: boolean) {
-    try {
-      const repo = await chatRepository;
-      await repo.saveVote(chatId, {
-        messageId: message.id,
-        isUpvoted,
-      });
-      setVotes((current) => ({ ...current, [message.id]: isUpvoted }));
-    } catch {
-      // Vote failures are non-fatal.
-    }
-  }
+  const handleVote = React.useCallback(
+    (message: UIMessage, isUpvoted: boolean) => {
+      void (async () => {
+        try {
+          const repo = await chatRepository;
+          await repo.saveVote(chatId, {
+            messageId: message.id,
+            isUpvoted,
+          });
+          setVotes((current) => ({ ...current, [message.id]: isUpvoted }));
+        } catch {
+          // Vote failures are non-fatal.
+        }
+      })();
+    },
+    [chatRepository, chatId],
+  );
 
   async function confirmCreateProject() {
     const name = newProjectName.trim();
@@ -721,15 +828,70 @@ function ChatConversation({
   const showThinking =
     isBusy && lastMessage?.role === "assistant" && !lastMessage.parts?.length;
 
+  // Starter prompt chips: only when the selected agent suggests them and
+  // the conversation is still empty. Clicking fills the composer.
+  const selectedAgent =
+    agents.find((a) => a.id === selectedAgentId) ?? null;
+  const starterPrompts =
+    messages.length === 0
+      ? (selectedAgent?.starterPrompts ?? []).filter(Boolean)
+      : [];
+
+  // ChatGPT-style windowing: only the last WINDOW_STEP messages render.
+  // Long transcripts would otherwise mount every markdown document at once.
+  // The route remounts on chat switch, so the window needs no reset.
+  const [visibleCount, setVisibleCount] = React.useState(MESSAGE_WINDOW);
+  const visibleMessages = React.useMemo(
+    () => annotatedMessages.slice(-visibleCount),
+    [annotatedMessages, visibleCount],
+  );
+  const hiddenCount = annotatedMessages.length - visibleMessages.length;
+
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      {/* Thread and composer */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+    <AssistantRuntimeProvider runtime={runtime}>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Thread and composer */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
       <MessageScrollerProvider>
         <MessageScroller className="min-h-0 flex-1">
           <MessageScrollerViewport>
             <MessageScrollerContent className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
-              {annotatedMessages.map((message) => (
+              {hiddenCount > 0 ? (
+                <MessageScrollerItem messageId="show-earlier">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mx-auto"
+                    onClick={() => setVisibleCount((count) => count + MESSAGE_WINDOW)}
+                  >
+                    {t("chat.showEarlier")}
+                  </Button>
+                </MessageScrollerItem>
+              ) : null}
+
+              {starterPrompts.length > 0 ? (
+                <MessageScrollerItem messageId="starter-prompts">
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {starterPrompts.map((prompt) => (
+                      <Button
+                        key={prompt}
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setPrefill((current) => ({
+                            text: prompt,
+                            nonce: (current?.nonce ?? 0) + 1,
+                          }))
+                        }
+                      >
+                        {prompt}
+                      </Button>
+                    ))}
+                  </div>
+                </MessageScrollerItem>
+              ) : null}
+
+              {visibleMessages.map((message) => (
                 <MessageScrollerItem
                   key={message.id}
                   messageId={message.id}
@@ -741,16 +903,12 @@ function ChatConversation({
                       isBusy && message.id === lastMessage?.id
                     }
                     vote={votes[message.id] ?? null}
-                    onEdit={(message) => void handleEdit(message)}
-                    onRegenerate={(message) => void handleRegenerate(message)}
-                    onFork={(message) => void handleFork(message)}
-                    onVote={(message, upvoted) => void handleVote(message, upvoted)}
-                    onBranchChange={(payload) =>
-                      void handleBranchChange(payload)
-                    }
-                    onToolApproval={(payload) =>
-                      void handleToolApproval(payload)
-                    }
+                    onEdit={handleEdit}
+                    onRegenerate={handleRegenerate}
+                    onFork={handleFork}
+                    onVote={handleVote}
+                    onBranchChange={handleBranchChange}
+                    onToolApproval={handleToolApproval}
                   />
                 </MessageScrollerItem>
               ))}
@@ -782,8 +940,15 @@ function ChatConversation({
         agentId={selectedAgentId}
         projects={projectsStore.projects as unknown as ChatProject[]}
         projectId={selectedProjectId}
-        onSubmit={(payload) => void handleSubmit(payload)}
-        onStop={() => void stop()}
+        prefill={prefill}
+        onSubmit={handleSubmit}
+        onStop={() => {
+          // Server-side cancel first (the local abort only stops the UI);
+          // the runtime's cancelRun performs the local abort plus the
+          // cancelled-message bookkeeping.
+          void cancelChatStream(chatId);
+          runtime.thread.cancelRun();
+        }}
         onPresetChange={setSelectedPreset}
         onAgentChange={setSelectedAgentId}
         onProjectChange={setSelectedProjectId}
@@ -792,7 +957,7 @@ function ChatConversation({
       </div>
 
       {/* The artifact panel sits beside the thread on wide screens. */}
-      <ArtifactPanel />
+      <ArtifactPanel chatId={chatId} />
 
       {/* Edit message */}
       <Dialog
@@ -865,7 +1030,8 @@ function ChatConversation({
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-    </div>
+        </Dialog>
+      </div>
+    </AssistantRuntimeProvider>
   );
 }

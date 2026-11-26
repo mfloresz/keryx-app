@@ -144,7 +144,30 @@
     "byGlobal": "Global",
     "byCatalog": "Catalog",
     "preview": "Chat with agent",
-    "editor": "Edit agent"
+    "editor": "Edit agent",
+    "toolsSection": {
+      "label": "Tools",
+      "webSearch": "Web search",
+      "updateArtifact": "Update artifacts",
+      "hint": "Leave empty to keep the agent's defaults. Selecting any tool restricts the agent to just those."
+    },
+    "skillsSection": {
+      "label": "Skills",
+      "emptyHint": "No skills available yet. Skills are configured by the admin."
+    },
+    "starterPrompts": {
+      "label": "Starter prompts",
+      "placeholder": "e.g. Summarize my week",
+      "add": "Add prompt"
+    },
+    "knowledge": {
+      "label": "Knowledge",
+      "hint": "Files the agent can consult on every conversation. They share a context budget, so keep the list small.",
+      "add": "Add files",
+      "uploading": "Uploading...",
+      "uploadFailed": "Failed to upload the files",
+      "deleteFailed": "Failed to delete the file"
+    }
   },
   "chat": {
     "welcomeTitle": "Hello, I'm Keryx. How can I help you?",
@@ -178,6 +201,7 @@
     "failedSwitchBranch": "Failed to switch branch",
     "failedFork": "Failed to create new chat from message",
     "failedVote": "Failed to vote",
+    "showEarlier": "Show earlier messages",
     "unsupportedImageTitle": "Image not supported",
     "unsupportedImageDescription": "The selected model does not support images. Only text documents are allowed.",
     "unsupportedCloudAttachmentDescription": "In cloud mode, attachments must be uploaded as embedded local files. Please reattach the file and try again.",
@@ -234,6 +258,14 @@
     },
     "attachFiles": "Attach files",
     "addTools": "Add tools",
+    "share": "Share",
+    "unshare": "Stop sharing",
+    "shareLinkCopied": "Share link copied to clipboard",
+    "failedShare": "Failed to update sharing",
+    "skills": {
+      "menuLabel": "Skills",
+      "remove": "Remove skill"
+    },
     "removeAttachment": "Remove attachment",
     "dropFiles": "Drop files to attach"
   },
@@ -265,6 +297,10 @@
     "version": "Artifact version",
     "previous": "Previous artifact",
     "next": "Next artifact",
+    "previousVersion": "Previous version",
+    "nextVersion": "Next version",
+    "loading": "Loading artifact…",
+    "fetchError": "Could not load the artifact.",
     "code": "Code",
     "download": "Download HTML",
     "openNewTab": "Open in new tab",
@@ -556,6 +592,12 @@
       "passwordRequired": "Password is required"
     }
   },
+  "share": {
+    "badge": "Shared",
+    "untitled": "Untitled chat",
+    "notFound": "This conversation is no longer available or was never shared.",
+    "loadError": "Could not load the shared conversation."
+  },
   "projects": {
     "title": "Projects",
     "subtitle": "Closed workspaces where your assistants read, create and edit files.",
@@ -595,5 +637,72 @@
     "readFileFailed": "Failed to read the file",
     "writeFileFailed": "Failed to save the file",
     "fileTooLarge": "The file exceeds the size limit"
+  },
+  "automations": {
+    "title": "Automations",
+    "description": "Run this agent on a schedule or via webhook.",
+    "empty": "No automations yet.",
+    "create": "New automation",
+    "createTitle": "New automation",
+    "schedule": "Schedule",
+    "daily": "Daily",
+    "dailyTime": "Time",
+    "everyMinutes": "Every {value} min",
+    "everyHour": "Every hour",
+    "everyHours": "Every {value} h",
+    "dailyAt": "Daily at {time}",
+    "taskPrompt": "Task prompt",
+    "taskPromptPlaceholder": "What should the agent do? Use {date} and {time} to insert the current date and time.",
+    "webhookUrl": "Webhook URL",
+    "webhookUrlPlaceholder": "https://example.com/hook (optional)",
+    "allowWriteTools": "Allow write tools",
+    "allowWriteToolsWarning": "Allows writing files without your approval.",
+    "enabled": "Enabled",
+    "runNow": "Run now",
+    "runTriggered": "Automation triggered",
+    "runFailed": "Failed to trigger the automation",
+    "openChat": "Open chat",
+    "failures": "{count} consecutive failures",
+    "statusSuccess": "Last run OK",
+    "statusError": "Failing",
+    "statusPaused": "Paused",
+    "statusPending": "Never run",
+    "deleteTitle": "Delete this automation?",
+    "deleteDescription": "The schedule will stop running. The chat and its messages are kept.",
+    "loadFailed": "Failed to load automations",
+    "createFailed": "Failed to create the automation",
+    "updateFailed": "Failed to update the automation",
+    "deleteFailed": "Failed to delete the automation"
+  },
+  "markdown": {
+    "copy": "Copy code",
+    "copied": "Copied",
+    "download": "Download code",
+    "diagram": "Diagram",
+    "drawingDiagram": "Drawing diagram…",
+    "diagramFailed": "Diagram could not be drawn: {reason}",
+    "enlarge": "Enlarge diagram",
+    "showSource": "Show source",
+    "showDiagram": "Show diagram",
+    "copySource": "Copy source",
+    "downloadSvg": "Download SVG",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to window",
+    "actualSize": "Actual size",
+    "close": "Close",
+    "fileTree": "File tree",
+    "scrollableTable": "Scrollable table",
+    "scrollableCode": "Scrollable code",
+    "variants": "Variants",
+    "taskDone": "Completed task",
+    "taskOpen": "Incomplete task",
+    "callouts": {
+      "note": "Note",
+      "tip": "Tip",
+      "important": "Important",
+      "warning": "Warning",
+      "caution": "Caution"
+    }
   }
 }

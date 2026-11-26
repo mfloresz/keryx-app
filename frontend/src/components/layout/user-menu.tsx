@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -66,18 +67,20 @@ export function UserMenu({ onOpenSettings, onOpenAdmin }: UserMenuProps) {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent side="right" align="start" className="w-64">
-        <DropdownMenuLabel className="flex items-center gap-2.5 font-normal">
-          <Avatar className="size-9 shrink-0">
-            {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-            <AvatarFallback className="text-xs">{initial}</AvatarFallback>
-          </Avatar>
-          <span className="min-w-0 leading-tight">
-            <span className="block truncate text-sm font-medium">{displayName}</span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {userEmail}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="flex items-center gap-2.5 font-normal">
+            <Avatar className="size-9 shrink-0">
+              {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
+              <AvatarFallback className="text-xs">{initial}</AvatarFallback>
+            </Avatar>
+            <span className="min-w-0 leading-tight">
+              <span className="block truncate text-sm font-medium">{displayName}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {userEmail}
+              </span>
             </span>
-          </span>
-        </DropdownMenuLabel>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
 
         <DropdownMenuItem onClick={onOpenSettings}>

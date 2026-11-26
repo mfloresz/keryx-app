@@ -1,5 +1,5 @@
-import * as React from "react";
 import { useRouterState } from "@tanstack/react-router";
+import * as React from "react";
 
 import { AppSidebar } from "#/components/layout/app-sidebar";
 import { MobileHeader } from "#/components/layout/mobile-header";
@@ -18,8 +18,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const routerState = useRouterState();
   const pathname = routerState.location.pathname;
 
-  // Public routes (login, invite) render without the app chrome.
-  const isPublic = pathname === "/login" || pathname.startsWith("/invite/");
+  // Public routes (login, invite, shared chats) render without the app chrome.
+  const isPublic =
+    pathname === "/login" ||
+    pathname.startsWith("/invite/") ||
+    pathname.startsWith("/share/");
 
   // The router guard already resolved the session, but the auth store owns
   // it for the rest of the app — load it once on mount.

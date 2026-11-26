@@ -141,10 +141,12 @@ function NewChat() {
     text,
     files,
     webSearch,
+    pinnedSkills,
   }: {
     text: string;
     files: PendingAttachment[];
     webSearch: boolean;
+    pinnedSkills: string[];
   }) {
     if (isSubmitting) return;
     setIsSubmitting(true);
@@ -214,6 +216,7 @@ function NewChat() {
           pendingText: text,
           pendingWebSearch: Boolean(webSearch),
           pendingFiles,
+          pendingPinnedSkills: pinnedSkills,
         },
       });
     } catch (err) {

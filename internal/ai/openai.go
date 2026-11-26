@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudwego/eino/components/model"
 	einoopenai "github.com/cloudwego/eino-ext/components/model/openai"
+	"github.com/cloudwego/eino/components/model"
 )
 
 // OpenAIProvider implements Provider for OpenAI-compatible APIs (OpenAI,
@@ -185,7 +185,7 @@ func (p *OpenAIProvider) requestTimeout(req ChatRequest) time.Duration {
 		timeout = req.Timeout
 	}
 	if timeout <= 0 {
-		timeout = 120 * time.Second
+		timeout = totalLoopBudget
 	}
 	return timeout
 }

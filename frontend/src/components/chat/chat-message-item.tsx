@@ -307,7 +307,7 @@ function SourcesList({
   );
 }
 
-export function ChatMessageItem({
+export const ChatMessageItem = React.memo(function ChatMessageItem({
   message,
   isStreaming,
   vote,
@@ -337,6 +337,16 @@ export function ChatMessageItem({
     (p) => p.type === "source-url" || p.type === "source-document",
   );
   const branch = getBranchMetadata(message);
+
+  // Parsing markdown is the expensive part of rendering a message. Memoizing
+  // on the text lets renders with identical text (reasoning-only updates,
+  // vote changes, sibling streaming) skip the re-parse entirely.
+  const renderedMarkdown = React.useMemo(
+    () => (
+      <Markdown streaming={Boolean(isStreaming)}>{text}</Markdown>
+    ),
+    [text, isStreaming],
+  );
 
   async function handleCopy() {
     if (!text) return;
@@ -449,9 +459,7 @@ export function ChatMessageItem({
               </BubbleContent>
             </Bubble>
           ) : (
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              <Markdown>{text}</Markdown>
-            </div>
+            <div className="max-w-none">{renderedMarkdown}</div>
           )
         ) : null}
 
@@ -589,4 +597,4 @@ export function ChatMessageItem({
       </MessageContent>
     </Message>
   );
-}
+});

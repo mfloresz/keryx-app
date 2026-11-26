@@ -2,11 +2,19 @@ import * as React from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 
+import { AgentAutomationsSection } from "#/components/agents/agent-automations";
+import {
+  KnowledgeSection,
+  SkillsSection,
+  StarterPromptsSection,
+  ToolsSection,
+} from "#/components/agents/agent-form-sections";
+import type { AgentKnowledge } from "#/components/chat/types";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { useI18n } from "#/i18n";
-import { useAgentsStore } from "#/stores/agents";
+import { useAgentsStore, type Agent } from "#/stores/agents";
 
 export const Route = createFileRoute("/agents/$id")({
   component: AgentEditorPage,
@@ -22,6 +30,11 @@ function AgentEditorPage() {
   const [description, setDescription] = React.useState("");
   const [icon, setIcon] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
+  const [tools, setTools] = React.useState<string[]>([]);
+  const [skills, setSkills] = React.useState<string[]>([]);
+  const [starterPrompts, setStarterPrompts] = React.useState<string[]>([]);
+  const [knowledge, setKnowledge] = React.useState<AgentKnowledge[]>([]);
+  const [loadedAgent, setLoadedAgent] = React.useState<Agent | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -32,10 +45,15 @@ function AgentEditorPage() {
       const agent = await getAgent(id);
       if (cancelled) return;
       if (agent) {
+        setLoadedAgent(agent);
         setName(agent.name);
         setDescription(agent.description ?? "");
         setIcon(agent.icon ?? "");
         setSystemPrompt(agent.systemPrompt);
+        setTools(agent.tools ?? []);
+        setSkills(agent.skills ?? []);
+        setStarterPrompts(agent.starterPrompts ?? []);
+        setKnowledge(agent.knowledge ?? []);
       }
       setIsLoading(false);
     })();
@@ -56,6 +74,11 @@ function AgentEditorPage() {
         description: description.trim(),
         icon: icon.trim(),
         systemPrompt,
+        tools,
+        skills,
+        starterPrompts: starterPrompts
+          .map((prompt) => prompt.trim())
+          .filter(Boolean),
       });
       toast.success("Agent saved");
       void navigate({ to: "/agents" });
@@ -97,6 +120,8 @@ function AgentEditorPage() {
       </div>
     );
   }
+
+  const isUserOwned = loadedAgent?.source === "user_custom";
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -171,6 +196,21 @@ function AgentEditorPage() {
           />
         </div>
 
+        <ToolsSection selected={tools} onChange={setTools} />
+
+        <SkillsSection selected={skills} onChange={setSkills} />
+
+        <StarterPromptsSection
+          prompts={starterPrompts}
+          onChange={setStarterPrompts}
+        />
+
+        <KnowledgeSection
+          agentId={id}
+          knowledge={knowledge}
+          onKnowledgeChange={setKnowledge}
+        />
+
         <div className="flex gap-2">
           <Button type="submit" disabled={isSaving}>
             {isSaving ? t("app.loading") : t("app.save")}
@@ -184,6 +224,13 @@ function AgentEditorPage() {
           </Button>
         </div>
       </form>
+
+      {/* Automations only exist for agents the user owns. */}
+      {isUserOwned ? (
+        <div className="mx-auto w-full max-w-3xl px-4 pb-10 sm:px-6">
+          <AgentAutomationsSection agentId={id} />
+        </div>
+      ) : null}
     </div>
   );
 }

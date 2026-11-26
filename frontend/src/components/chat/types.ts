@@ -6,6 +6,14 @@ export interface ModelPreset {
   supportsSearch: boolean;
 }
 
+/** A knowledge file attached to an agent on the backend. */
+export interface AgentKnowledge {
+  id: string;
+  filename: string;
+  mediaType: string;
+  size: number;
+}
+
 export interface ChatAgent {
   id: string;
   builtinId?: string;
@@ -15,6 +23,14 @@ export interface ChatAgent {
   icon?: string;
   systemPrompt: string;
   source: "builtin" | "override" | "global_custom" | "user_custom";
+  /** Extra tools the agent may use, e.g. "web_search" | "update_artifact". */
+  tools?: string[];
+  /** Skills the agent has access to (configured by the admin). */
+  skills?: string[];
+  /** Suggested first messages shown on an empty conversation. */
+  starterPrompts?: string[];
+  /** Files the agent can consult (edit page only). */
+  knowledge?: AgentKnowledge[];
 }
 
 export interface ChatProject {

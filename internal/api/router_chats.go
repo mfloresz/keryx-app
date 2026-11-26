@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -12,9 +13,15 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+
 	"keryx-server/internal/ai"
 	"keryx-server/internal/store"
 )
+
+// maxUserMessageBytes caps the client-sent user message blob persisted
+// verbatim into the chat record.
+const maxUserMessageBytes = 1 << 20 // 1 MiB
 
 func (s *Server) handleListChats(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromContext(r)
@@ -34,12 +41,38 @@ func (s *Server) handleSaveChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// SaveChat ignores the Messages field (messages live in the
+	// chat_messages collection), so remember whether this is a new chat and
+	// import the client-sent messages after the row exists.
+	isNew := chat.ID == "" || nilChatForOwner(s, chat.ID, userID)
+
 	saved, err := s.Store.SaveChat(&chat, userID)
 	if err != nil {
 		internalError(w, r, "Failed to save chat", err)
 		return
 	}
+
+	if isNew && len(chat.Messages) > 0 {
+		var msgs []map[string]any
+		if err := json.Unmarshal(chat.Messages, &msgs); err == nil && len(msgs) > 0 {
+			if err := s.Store.UpsertChatMessages(saved.ID, msgs); err != nil {
+				internalError(w, r, "Failed to save chat messages", err)
+				return
+			}
+		}
+	}
 	jsonResponse(w, saved, http.StatusOK)
+}
+
+// nilChatForOwner reports whether no chat with the given ID exists for the
+// owner, i.e. SaveChat will create a new record (PocketBase then assigns its
+// own ID, even when the client sent one).
+func nilChatForOwner(s *Server, chatID, userID string) bool {
+	if chatID == "" {
+		return true
+	}
+	_, err := s.Store.GetChat(chatID, userID)
+	return err != nil
 }
 
 func (s *Server) handleGetChat(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +85,41 @@ func (s *Server) handleGetChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResponse(w, chat, http.StatusOK)
+}
+
+// publicChatResponse is the read-only shape served to anonymous visitors:
+// the owner identity, votes and the private summary are never exposed.
+type publicChatResponse struct {
+	ID        string          `json:"id"`
+	Title     string          `json:"title"`
+	Messages  json.RawMessage `json:"messages"`
+	CreatedAt string          `json:"createdAt"`
+}
+
+func (s *Server) handleGetPublicChat(w http.ResponseWriter, r *http.Request) {
+	chatID := r.PathValue("id")
+	chat, err := s.Store.GetPublicChat(chatID)
+	if err != nil {
+		errorResponse(w, "Public chat not found", http.StatusNotFound)
+		return
+	}
+	jsonResponse(w, publicChatResponse{
+		ID:        chat.ID,
+		Title:     chat.Title,
+		Messages:  chat.Messages,
+		CreatedAt: chat.CreatedAt,
+	}, http.StatusOK)
+}
+
+func (s *Server) handleSearchChatMessages(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	q := r.URL.Query().Get("q")
+	results, err := s.Store.SearchChatMessages(userID, q, 30)
+	if err != nil {
+		errorResponse(w, "Search failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, results, http.StatusOK)
 }
 
 func (s *Server) handleDeleteChat(w http.ResponseWriter, r *http.Request) {
@@ -141,9 +209,11 @@ func (s *Server) handleDeleteMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var messages []map[string]any
-	if err := json.Unmarshal(chat.Messages, &messages); err != nil {
-		errorResponse(w, "Failed to parse messages", http.StatusInternalServerError)
+	// Messages live in the chat_messages collection; the branch snapshot
+	// logic below operates on the loaded array.
+	messages, err := s.Store.ChatMessages(chatID)
+	if err != nil {
+		errorResponse(w, "Failed to load messages", http.StatusInternalServerError)
 		return
 	}
 
@@ -255,13 +325,17 @@ func (s *Server) handleDeleteMessages(w http.ResponseWriter, r *http.Request) {
 		branchState["currentSnapshotId"] = newID
 		branches[rootID] = branchState
 
-		// Truncate messages to before the assistant message being regenerated
+		// Truncate messages to before the assistant message being regenerated:
+		// the message itself and everything after it is deleted (inclusive).
 		messages = messages[:targetIndex]
-		chat.Messages, _ = json.Marshal(messages)
 		chat.Branches, _ = json.Marshal(branches)
+		if err := s.Store.DeleteChatMessagesAfter(chatID, req.MessageID, true); err != nil {
+			errorResponse(w, "Failed to delete messages", http.StatusInternalServerError)
+			return
+		}
 	} else {
+		targetID, _ := messages[targetIndex]["id"].(string)
 		messages = messages[:targetIndex+1]
-		chat.Messages, _ = json.Marshal(messages)
 		// Keep branches in sync after truncation for edit flow
 		var branches map[string]any
 		if chat.Branches != nil {
@@ -270,6 +344,11 @@ func (s *Server) handleDeleteMessages(w http.ResponseWriter, r *http.Request) {
 		if branches != nil {
 			syncBranchSnapshots(messages, branches)
 			chat.Branches, _ = json.Marshal(branches)
+		}
+		// Delete everything strictly after the kept target message.
+		if err := s.Store.DeleteChatMessagesAfter(chatID, targetID, false); err != nil {
+			errorResponse(w, "Failed to delete messages", http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -362,14 +441,24 @@ func (s *Server) handleSwitchBranch(w http.ResponseWriter, r *http.Request) {
 	for _, sm := range snapshotMessages {
 		newMessages = append(newMessages, sm.(map[string]any))
 	}
-	chat.Messages, _ = json.Marshal(newMessages)
 	branchState["currentSnapshotId"] = req.SnapshotID
 	branches[req.RootMessageID] = branchState
 	chat.Branches, _ = json.Marshal(branches)
 
+	// Messages live in the chat_messages collection: replace them wholesale,
+	// then persist the branch bookkeeping on the chat row.
+	if err := s.Store.ReplaceChatMessages(chatID, newMessages); err != nil {
+		errorResponse(w, "Failed to switch branch", http.StatusInternalServerError)
+		return
+	}
 	if _, err := s.Store.SaveChat(chat, userID); err != nil {
 		errorResponse(w, "Failed to save chat", http.StatusInternalServerError)
 		return
+	}
+
+	// Re-fetch so the response carries the messages as now stored.
+	if updated, err := s.Store.GetChat(chatID, userID); err == nil {
+		chat = updated
 	}
 	jsonResponse(w, chat, http.StatusOK)
 }
@@ -416,8 +505,11 @@ func (s *Server) handleSaveVote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var messages []map[string]any
-	json.Unmarshal(chat.Messages, &messages)
+	messages, err := s.Store.ChatMessages(chatID)
+	if err != nil {
+		errorResponse(w, "Failed to load messages", http.StatusInternalServerError)
+		return
+	}
 
 	found := false
 	for _, msg := range messages {
@@ -518,9 +610,17 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		// available and a workspace section is appended to the prompt.
 		// Empty = plain chat (no workspace tools).
 		ProjectID string `json:"projectId"`
+		// PinnedSkills requests up to maxPinnedSkills skills whose full
+		// instructions are preloaded into this run's prompt.
+		PinnedSkills []string `json:"pinnedSkills"`
 	}
 	if err := readJSONBody(r, &req); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.PinnedSkills) > maxPinnedSkills {
+		errorResponse(w, fmt.Sprintf("Too many pinned skills (max %d)", maxPinnedSkills), http.StatusBadRequest)
 		return
 	}
 
@@ -549,7 +649,7 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 			errorResponse(w, fmt.Sprintf("Invalid message role: %q", m.Role), http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(m.Content) == "" && len(m.Attachments) == 0 {
+		if strings.TrimSpace(m.Content) == "" && len(m.Attachments) == 0 && len(m.ToolCalls) == 0 {
 			continue
 		}
 		resolved, err := s.resolveAttachments(userID, m)
@@ -564,6 +664,13 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Messages = filtered
+
+	// Keep the full (pre-trim) conversation for the background summarizer,
+	// then apply the model's context budget: keep the newest messages that
+	// fit the model's window (~4 chars/token), so long conversations stay
+	// under the provider's prompt limit instead of failing outright.
+	fullMessages := req.Messages
+	req.Messages = ai.FitMessagesToBudget(req.Messages, contextBudgetFor(req.Model))
 
 	if err := s.Store.AssertModelAllowed(userID, req.Model); err != nil {
 		errorResponse(w, "Model not allowed", http.StatusForbidden)
@@ -628,9 +735,11 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	// An agent's prompt fully overrides the base prompt; search section and
 	// user context are appended afterwards either way. A missing/inaccessible
 	// agent degrades gracefully to the effective base prompt.
+	var ag *store.Agent
 	var systemPrompt string
 	if req.AgentID != "" {
-		if ag, agErr := s.Store.GetAgentForStream(req.AgentID, userID); agErr == nil {
+		if resolved, agErr := s.Store.GetAgentForStream(req.AgentID, userID); agErr == nil {
+			ag = resolved
 			systemPrompt = ag.SystemPrompt
 			slog.Info("stream agent", "agentId", ag.ID, "source", string(ag.Source), "chat", chatID)
 		} else {
@@ -644,19 +753,47 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 	} else {
 		systemPrompt = s.Store.GetEffectiveBasePrompt(s.Cfg.BaseSystemPrompt).Prompt
 	}
+	// Agent bundle: bound skills (instructions preloaded) and knowledge files
+	// are appended right after the agent's own prompt; unresolvable names are
+	// skipped.
+	if ag != nil {
+		systemPrompt += renderSkillSections(s.resolveAgentSkills(ag.Skills), skillHeaderBound)
+		systemPrompt += s.agentKnowledgeSection(ag, userID)
+	}
+	// Client-pinned skills: user-requested preloads for this run only.
+	if len(req.PinnedSkills) > 0 {
+		systemPrompt += renderSkillSections(s.resolveAgentSkills(req.PinnedSkills), skillHeaderPinned)
+	}
 	if webSearchActive {
 		systemPrompt += s.buildSearchSystemPrompt()
 	}
 
-	// Workspace tools + prompt section, active only with a valid project.
-	var projectTools []ai.ToolDefinition
+	// Conversation summary memory: remind the model of the older part of the
+	// conversation that no longer fits the recent window (maintained by
+	// maybeSummarizeAsync below).
+	if chat.Summary != "" {
+		systemPrompt += "\n\n---\n\n### Conversation Summary (earlier messages)\n" + chat.Summary
+	}
+
+	// Workspace prompt section, active only with a valid project (the tools
+	// themselves are assembled in chatToolSet below).
 	if project != nil {
-		projectTools = buildProjectToolDefinitions()
 		files, err := s.Store.ListProjectFiles(project.ID, userID)
 		if err != nil {
 			files = nil
 		}
 		systemPrompt += buildProjectWorkspacePrompt(project, files)
+	}
+
+	// Skills (progressive disclosure): names + descriptions go into the
+	// prompt, full instructions are loaded on demand via load_skill. A store
+	// error degrades to no skills.
+	skills, err := s.Store.ListEnabledSkills()
+	if err != nil {
+		skills = nil
+	}
+	if len(skills) > 0 {
+		systemPrompt += buildSkillsPrompt(skills)
 	}
 
 	// Inject the dynamic user context (preferred name, current datetime,
@@ -676,247 +813,224 @@ func (s *Server) handleChatStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Accumulate partial output locally so an error or client disconnect can
-	// still persist whatever was generated so far.
-	var (
-		partialText, partialReasoning strings.Builder
-		toolParts                     []map[string]any
-		sourceParts                   []map[string]any
-		streamStarted                 bool
-	)
+	var agentTools []string
+	if ag != nil {
+		agentTools = ag.Tools
+	}
+	var projectExec ai.ToolExecFunc
+	if project != nil {
+		projectExec = projectToolExec(s, project.ID, userID)
+	}
+
+	// The run's parameters: the tool set and dispatcher are finalized inside
+	// startChatRun, where the activeStream exists (citations, artifacts and
+	// the approval hook broadcast through it).
+	params := chatRunParams{
+		chatID:        chatID,
+		userID:        userID,
+		model:         resolvedModel,
+		messages:      req.Messages,
+		fullMessages:  fullMessages,
+		contextBudget: contextBudgetFor(req.Model),
+		systemPrompt:  systemPrompt,
+		tools: chatToolSet(chatToolOptions{
+			webSearchActive: webSearchActive,
+			project:         project != nil,
+			loadSkill:       len(skills) > 0,
+			agentTools:      agentTools,
+		}),
+		projectExec:        projectExec,
+		webSearchActive:    webSearchActive,
+		braveAPIKey:        braveAPIKey,
+		provider:           provider,
+		providerID:         providerIDForModel(req.Model),
+		userMessageID:      userMessageID,
+		assistantMessageID: assistantMessageID,
+		titleChat:          chat,
+		language:           req.Language,
+		approvalHook: func(active *activeStream) ai.ToolApprovalFunc {
+			return s.toolApprovalHook(chatID, active)
+		},
+	}
 
 	// Register the stream so clients that navigate away or reload can
-	// reconnect to it via GET /api/chats/{id}/stream. Removed on all exit
-	// paths below once the assistant message is durably persisted.
-	active := s.activeStreams.register(chatID, assistantMessageID)
-	defer func() {
-		active.broadcastFinish("finish", nil)
-		s.activeStreams.remove(chatID, active)
-	}()
+	// reconnect to it via GET /api/chats/{id}/stream. The run goroutine
+	// removes the entry on every exit path. This request becomes an SSE
+	// observer: it subscribes (via onActive) BEFORE the run goroutine starts
+	// so no event can slip between registration and subscription.
+	var events chan streamEvent
+	active := s.startChatRun(params, func(a *activeStream) {
+		events, _ = a.subscribe()
+	})
+	defer active.unsubscribe(events)
 
-	// Persist the partial assistant message periodically while streaming,
-	// so a client that (re)loads the chat mid-generation sees the text
-	// generated so far instead of nothing. The final append after the
-	// stream ends remains authoritative.
-	lastPersist := time.Now()
-	persistPartial := func() {
-		if time.Since(lastPersist) < 1500*time.Millisecond {
+	// Forward the run's events to this request's observer until the run
+	// finishes or the client disconnects. All client-facing emission goes
+	// through the activeStream; nothing writes to w directly.
+	followStream(w, flusher, r, active, events)
+}
+
+// streamErrorMessage maps a generation error to a user-facing message. The ai
+// sentinel errors get specific copy; anything else stays generic so provider
+// internals never leak to the client.
+func streamErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, ai.ErrOutputLimit):
+		return "The response hit the model's output limit before completing. Try again or switch to a model with a higher output budget."
+	case errors.Is(err, ai.ErrContentFilter):
+		return "The response was blocked by the provider's content filter."
+	case errors.Is(err, ai.ErrEmptyResponse):
+		return "The model finished its reasoning without producing an answer. Please try again."
+	case errors.Is(err, ai.ErrIdleTimeout):
+		return "The model stopped sending data before finishing. Please try again."
+	case errors.Is(err, ai.ErrTruncated):
+		return "The response ended unexpectedly. Please try again."
+	default:
+		return "The model provider returned an error. Please try again."
+	}
+}
+
+// contextBudgetFor returns the character budget for a model's context window
+// (~4 chars per token), falling back to the package default when the catalog
+// lists no limit for the model.
+func contextBudgetFor(modelID string) int {
+	lookup := func(mi ai.ModelInfo) int {
+		if mi.MaxContext > 0 {
+			return mi.MaxContext * 4
+		}
+		return ai.DefaultContextBudgetChars
+	}
+	if info, _, err := ai.ResolveModel(modelID); err == nil {
+		for _, mi := range info.Models {
+			if mi.ID == modelID {
+				return lookup(mi)
+			}
+		}
+	}
+	// Fallback: scan the whole catalog (model IDs are globally unique).
+	for _, mi := range ai.ModelCatalog() {
+		if mi.ID == modelID {
+			return lookup(mi)
+		}
+	}
+	return ai.DefaultContextBudgetChars
+}
+
+// titleGenerationTarget is the resolved provider for a background title
+// request, plus the catalog id it came from (empty when the chat's own
+// provider is reused).
+type titleGenerationTarget struct {
+	provider ai.Provider
+	// providerID is the title provider's catalog id; empty when the chat's
+	// own provider is used, so callers can tell a custom model apart.
+	providerID string
+}
+
+// generateTitleAsync generates the chat title in the background. The title is
+// persisted under the chat lock only if the chat still has none; if the
+// process dies before it lands, the next message regenerates it (same
+// condition as when title generation was synchronous).
+func (s *Server) generateTitleAsync(chatID, userID, language string, messages []ai.ChatMessage, target titleGenerationTarget) {
+	var firstUserMsg *ai.ChatMessage
+	for i := range messages {
+		if messages[i].Role == "user" {
+			firstUserMsg = &messages[i]
+			break
+		}
+	}
+	if firstUserMsg == nil || target.provider == nil {
+		return
+	}
+	titleMsg := ai.TitleUserMessage(*firstUserMsg, ai.TextAttachmentBudget)
+	if titleMsg == "" {
+		return
+	}
+	lang := language
+	if lang == "" {
+		lang = "en"
+	}
+
+	go func() {
+		titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		titlePrompt := s.Store.GetEffectiveTitlePrompt(s.Cfg.TitleGenerationSystemPrompt).Prompt
+		titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
+		title, err := target.provider.GenerateTitle(titleCtx, titlePrompt, titleMsg, lang)
+		if err != nil || title == "" {
 			return
 		}
-		lastPersist = time.Now()
-		text, reasoning := active.snapshot()
-		if strings.TrimSpace(text) != "" || reasoning != "" || len(toolParts) > 0 {
-			s.appendAssistantMessage(chatID, userID, assistantMessageID, text, reasoning, toolParts, sourceParts)
+
+		unlock := s.lockChat(chatID)
+		defer unlock()
+		chat, err := s.Store.GetChat(chatID, userID)
+		if err != nil || chat.Title != "" {
+			return
 		}
-	}
-
-	// Build tool definitions: web search (when active) plus the project
-	// workspace tools (when a project is attached). One exec closure
-	// dispatches by tool name.
-	var tools []ai.ToolDefinition
-	var toolExec ai.ToolExecFunc
-	if webSearchActive {
-		tools = append(tools, buildSearchToolDefinition()...)
-	}
-	if project != nil {
-		tools = append(tools, projectTools...)
-	}
-	if len(tools) > 0 {
-		projectExec := projectToolExec(s, project.ID, userID)
-		toolExec = func(ctx context.Context, toolName string, input json.RawMessage) (string, error) {
-			if toolName == "web_search" {
-				// Each citation is streamed to the client so the answer can
-				// carry a clickable source list.
-				return execWebSearchTool(braveAPIKey, chatID, userID, input, func(title, url string) {
-					extra := map[string]string{
-						"title": title,
-						"url":   url,
-					}
-					writeSSEEvent(w, "source", extra)
-					active.broadcast("source", extra)
-					flusher.Flush()
-					// Persisted with the assistant message so the sources
-					// survive a reload.
-					sourceParts = append(sourceParts, map[string]any{
-						"type":     "source-url",
-						"sourceId": fmt.Sprintf("src_%d", len(sourceParts)+1),
-						"url":      url,
-						"title":    title,
-					})
-				})
-			}
-			return projectExec(ctx, toolName, input)
+		chat.Title = title
+		if _, err := s.Store.SaveChat(chat, userID); err != nil {
+			slog.Warn("failed to persist generated title", "chat", chatID, "error", err)
 		}
+	}()
+}
+
+// titleTargetFor resolves the provider to use for title generation: the
+// admin-configured lightweight model when set, otherwise the chat's provider.
+func (s *Server) titleTargetFor(chatID string, fallback ai.Provider) titleGenerationTarget {
+	policy, err := s.Store.GetTitleGenerationPolicy()
+	if err != nil || policy.Mode != store.TitleModeCustom || policy.ModelID == "" {
+		return titleGenerationTarget{provider: fallback}
 	}
-
-	streamResult, err := provider.ChatStream(r.Context(), ai.ChatRequest{
-		Model:    resolvedModel,
-		Messages: req.Messages,
-		System:   systemPrompt,
-		// Stable per-chat grouping key for prompt-cache affinity
-		// (prompt_cache_key on OpenAI-compat, session_id on OpenRouter).
-		CacheKey: ai.SessionForChat(chatID),
-		Tools:    tools,
-		ToolExec: toolExec,
-		// Tools that change the workspace wait for the user's approval.
-		ToolApproval: s.toolApprovalHook(w, flusher, chatID, assistantMessageID, active),
-	}, func(chunk ai.StreamChunk) {
-		// Send the start event only when the first chunk actually arrives
-		// from the provider, so the frontend doesn't create an empty
-		// assistant message before the model starts generating.
-		if !streamStarted {
-			writeSSEEvent(w, "start", map[string]string{
-				"userMessageId":      userMessageID,
-				"assistantMessageId": assistantMessageID,
-			})
-			flusher.Flush()
-			streamStarted = true
-		}
-
-		switch chunk.Kind {
-		case ai.StreamChunkReasoning:
-			partialReasoning.WriteString(chunk.Text)
-			writeSSEEvent(w, "reasoning", map[string]string{"text": chunk.Text})
-			active.append("reasoning", chunk.Text)
-		case ai.StreamChunkToolCall:
-			// Surface live tool activity: the execution stays server-side,
-			// the client only learns that a tool was invoked and with what
-			// arguments.
-			extra := map[string]string{
-				"name":       chunk.ToolName,
-				"toolCallId": chunk.ToolCallID,
-				"input":      chunk.Input,
-			}
-			writeSSEEvent(w, "tool_call", extra)
-			active.broadcast("tool_call", extra)
-		case ai.StreamChunkToolResult:
-			part := map[string]any{
-				"type":       "dynamic-tool",
-				"toolCallId": chunk.ToolCallID,
-				"toolName":   chunk.ToolName,
-				"state":      "output-available",
-				"output":     chunk.Output,
-			}
-			if json.Valid([]byte(chunk.Input)) {
-				part["input"] = json.RawMessage(chunk.Input)
-			} else {
-				part["input"] = chunk.Input
-			}
-			toolParts = append(toolParts, part)
-			extra := map[string]string{
-				"name":       chunk.ToolName,
-				"toolCallId": chunk.ToolCallID,
-				"output":     chunk.Output,
-			}
-			writeSSEEvent(w, "tool_result", extra)
-			active.broadcast("tool_result", extra)
-		default:
-			partialText.WriteString(chunk.Text)
-			writeSSEEvent(w, "text", map[string]string{"text": chunk.Text})
-			active.append("text", chunk.Text)
-		}
-		flusher.Flush()
-		persistPartial()
-	})
-
-	fullText := streamResult.Text
-	fullReasoning := streamResult.Reasoning
-	if fullText == "" {
-		fullText = partialText.String()
-	}
-	if fullReasoning == "" {
-		fullReasoning = partialReasoning.String()
-	}
-
+	info, upstreamModel, err := ai.ResolveModel(policy.ModelID)
 	if err != nil {
-		// Persist the partial assistant response (if any) instead of losing it.
-		if strings.TrimSpace(fullText) != "" || fullReasoning != "" || len(toolParts) > 0 {
-			s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts, sourceParts)
-		}
-		slog.Error("chat stream failed", "error", err, "chat", chatID, "user", userID, "model", req.Model)
-		active.broadcastFinish("error", map[string]string{"error": "The model provider returned an error. Please try again."})
-		writeSSEEvent(w, "error", map[string]string{"error": "The model provider returned an error. Please try again."})
-		flusher.Flush()
-		return
+		return titleGenerationTarget{provider: fallback}
 	}
-
-	// Generate title if chat has no title, then save both title and messages.
-	if chat.Title == "" && len(req.Messages) > 0 && provider != nil {
-		var firstUserMsg *ai.ChatMessage
-		for i := range req.Messages {
-			if req.Messages[i].Role == "user" {
-				firstUserMsg = &req.Messages[i]
-				break
-			}
-		}
-		titleMsg := ""
-		if firstUserMsg != nil {
-			titleMsg = ai.TitleUserMessage(*firstUserMsg, ai.TextAttachmentBudget)
-		}
-		if titleMsg != "" {
-			lang := req.Language
-			if lang == "" {
-				lang = "en"
-			}
-
-			// Resolve the provider to use for title generation.
-			// The admin can configure a dedicated lightweight model;
-			// otherwise fall back to the chat model's provider.
-			titleProvider := provider
-			policy, policyErr := s.Store.GetTitleGenerationPolicy()
-			if policyErr == nil && policy.Mode == store.TitleModeCustom && policy.ModelID != "" {
-				info, upstreamModel, resolveErr := ai.ResolveModel(policy.ModelID)
-				if resolveErr == nil {
-					apiKey, keyErr := s.apiKeyForProvider(info.ID)
-					if keyErr == nil {
-						if info.ID == "google" {
-							titleProvider = &ai.GoogleProvider{
-								APIKey:  apiKey,
-								Model:   upstreamModel,
-								Timeout: 120 * time.Second,
-							}
-						} else {
-							// Titles share the chat's OpenCode session so they
-							// hit the same prompt-cache grouping.
-							session := ""
-							if ai.IsOpencodeProvider(info.ID) {
-								session = ai.SessionForChat(chatID)
-							}
-							titleProvider = &ai.OpenAIProvider{
-								APIKey:     apiKey,
-								BaseURL:    info.BaseURL,
-								Model:      upstreamModel,
-								Timeout:    120 * time.Second,
-								Options:    info.Options,
-								SessionID:  session,
-								OpenRouter: info.ID == "openrouter",
-							}
-						}
-					}
-				}
-			}
-
-			titleCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			titlePrompt := s.Store.GetEffectiveTitlePrompt(s.Cfg.TitleGenerationSystemPrompt).Prompt
-			titlePrompt = strings.ReplaceAll(titlePrompt, "{language}", languageName(lang))
-			title, err := titleProvider.GenerateTitle(titleCtx, titlePrompt, titleMsg, lang)
-			cancel()
-			if err == nil && title != "" {
-				chat.Title = title
-			}
+	apiKey, err := s.apiKeyForProvider(info.ID)
+	if err != nil {
+		return titleGenerationTarget{provider: fallback}
+	}
+	if info.ID == "google" {
+		return titleGenerationTarget{
+			provider: &ai.GoogleProvider{
+				APIKey:  apiKey,
+				Model:   upstreamModel,
+				Timeout: 120 * time.Second,
+			},
+			providerID: info.ID,
 		}
 	}
-
-	// Append assistant message and persist atomically with the title.
-	savedTitle := s.appendAssistantMessage(chatID, userID, assistantMessageID, fullText, fullReasoning, toolParts, sourceParts, chat.Title)
-	if savedTitle != "" {
-		writeSSEEvent(w, "finish", map[string]string{"title": savedTitle})
-		flusher.Flush()
-		return
+	// Titles share the chat's OpenCode session so they hit the same
+	// prompt-cache grouping.
+	session := ""
+	if ai.IsOpencodeProvider(info.ID) {
+		session = ai.SessionForChat(chatID)
 	}
+	return titleGenerationTarget{
+		provider: &ai.OpenAIProvider{
+			APIKey:     apiKey,
+			BaseURL:    info.BaseURL,
+			Model:      upstreamModel,
+			Timeout:    120 * time.Second,
+			Options:    info.Options,
+			SessionID:  session,
+			OpenRouter: info.ID == "openrouter",
+		},
+		providerID: info.ID,
+	}
+}
 
-	writeSSEEvent(w, "finish", nil)
-	flusher.Flush()
+// titleProviderFor returns only the provider half of titleTargetFor.
+func (s *Server) titleProviderFor(chatID string, fallback ai.Provider) ai.Provider {
+	return s.titleTargetFor(chatID, fallback).provider
+}
+
+// providerIDForModel returns the catalog provider id behind a public model id,
+// or "" when it can't be resolved.
+func providerIDForModel(modelID string) string {
+	info, _, err := ai.ResolveModel(modelID)
+	if err != nil {
+		return ""
+	}
+	return info.ID
 }
 
 // applyUserContext replaces the {username}, {date}, {datetime} and
@@ -1011,35 +1125,42 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 
 	messageID := ""
 	if len(raw) > 0 {
+		// The client controls this blob and it is persisted verbatim into
+		// the chat record, so bound its size: an oversized payload is
+		// rejected outright.
+		if len(raw) > maxUserMessageBytes {
+			return ""
+		}
 		var um map[string]any
 		if err := json.Unmarshal(raw, &um); err == nil && um["role"] == "user" {
+			// parts, when present, must be a JSON array: the UI renders it
+			// verbatim and any other shape would corrupt the chat on load.
+			if parts, ok := um["parts"]; ok && parts != nil {
+				if _, isArray := parts.([]any); !isArray {
+					return ""
+				}
+			}
 			messageID, _ = um["id"].(string)
 			if messageID == "" {
 				messageID = generateID()
 				um["id"] = messageID
 			}
-			var messages []map[string]any
-			json.Unmarshal(chat.Messages, &messages)
-			replaced := false
-			for i, m := range messages {
-				if mid, _ := m["id"].(string); mid == messageID {
-					messages[i] = um
-					replaced = true
-					break
+			// Messages live in the chat_messages collection: upsert by
+			// message id (edit/regenerate reuse the id, so no duplicate).
+			if err := s.Store.UpsertChatMessage(chatID, um); err != nil {
+				return ""
+			}
+			// Keep branch snapshots in sync with the new tail.
+			msgs, mErr := s.Store.ChatMessages(chatID)
+			if mErr == nil {
+				var branches map[string]any
+				if chat.Branches != nil {
+					_ = json.Unmarshal(chat.Branches, &branches)
 				}
-			}
-			if !replaced {
-				messages = append(messages, um)
-			}
-			chat.Messages, _ = json.Marshal(messages)
-			// Keep branch snapshots in sync with new tail
-			var branches map[string]any
-			if chat.Branches != nil {
-				_ = json.Unmarshal(chat.Branches, &branches)
-			}
-			if branches != nil {
-				syncBranchSnapshots(messages, branches)
-				chat.Branches, _ = json.Marshal(branches)
+				if branches != nil {
+					syncBranchSnapshots(msgs, branches)
+					chat.Branches, _ = json.Marshal(branches)
+				}
 			}
 		}
 	}
@@ -1050,23 +1171,16 @@ func (s *Server) persistUserMessage(chatID, userID string, raw json.RawMessage, 
 	return messageID
 }
 
-// appendAssistantMessage appends (or replaces, on retry) the assistant
-// message in the stored chat and returns the persisted title. toolParts are
-// the dynamic-tool parts (web search invocations) observed during the
-// stream. sourceParts are the citations the answer is based on. The
-// read-save cycle is serialized per chat so it never clobbers votes,
-// branches, or edits saved while the stream was running.
-func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoning string, toolParts []map[string]any, sourceParts []map[string]any, titleOverride ...string) string {
+// appendAssistantMessage upserts (or replaces, on retry) the assistant
+// message in the chat_messages collection and returns the persisted title.
+// toolParts are the dynamic-tool parts (web search invocations) observed
+// during the stream, sourceParts the citations the answer is based on, and
+// artifactParts the artifacts the model published via update_artifact. The
+// upsert is serialized per chat so it never clobbers votes, branches, or
+// edits saved while the stream was running.
+func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoning string, toolParts []map[string]any, sourceParts []map[string]any, artifactParts []map[string]any, titleOverride ...string) string {
 	unlock := s.lockChat(chatID)
 	defer unlock()
-
-	chat, err := s.Store.GetChat(chatID, userID)
-	if err != nil {
-		return ""
-	}
-
-	var messages []map[string]any
-	json.Unmarshal(chat.Messages, &messages)
 
 	parts := []map[string]any{}
 	if reasoning != "" {
@@ -1074,6 +1188,7 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 	}
 	parts = append(parts, sourceParts...)
 	parts = append(parts, toolParts...)
+	parts = append(parts, artifactParts...)
 	parts = append(parts, map[string]any{"type": "text", "text": text})
 	assistantMsg := map[string]any{
 		"id":        messageID,
@@ -1082,20 +1197,21 @@ func (s *Server) appendAssistantMessage(chatID, userID, messageID, text, reasoni
 		"parts":     parts,
 	}
 
-	replaced := false
-	for i, m := range messages {
-		if mid, _ := m["id"].(string); mid == messageID {
-			messages[i] = assistantMsg
-			replaced = true
-			break
-		}
+	// Upsert by message id: an insert appends, a repeat (retry) replaces in
+	// place. SaveChat below ignores Messages — only branch snapshots and the
+	// optional title override travel with the chat row.
+	if err := s.Store.UpsertChatMessage(chatID, assistantMsg); err != nil {
+		return ""
 	}
-	if !replaced {
-		messages = append(messages, assistantMsg)
+
+	chat, err := s.Store.GetChat(chatID, userID)
+	if err != nil {
+		return ""
 	}
-	chat.Messages, _ = json.Marshal(messages)
 
 	// Keep branch current snapshots in sync after appending new assistant message
+	var messages []map[string]any
+	json.Unmarshal(chat.Messages, &messages)
 	var branches map[string]any
 	if chat.Branches != nil {
 		_ = json.Unmarshal(chat.Branches, &branches)
@@ -1147,11 +1263,18 @@ func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
 	// `since` is how many characters of the assistant text the client
 	// already has (from the incremental persistence). Only the remainder
 	// is replayed, which avoids duplicating text the client loaded from
-	// the store.
+	// the store. `sinceSeq` is the alternative resume mechanism: the client
+	// replays the stream's seq-numbered event log from where it left off.
 	since := 0
 	if v := r.URL.Query().Get("since"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			since = n
+		}
+	}
+	sinceSeq := int64(0)
+	if v := r.URL.Query().Get("sinceSeq"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			sinceSeq = n
 		}
 	}
 
@@ -1161,10 +1284,46 @@ func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 
-	// Subscribe BEFORE taking the snapshot: any chunk emitted from now on
-	// is buffered in the channel, so nothing is lost between snapshot and
-	// live forwarding.
-	events := active.subscribe()
+	// sinceSeq path: replay the seq-numbered event log from where the client
+	// left off, then hand over to the shared live follow. Events emitted
+	// after the subscribe above carry a seq greater than the captured
+	// high-water mark and arrive through the channel instead, so there is no
+	// gap and no overlap.
+	if sinceSeq > 0 {
+		events, highWater := active.subscribe()
+		defer active.unsubscribe(events)
+
+		// Prologue: let the client adopt the assistant message id. Seq 0 →
+		// no id line, never replayed.
+		writeSSEEvent(w, "start", map[string]string{
+			"assistantMessageId": active.AssistantMessageID,
+		})
+		for _, ev := range active.replaySince(sinceSeq) {
+			if ev.seq > highWater {
+				break
+			}
+			writeSSEEventAt(w, ev.seq, ev.event, ev.extra)
+		}
+		flusher.Flush()
+
+		// If the stream finished between the get() and the replay above, the
+		// client already has everything; tell it we're done.
+		select {
+		case <-active.done:
+			writeSSEEvent(w, "finish", nil)
+			flusher.Flush()
+			return
+		default:
+		}
+
+		followStream(w, flusher, r, active, events)
+		return
+	}
+
+	// Legacy chars-snapshot path (mount resume): subscribe BEFORE taking the
+	// snapshot: any chunk emitted from now on is buffered in the channel, so
+	// nothing is lost between snapshot and live forwarding.
+	events, _ := active.subscribe()
 	defer active.unsubscribe(events)
 
 	// Replay: start event with the assistant message id (so the client
@@ -1199,6 +1358,27 @@ func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
 	default:
 	}
 
+	// Live phase: shared with POST /api/chats/{id}/stream, whose observer
+	// subscribes before the run starts and follows the same loop.
+	followStream(w, flusher, r, active, events)
+}
+
+// followStream forwards live stream events to an SSE observer until the run
+// finishes or the observer disconnects. It is the shared tail of both
+// POST /api/chats/{id}/stream (which subscribes before the run starts) and
+// GET /api/chats/{id}/stream (which first replays a snapshot prologue). The
+// caller must already have subscribed and set the SSE headers.
+func followStream(w http.ResponseWriter, flusher http.Flusher, r *http.Request, active *activeStream, events chan streamEvent) {
+	// Pending-approval replay: a client that subscribes while a tool approval
+	// is waiting must see the prompt again, or the run blocks forever with
+	// nobody able to answer. Known race: if the approval is answered between
+	// this replay and the client's answer, the answer endpoint returns 404
+	// and the UI surfaces a toast — acceptable.
+	if extra, ok := active.pendingApprovalEvent(); ok && !active.isDone() {
+		writeSSEEvent(w, "tool_approval", extra)
+		flusher.Flush()
+	}
+
 	for {
 		select {
 		case <-r.Context().Done():
@@ -1218,19 +1398,41 @@ func (s *Server) handleReconnectStream(w http.ResponseWriter, r *http.Request) {
 				}
 				if e == "superseded" {
 					// This stream was replaced by a new generation; the
-					// client should reload messages rather than show an error.
+					// client should reload messages rather than show an
+					// error. The closed done channel ends the loop with a
+					// finish event.
 					continue
 				}
-				writeSSEEvent(w, "error", map[string]string{"error": e})
+				writeSSEEventAt(w, ev.seq, "error", map[string]string{"error": e})
 				flusher.Flush()
 			case "finish":
 				// Handled via done channel; ignore duplicates here.
 			default:
-				writeSSEEvent(w, ev.event, ev.extra)
+				writeSSEEventAt(w, ev.seq, ev.event, ev.extra)
 				flusher.Flush()
 			}
 		}
 	}
+}
+
+// handleCancelStream stops an in-progress chat generation (the Stop button).
+// Idempotent: with no active stream it still succeeds, so a stale or
+// duplicated Stop press is harmless.
+func (s *Server) handleCancelStream(w http.ResponseWriter, r *http.Request) {
+	userID, _ := userIDFromContext(r)
+	chatID := r.PathValue("id")
+
+	// Same ownership check as the reconnect endpoint: cancelling another
+	// user's generation must not even reveal whether one is running.
+	if _, err := s.Store.GetChat(chatID, userID); err != nil {
+		errorResponse(w, "Chat not found", http.StatusNotFound)
+		return
+	}
+
+	if active := s.activeStreams.get(chatID); active != nil {
+		active.Cancel()
+	}
+	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)
 }
 
 // resolveAttachments loads attachment bytes for any message whose attachment
@@ -1259,21 +1461,34 @@ func (s *Server) resolveAttachments(userID string, m ai.ChatMessage) (ai.ChatMes
 }
 
 // writeSSEEvent writes a single SSE data frame with a JSON payload of the
-// form {"type": <event>, ...extra}. Payload fields are marshaled with
-// encoding/json so special characters (newlines, quotes) are escaped exactly
-// once.
+// form {"type": <event>, ...extra} and no seq (prologue events).
 func writeSSEEvent(w http.ResponseWriter, event string, extra map[string]string) {
+	writeSSEEventAt(w, 0, event, extra)
+}
+
+// writeSSEEventAt writes a single SSE data frame; when seq > 0 it emits an
+// "id: <seq>" line before "data:" and includes "seq" in the JSON payload so
+// sinceSeq reconnects can resume without gaps. Payload fields are marshaled
+// with encoding/json so special characters (newlines, quotes) are escaped
+// exactly once.
+func writeSSEEventAt(w http.ResponseWriter, seq int64, event string, extra map[string]string) {
 	payload := map[string]string{"type": event}
 	maps.Copy(payload, extra)
+	if seq > 0 {
+		payload["seq"] = strconv.FormatInt(seq, 10)
+	}
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return
+	}
+	if seq > 0 {
+		fmt.Fprintf(w, "id: %d\n", seq)
 	}
 	fmt.Fprintf(w, "data: %s\n\n", data)
 }
 
 func generateID() string {
-	return fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	return "msg_" + uuid.NewString()
 }
 
 // cloneMessages deep-copies a slice of message maps via JSON round-trip.
@@ -1393,16 +1608,16 @@ func (s *Server) handleForkChat(w http.ResponseWriter, r *http.Request) {
 
 	// Slice up to and including the target message
 	newMessages := messages[:targetIndex+1]
-	newMessagesJSON, _ := json.Marshal(newMessages)
 
-	// Prepare new chat record (let PocketBase auto-generate ID)
+	// Prepare new chat record (let PocketBase auto-generate ID). SaveChat
+	// ignores the Messages field — the forked messages are imported into the
+	// chat_messages collection right after.
 	newChat := &store.ChatRecord{
 		Title:      srcChat.Title,
 		Visibility: store.VisibilityPrivate,
 		WebSearch:  srcChat.WebSearch,
 		AgentID:    srcChat.AgentID,
 		Preset:     srcChat.Preset,
-		Messages:   newMessagesJSON,
 		Votes:      json.RawMessage("[]"),
 		Branches:   json.RawMessage("{}"),
 	}
@@ -1410,6 +1625,10 @@ func (s *Server) handleForkChat(w http.ResponseWriter, r *http.Request) {
 	saved, err := s.Store.SaveChat(newChat, userID)
 	if err != nil {
 		internalError(w, r, "Failed to fork chat", err)
+		return
+	}
+	if err := s.Store.UpsertChatMessages(saved.ID, newMessages); err != nil {
+		internalError(w, r, "Failed to fork chat messages", err)
 		return
 	}
 

@@ -217,10 +217,10 @@ func (s *Server) handleAdminDeleteInvitation(w http.ResponseWriter, r *http.Requ
 
 // providerKeyEntry is returned by list/GET — the actual key is never exposed.
 type providerKeyEntry struct {
-	Provider    string  `json:"provider"`
-	Label       string  `json:"label"`
-	Configured  bool    `json:"configured"`
-	UpdatedAt   *string `json:"updatedAt,omitempty"`
+	Provider   string  `json:"provider"`
+	Label      string  `json:"label"`
+	Configured bool    `json:"configured"`
+	UpdatedAt  *string `json:"updatedAt,omitempty"`
 }
 
 func knownProvidersWithLabel() []providerKeyEntry {
@@ -286,6 +286,7 @@ func (s *Server) handleAdminUpsertProviderKey(w http.ResponseWriter, r *http.Req
 		internalError(w, r, "Failed to save API key", err)
 		return
 	}
+	s.InvalidateProvider(provider)
 	auditLog(r, "provider_key.upsert", provider)
 
 	jsonResponse(w, info, http.StatusOK)
@@ -302,6 +303,7 @@ func (s *Server) handleAdminDeleteProviderKey(w http.ResponseWriter, r *http.Req
 		errorResponse(w, "Failed to delete API key", http.StatusInternalServerError)
 		return
 	}
+	s.InvalidateProvider(provider)
 	auditLog(r, "provider_key.delete", provider)
 
 	jsonResponse(w, map[string]bool{"success": true}, http.StatusOK)

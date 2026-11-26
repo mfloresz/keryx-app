@@ -8,20 +8,25 @@ import (
 
 // Collection names
 const (
-	UsersCollection                  = "users"
-	ChatsCollection                  = "chats"
-	ModelsCollection                 = "models"
-	UserModelAccessCollection        = "user_model_access"
-	InvitationsCollection            = "invitations"
-	AttachmentsCollection            = "attachments"
-	ProviderKeysCollection           = "provider_keys"
-	TitleGenerationPolicyCollection  = "title_generation_policy"
-		ModelPresetsCollection            = "model_presets"
-		WebSearchConfigCollection         = "web_search_config"
-	PromptOverridesCollection         = "prompt_overrides"
-	AgentsCollection                  = "agents"
-	ProjectsCollection                = "projects"
-	ProjectFilesCollection            = "project_files"
+	UsersCollection                 = "users"
+	ChatsCollection                 = "chats"
+	ModelsCollection                = "models"
+	UserModelAccessCollection       = "user_model_access"
+	InvitationsCollection           = "invitations"
+	AttachmentsCollection           = "attachments"
+	ProviderKeysCollection          = "provider_keys"
+	TitleGenerationPolicyCollection = "title_generation_policy"
+	ModelPresetsCollection          = "model_presets"
+	WebSearchConfigCollection       = "web_search_config"
+	PromptOverridesCollection       = "prompt_overrides"
+	AgentsCollection                = "agents"
+	ProjectsCollection              = "projects"
+	ProjectFilesCollection          = "project_files"
+	ChatMessagesCollection          = "chat_messages"
+	ChatArtifactsCollection         = "chat_artifacts"
+	SkillsCollection                = "skills"
+	AutomationsCollection           = "automations"
+	AutomationRunsCollection        = "automation_runs"
 )
 
 // User roles
@@ -57,26 +62,29 @@ type AuthResult struct {
 }
 
 type ChatRecord struct {
-	ID         string          `json:"id"`
-	OwnerID    string          `json:"ownerId,omitempty"`
-	Title      string          `json:"title"`
-	Visibility string          `json:"visibility"`
-	Messages   json.RawMessage `json:"messages"`
-	Votes      json.RawMessage `json:"votes"`
-	WebSearch  bool            `json:"webSearch"`
-	AgentID    string          `json:"agentId,omitempty"`
-	Preset     string          `json:"preset,omitempty"`
-	ProjectID  string          `json:"projectId,omitempty"`
-	Branches   json.RawMessage `json:"branches"`
-	LastUsage  json.RawMessage `json:"lastUsage,omitempty"`
-	CreatedAt  string          `json:"createdAt,omitempty"`
-	UpdatedAt  string          `json:"updatedAt,omitempty"`
+	ID             string          `json:"id"`
+	OwnerID        string          `json:"ownerId,omitempty"`
+	Title          string          `json:"title"`
+	Visibility     string          `json:"visibility"`
+	Messages       json.RawMessage `json:"messages"`
+	Votes          json.RawMessage `json:"votes"`
+	WebSearch      bool            `json:"webSearch"`
+	AgentID        string          `json:"agentId,omitempty"`
+	Preset         string          `json:"preset,omitempty"`
+	ProjectID      string          `json:"projectId,omitempty"`
+	Branches       json.RawMessage `json:"branches"`
+	LastUsage      json.RawMessage `json:"lastUsage,omitempty"`
+	Summary        string          `json:"summary,omitempty"`
+	SummaryThrough string          `json:"summaryThrough,omitempty"`
+	CreatedAt      string          `json:"createdAt,omitempty"`
+	UpdatedAt      string          `json:"updatedAt,omitempty"`
 }
 
 type ChatIndexEntry struct {
-	ID        string `json:"id"`
-	Title     string `json:"title"`
-	CreatedAt string `json:"createdAt"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Visibility string `json:"visibility"`
+	CreatedAt  string `json:"createdAt"`
 }
 
 type FavoriteMessageEntry struct {
@@ -121,8 +129,8 @@ const (
 
 // TitleGenerationPolicy holds the admin-defined title generation policy.
 type TitleGenerationPolicy struct {
-	Mode      TitleGenerationMode `json:"mode"`
-	ModelID   string              `json:"modelId,omitempty"`
+	Mode    TitleGenerationMode `json:"mode"`
+	ModelID string              `json:"modelId,omitempty"`
 }
 
 type AllowedModel struct {

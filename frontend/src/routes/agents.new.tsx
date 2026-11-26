@@ -2,6 +2,11 @@ import * as React from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 
+import {
+  SkillsSection,
+  StarterPromptsSection,
+  ToolsSection,
+} from "#/components/agents/agent-form-sections";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
@@ -21,6 +26,9 @@ function NewAgentPage() {
   const [description, setDescription] = React.useState("");
   const [icon, setIcon] = React.useState("");
   const [systemPrompt, setSystemPrompt] = React.useState("");
+  const [tools, setTools] = React.useState<string[]>([]);
+  const [skills, setSkills] = React.useState<string[]>([]);
+  const [starterPrompts, setStarterPrompts] = React.useState<string[]>([]);
   const [isSaving, setIsSaving] = React.useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -35,6 +43,11 @@ function NewAgentPage() {
         description: description.trim(),
         icon: icon.trim() || undefined,
         systemPrompt,
+        tools,
+        skills,
+        starterPrompts: starterPrompts
+          .map((prompt) => prompt.trim())
+          .filter(Boolean),
       });
       void navigate({ to: "/agents/$id", params: { id: created.id } });
     } catch (err) {
@@ -104,6 +117,15 @@ function NewAgentPage() {
             className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           />
         </div>
+
+        <ToolsSection selected={tools} onChange={setTools} />
+
+        <SkillsSection selected={skills} onChange={setSkills} />
+
+        <StarterPromptsSection
+          prompts={starterPrompts}
+          onChange={setStarterPrompts}
+        />
 
         <div className="flex gap-2">
           <Button type="submit" disabled={isSaving}>

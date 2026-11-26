@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cloudwego/eino/components/model"
 	einogemini "github.com/cloudwego/eino-ext/components/model/gemini"
+	"github.com/cloudwego/eino/components/model"
 	"google.golang.org/genai"
 )
 
@@ -54,7 +54,7 @@ func (p *GoogleProvider) requestTimeout(req ChatRequest) time.Duration {
 		timeout = req.Timeout
 	}
 	if timeout <= 0 {
-		timeout = 120 * time.Second
+		timeout = totalLoopBudget
 	}
 	return timeout
 }

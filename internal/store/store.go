@@ -36,8 +36,14 @@ func (s *Store) EnsureSchema() error {
 	if _, err := s.ensureInvitationsCollection(users); err != nil {
 		return fmt.Errorf("ensure invitations: %w", err)
 	}
-	if _, err := s.ensureAgentsCollection(users); err != nil {
+	agents, err := s.ensureAgentsCollection(users)
+	if err != nil {
 		return fmt.Errorf("ensure agents: %w", err)
+	}
+	// agents JSON bundle columns (tools/skills/knowledge/starter_prompts) for
+	// DBs created before agent bundles existed; no-op on fresh installs.
+	if err := s.migrateAgentsCollectionForBundles(agents); err != nil {
+		return fmt.Errorf("migrate agent bundles: %w", err)
 	}
 	// chats.agent_id: TextField (not Relation) so deleting an agent never
 	// breaks existing chats — the stream falls back to the base prompt.
@@ -53,6 +59,23 @@ func (s *Store) EnsureSchema() error {
 	if err := s.migrateChatsCollectionForProjects(chats); err != nil {
 		return fmt.Errorf("migrate chats project_id: %w", err)
 	}
+	// chats.summary / summary_through: plain text columns for conversation
+	// summarization (what the summary covers).
+	if err := s.migrateChatsCollectionForSummary(chats); err != nil {
+		return fmt.Errorf("migrate chats summary: %w", err)
+	}
+	if _, err := s.ensureChatMessagesCollection(chats); err != nil {
+		return fmt.Errorf("ensure chat messages: %w", err)
+	}
+	if err := s.migrateChatsBlobToMessages(); err != nil {
+		return fmt.Errorf("migrate chats messages blob: %w", err)
+	}
+	if _, err := s.ensureChatArtifactsCollection(chats); err != nil {
+		return fmt.Errorf("ensure chat artifacts: %w", err)
+	}
+	if _, err := s.ensureSkillsCollection(); err != nil {
+		return fmt.Errorf("ensure skills: %w", err)
+	}
 	if _, err := s.ensureAttachmentsCollection(users, chats); err != nil {
 		return fmt.Errorf("ensure attachments: %w", err)
 	}
@@ -62,6 +85,13 @@ func (s *Store) EnsureSchema() error {
 	}
 	if _, err := s.ensureProjectFilesCollection(users, projects); err != nil {
 		return fmt.Errorf("ensure project files: %w", err)
+	}
+	automations, err := s.ensureAutomationsCollection(users)
+	if err != nil {
+		return fmt.Errorf("ensure automations: %w", err)
+	}
+	if _, err := s.ensureAutomationRunsCollection(automations); err != nil {
+		return fmt.Errorf("ensure automation runs: %w", err)
 	}
 	if err := s.seedModels(); err != nil {
 		return fmt.Errorf("seed models: %w", err)

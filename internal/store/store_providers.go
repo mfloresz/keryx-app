@@ -13,9 +13,9 @@ import (
 // is never exposed to the frontend, only whether one is configured and when it
 // was last updated.
 type ProviderKeyInfo struct {
-	Provider        string `json:"provider"`
-	Configured      bool   `json:"configured"`
-	UpdatedAt       string `json:"updatedAt,omitempty"`
+	Provider   string `json:"provider"`
+	Configured bool   `json:"configured"`
+	UpdatedAt  string `json:"updatedAt,omitempty"`
 }
 
 // ListProviderKeys returns all provider keys with the actual key stripped.

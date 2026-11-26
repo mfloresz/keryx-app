@@ -202,4 +202,36 @@ func TestBuildSchemaMessagesMarkdown(t *testing.T) {
 			t.Error("file part should not be staged when inlined")
 		}
 	})
+
+	t.Run("preserves assistant tool calls and tool messages", func(t *testing.T) {
+		msgs := buildSchemaMessages(ChatRequest{
+			Messages: []ChatMessage{
+				{Role: "user", Content: "read file"},
+				{
+					Role:    "assistant",
+					Content: "Reading...",
+					ToolCalls: []ToolCall{{
+						ID:        "tc-1",
+						Name:      "read_file",
+						Arguments: `{"path":"main.go"}`,
+					}},
+					ToolResults: []ToolResult{{
+						ToolCallID: "tc-1",
+						ToolName:   "read_file",
+						Output:     "package main",
+					}},
+				},
+			},
+		}, false)
+
+		if len(msgs) != 3 {
+			t.Fatalf("expected 3 schema messages (user, assistant, tool), got %d", len(msgs))
+		}
+		if msgs[1].Role != schema.Assistant || len(msgs[1].ToolCalls) != 1 {
+			t.Errorf("expected assistant message with 1 tool call, got %+v", msgs[1])
+		}
+		if msgs[2].Role != schema.Tool || msgs[2].ToolCallID != "tc-1" || msgs[2].Content != "package main" {
+			t.Errorf("expected tool message with output, got %+v", msgs[2])
+		}
+	})
 }

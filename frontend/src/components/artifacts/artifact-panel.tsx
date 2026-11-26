@@ -12,6 +12,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Button } from "#/components/ui/button";
+import { Markdown } from "#/components/chat/markdown";
 import {
   Select,
   SelectContent,
@@ -20,17 +21,22 @@ import {
   SelectValue,
 } from "#/components/ui/select";
 import { useI18n } from "#/i18n";
-import { publishArtifact } from "#/services/artifact-service";
-import { useArtifactStore } from "#/stores/artifact";
+import {
+  fetchChatArtifact,
+  publishArtifact,
+} from "#/services/artifact-service";
+import { isModelArtifact, useArtifactStore } from "#/stores/artifact";
 
 /**
- * Right-hand panel that previews HTML artifacts.
+ * Right-hand panel that previews artifacts.
  *
- * The preview runs in a sandboxed iframe pointing at a document published
- * by the backend, so the artifact's scripts execute without access to the
- * parent's origin.
+ * Fenced-HTML artifacts carry their code in the message text and are
+ * previewed through a sandboxed iframe pointing at a document published by
+ * the backend. Model artifacts announce themselves via data-artifact parts
+ * and fetch their content lazily from the backend; markdown ones render
+ * through the Markdown component, HTML ones go through the same iframe.
  */
-export function ArtifactPanel() {
+export function ArtifactPanel({ chatId }: { chatId: string }) {
   const { t } = useI18n();
   const {
     all,
@@ -49,20 +55,85 @@ export function ArtifactPanel() {
   const [publishError, setPublishError] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
 
-  // Publish whenever the active artifact changes.
+  // Model artifact content, fetched lazily. `viewVersion` steps through
+  // versions of the active model artifact (null = the stored version).
+  const [fetchedCode, setFetchedCode] = React.useState<string | null>(null);
+  const [fetching, setFetching] = React.useState(false);
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
+  const [viewVersion, setViewVersion] = React.useState<number | null>(null);
+  const [reloadTick, setReloadTick] = React.useState(0);
+
+  const activeModel =
+    active && isModelArtifact(active) ? active : null;
+  const activeIsModel = activeModel !== null;
+  const maxVersion = activeModel ? activeModel.version : 1;
+  const effectiveVersion = activeModel
+    ? (viewVersion ?? activeModel.version)
+    : undefined;
+  const activeType = activeModel ? activeModel.type : "html";
+  // Fenced artifacts carry their code locally; model ones use the fetch result.
+  const effectiveCode = active
+    ? isModelArtifact(active)
+      ? (fetchedCode ?? "")
+      : active.code
+    : "";
+
+  // Reset the per-artifact view state when the selection changes.
   React.useEffect(() => {
-    if (!isOpen || !active) {
+    setViewVersion(null);
+    setFetchedCode(null);
+    setFetchError(null);
+    setPublishedUrl(null);
+    setPublishError(null);
+  }, [active?.key]);
+
+  // Model artifacts have no local code: fetch the content for the
+  // effective version (refetches when the version selection steps).
+  React.useEffect(() => {
+    if (!activeIsModel || !activeModel) return;
+
+    let cancelled = false;
+    setFetching(true);
+    setFetchError(null);
+
+    fetchChatArtifact(chatId, activeModel.artifactId, effectiveVersion)
+      .then((artifact) => {
+        if (!cancelled) setFetchedCode(artifact.content);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setFetchError(
+            err instanceof Error ? err.message : t("artifact.fetchError"),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setFetching(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIsModel, activeModel?.artifactId, effectiveVersion, chatId, reloadTick]);
+
+  // Publish the HTML content (fenced or fetched) for the sandboxed iframe.
+  // Markdown model artifacts render directly and never hit this effect.
+  React.useEffect(() => {
+    if (!isOpen || !active || activeType === "markdown") {
       setPublishedUrl(null);
       setPublishError(null);
       return;
     }
+    // A model HTML artifact without content yet is still fetching.
+    if (activeIsModel && !effectiveCode) return;
 
     let cancelled = false;
     setPublishing(true);
     setPublishError(null);
     setPublishedUrl(null);
 
-    void publishArtifact(active.code)
+    void publishArtifact(effectiveCode)
       .then((published) => {
         if (!cancelled) setPublishedUrl(published.url);
       })
@@ -80,29 +151,46 @@ export function ArtifactPanel() {
     return () => {
       cancelled = true;
     };
-  }, [isOpen, active]);
+  }, [isOpen, active, activeIsModel, activeType, effectiveCode]);
 
   if (!isOpen) return null;
 
   async function handleCopy() {
-    if (!active) return;
-    await navigator.clipboard.writeText(active.code);
+    if (!active || !effectiveCode) return;
+    await navigator.clipboard.writeText(effectiveCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
 
   function handleDownload() {
-    if (!active) return;
-    const blob = new Blob([active.code], { type: "text/html" });
+    if (!active || !effectiveCode) return;
+    const isMarkdown = activeType === "markdown";
+    const blob = new Blob([effectiveCode], {
+      type: isMarkdown ? "text/markdown" : "text/html",
+    });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `artifact-v${activeIndex + 1}.html`;
+    anchor.download = activeIsModel
+      ? `${activeModel!.artifactId}-v${effectiveVersion}.${isMarkdown ? "md" : "html"}`
+      : `artifact-v${activeIndex + 1}.html`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
 
+  // Version stepping for model artifacts with more than one version.
+  const hasVersions = activeIsModel && maxVersion > 1;
+  const stepVersion = (delta: -1 | 1) => {
+    if (!activeModel) return;
+    setViewVersion((current) => {
+      const from = current ?? activeModel.version;
+      const next = Math.min(maxVersion, Math.max(1, from + delta));
+      return next === activeModel.version ? null : next;
+    });
+  };
+
   const hasMultiple = all.length > 1;
+  const isLoadingModel = activeIsModel && fetching && !fetchedCode;
 
   return (
     <aside
@@ -144,11 +232,56 @@ export function ArtifactPanel() {
             <SelectContent>
               {all.map((artifact, index) => (
                 <SelectItem key={artifact.key} value={artifact.key}>
-                  v{index + 1}
+                  {isModelArtifact(artifact) ? artifact.title : `v${index + 1}`}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+        ) : null}
+
+        {hasVersions ? (
+          <div className="ml-1 flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("artifact.previousVersion")}
+              disabled={effectiveVersion! <= 1}
+              onClick={() => stepVersion(-1)}
+            >
+              <ChevronLeftIcon />
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              v{effectiveVersion} / {maxVersion}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("artifact.nextVersion")}
+              disabled={effectiveVersion! >= maxVersion}
+              onClick={() => stepVersion(1)}
+            >
+              <ChevronRightIcon />
+            </Button>
+            <Select
+              value={String(effectiveVersion)}
+              onValueChange={(v) => {
+                const num = Number(v);
+                if (!Number.isFinite(num)) return;
+                setViewVersion(num === maxVersion ? null : num);
+              }}
+            >
+              <SelectTrigger size="sm" className="h-7 w-16 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: maxVersion }, (_, i) => i + 1).map((v) => (
+                  <SelectItem key={v} value={String(v)}>
+                    v{v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         ) : null}
 
         <div className="ms-auto flex items-center gap-1">
@@ -165,6 +298,7 @@ export function ArtifactPanel() {
             variant="ghost"
             size="icon-sm"
             aria-label={t("artifact.download")}
+            disabled={!effectiveCode}
             onClick={handleDownload}
           >
             <DownloadIcon />
@@ -186,11 +320,17 @@ export function ArtifactPanel() {
             aria-label={t("artifact.reload")}
             disabled={!active}
             onClick={() => {
+              if (activeIsModel) {
+                // Refetch the model artifact content.
+                setFetchedCode(null);
+                setReloadTick((tick) => tick + 1);
+                return;
+              }
               // Re-publish: bump the key so the effect runs again.
               setPublishedUrl(null);
               setPublishing(true);
               setPublishError(null);
-              void publishArtifact(active!.code)
+              void publishArtifact(effectiveCode)
                 .then((p) => setPublishedUrl(p.url))
                 .catch(() => setPublishError(t("artifact.publishError")))
                 .finally(() => setPublishing(false));
@@ -232,6 +372,7 @@ export function ArtifactPanel() {
             variant="ghost"
             size="xs"
             className="ms-auto"
+            disabled={!effectiveCode}
             onClick={() => void handleCopy()}
           >
             {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
@@ -247,8 +388,30 @@ export function ArtifactPanel() {
           </p>
         ) : tab === "code" ? (
           <pre className="h-full overflow-auto p-3 text-xs">
-            <code>{active.code}</code>
+            <code>{effectiveCode}</code>
           </pre>
+        ) : isLoadingModel ? (
+          <p className="p-4 text-sm text-muted-foreground">
+            {t("artifact.loading")}
+          </p>
+        ) : fetchError ? (
+          <div className="space-y-3 p-4">
+            <p className="text-sm text-destructive">{t("artifact.fetchError")}</p>
+            <Button
+              size="sm"
+              onClick={() => {
+                setFetchError(null);
+                setFetchedCode(null);
+                setReloadTick((tick) => tick + 1);
+              }}
+            >
+              {t("artifact.retry")}
+            </Button>
+          </div>
+        ) : activeType === "markdown" ? (
+          <div className="h-full max-w-none overflow-auto p-4">
+            <Markdown>{effectiveCode}</Markdown>
+          </div>
         ) : publishing ? (
           <p className="p-4 text-sm text-muted-foreground">
             {t("artifact.publishing")}
@@ -261,7 +424,7 @@ export function ArtifactPanel() {
               onClick={() => {
                 setPublishError(null);
                 setPublishing(true);
-                void publishArtifact(active.code)
+                void publishArtifact(effectiveCode)
                   .then((p) => setPublishedUrl(p.url))
                   .catch(() => setPublishError(t("artifact.publishError")))
                   .finally(() => setPublishing(false));

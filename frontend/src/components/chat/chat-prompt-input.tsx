@@ -1,4 +1,3 @@
-import * as React from "react";
 import {
   BotIcon,
   CheckIcon,
@@ -6,11 +5,19 @@ import {
   GlobeIcon,
   PaperclipIcon,
   PlusIcon,
+  SparklesIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react";
+import * as React from "react";
 import { toast } from "sonner";
 
+import type {
+  ChatAgent,
+  ChatProject,
+  ModelPreset,
+  PendingAttachment,
+} from "#/components/chat/types";
 import { Attachment, AttachmentMedia } from "#/components/ui/attachment";
 import { Button } from "#/components/ui/button";
 import {
@@ -47,12 +54,7 @@ import {
   convertToMarkdown,
   isConvertible,
 } from "#/services/document-conversion";
-import type {
-  ChatAgent,
-  ChatProject,
-  ModelPreset,
-  PendingAttachment,
-} from "#/components/chat/types";
+import { listSkills, type SkillInfo } from "#/services/skills";
 
 const DOCUMENT_ACCEPT =
   ".pdf,.txt,.md,.doc,.docx,.docm,.odt,.ods,.odp,.ppt,.pptx,.pptm,.ppsx,.ppsm,.xls,.xlsx,.xlsm,.rtf,.epub,.csv,.json,.xml,.html,.css,.js,.ts,.py,.java,.cpp,.go,.rs";
@@ -81,10 +83,16 @@ export interface ChatPromptInputProps {
   agentId?: string | null;
   projects?: ChatProject[];
   projectId?: string | null;
+  /**
+   * Request from the parent to set the composer text (starter prompt
+   * chips). The nonce makes each request unique.
+   */
+  prefill?: { text: string; nonce: number } | null;
   onSubmit: (payload: {
     text: string;
     files: PendingAttachment[];
     webSearch: boolean;
+    pinnedSkills: string[];
   }) => void;
   onStop: () => void;
   onPresetChange: (preset: string) => void;
@@ -103,6 +111,7 @@ export function ChatPromptInput({
   agentId,
   projects,
   projectId,
+  prefill,
   onSubmit,
   onStop,
   onPresetChange,
@@ -114,9 +123,35 @@ export function ChatPromptInput({
   const [text, setText] = React.useState("");
   const [files, setFiles] = React.useState<PendingAttachment[]>([]);
   const [useWebSearch, setUseWebSearch] = React.useState(webSearch ?? false);
+  // Skills are fetched once and cached; pinned ones apply to the next
+  // message only and are cleared after each send.
+  const [skills, setSkills] = React.useState<SkillInfo[]>([]);
+  const [pinnedSkills, setPinnedSkills] = React.useState<string[]>([]);
   const [isDragging, setIsDragging] = React.useState(false);
   const [unsupportedImageOpen, setUnsupportedImageOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const prefillNonceRef = React.useRef(0);
+
+  React.useEffect(() => {
+    if (!prefill || prefill.nonce === prefillNonceRef.current) return;
+    prefillNonceRef.current = prefill.nonce;
+    setText(prefill.text);
+  }, [prefill]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void listSkills()
+      .then((list) => {
+        if (!cancelled) setSkills(list);
+      })
+      .catch(() => {
+        // Without the catalog the skills button simply stays hidden.
+        if (!cancelled) setSkills([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const selectedPreset = presets.find((p) => p.preset === preset);
   const modelSupportsImages = selectedPreset?.supportsImages ?? true;
@@ -223,9 +258,16 @@ export function ChatPromptInput({
     if (!trimmed && files.length === 0) return;
     if (isBusy || isConverting) return;
 
-    onSubmit({ text: trimmed, files, webSearch: useWebSearch });
+    onSubmit({
+      text: trimmed,
+      files,
+      webSearch: useWebSearch,
+      pinnedSkills,
+    });
     setText("");
     setFiles([]);
+    // Pinned skills apply to the next message only.
+    setPinnedSkills([]);
   }
 
   function handlePresetChange(value: string) {
@@ -265,16 +307,48 @@ export function ChatPromptInput({
   }, [addFiles]);
 
   return (
-    <div className="bg-background px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-2">
+    <div className="bg-background px-4 pt-2 pb-[max(env(safe-area-inset-bottom),1rem)]">
       <div
         className={`relative mx-auto max-w-3xl transition-shadow ${
           isDragging ? "ring-2 ring-primary/50" : ""
         }`}
       >
         <InputGroup className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm focus-within:border-primary/30 focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/10">
+          {/* Pinned skills row (apply to the next message only) */}
+          {pinnedSkills.length > 0 ? (
+            <InputGroupAddon
+              align="block-start"
+              className="flex-wrap px-3 pt-3"
+            >
+              {pinnedSkills.map((name) => (
+                <span
+                  key={name}
+                  className="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs"
+                >
+                  <SparklesIcon className="size-3 shrink-0" />
+                  <span className="max-w-30 truncate">{name}</span>
+                  <button
+                    type="button"
+                    aria-label={t("chat.skills.remove")}
+                    onClick={() =>
+                      setPinnedSkills((current) =>
+                        current.filter((skill) => skill !== name),
+                      )
+                    }
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </InputGroupAddon>
+          ) : null}
+
           {/* Attachments row */}
           {files.length > 0 ? (
-            <InputGroupAddon align="block-start" className="flex-wrap px-3 pt-3">
+            <InputGroupAddon
+              align="block-start"
+              className="flex-wrap px-3 pt-3"
+            >
               {files.map((file) => (
                 <Attachment key={file.id} size="sm">
                   <AttachmentMedia variant="icon">
@@ -337,15 +411,14 @@ export function ChatPromptInput({
                     variant="ghost"
                     size="icon-xs"
                     aria-label={t("chat.addTools")}
+                    className={isBusy ? "pointer-events-none opacity-50" : ""}
                   />
                 }
               >
                 <PlusIcon className="size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64">
-                <DropdownMenuItem
-                  onClick={() => fileInputRef.current?.click()}
-                >
+                <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                   <PaperclipIcon className="mr-2 size-4" />
                   {t("chat.attachFiles")}
                 </DropdownMenuItem>
@@ -404,11 +477,62 @@ export function ChatPromptInput({
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {skills.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      variant={pinnedSkills.length ? "default" : "ghost"}
+                      size="xs"
+                      aria-label={t("chat.skills.menuLabel")}
+                      className={isBusy ? "pointer-events-none opacity-50" : ""}
+                    />
+                  }
+                >
+                  <SparklesIcon className="size-4" />
+                  <span className="hidden sm:inline">
+                    {t("chat.skills.menuLabel")}
+                  </span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  {skills.map((skill) => {
+                    const pinned = pinnedSkills.includes(skill.name);
+                    return (
+                      <DropdownMenuItem
+                        key={skill.name}
+                        onClick={() =>
+                          setPinnedSkills((current) =>
+                            pinned
+                              ? current.filter((s) => s !== skill.name)
+                              : [...current, skill.name],
+                          )
+                        }
+                      >
+                        <SparklesIcon className="mr-2 size-4 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0">
+                          <span className="block truncate">{skill.name}</span>
+                          {skill.description ? (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {skill.description}
+                            </span>
+                          ) : null}
+                        </span>
+                        {pinned ? (
+                          <CheckIcon className="ms-auto size-4 shrink-0" />
+                        ) : null}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+
             {webSearchGloballyEnabled ? (
               <Button
                 type="button"
                 variant={useWebSearch ? "default" : "ghost"}
                 size="xs"
+                className={isBusy ? "pointer-events-none opacity-50" : ""}
                 onClick={() => setUseWebSearch((value) => !value)}
               >
                 <GlobeIcon className="size-4" />
@@ -421,7 +545,9 @@ export function ChatPromptInput({
               {selectedAgent ? (
                 <span className="group flex max-w-full items-center gap-1.5 rounded-full border bg-muted px-3 py-1 text-xs">
                   <BotIcon className="size-3 shrink-0" />
-                  <span className="max-w-30 truncate">{selectedAgent.name}</span>
+                  <span className="max-w-30 truncate">
+                    {selectedAgent.name}
+                  </span>
                   <button
                     type="button"
                     aria-label={t("chat.agent.clear")}
@@ -456,13 +582,19 @@ export function ChatPromptInput({
               >
                 <SelectTrigger
                   size="sm"
-                  className="h-8 min-w-0 max-w-full px-3 text-xs"
+                  className={`h-8 max-w-full min-w-0 px-3 text-xs ${
+                    isBusy ? "pointer-events-none opacity-50" : ""
+                  }`}
                 >
                   <SelectValue placeholder={activePresetTitle} />
                 </SelectTrigger>
                 <SelectContent>
                   {presets.map((p) => (
-                    <SelectItem key={p.preset} value={p.preset} className="py-2">
+                    <SelectItem
+                      key={p.preset}
+                      value={p.preset}
+                      className="py-2"
+                    >
                       {p.label}
                     </SelectItem>
                   ))}
@@ -484,7 +616,7 @@ export function ChatPromptInput({
                   type="submit"
                   size="icon-sm"
                   aria-label={t("chat.send")}
-                  disabled={(!text.trim() && files.length === 0) || isConverting}
+                  disabled={isConverting}
                   onClick={handleSubmit}
                 >
                   <span aria-hidden>↑</span>

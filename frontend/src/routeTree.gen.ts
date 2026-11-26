@@ -20,6 +20,7 @@ import { Route as ChatIdRouteImport } from './routes/chat.$id'
 import { Route as InviteTokenRouteImport } from './routes/invite.$token'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsIdRouteImport } from './routes/projects.$id'
+import { Route as ShareIdRouteImport } from './routes/share.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -76,6 +77,11 @@ const ProjectsIdRoute = ProjectsIdRouteImport.update({
   path: '/projects/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShareIdRoute = ShareIdRouteImport.update({
+  id: '/share/$id',
+  path: '/share/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/chat/$id': typeof ChatIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/projects/$id': typeof ProjectsIdRoute
+  '/share/$id': typeof ShareIdRoute
   '/agents/': typeof AgentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
 }
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/chat/$id': typeof ChatIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/projects/$id': typeof ProjectsIdRoute
+  '/share/$id': typeof ShareIdRoute
   '/agents': typeof AgentsIndexRoute
   '/projects': typeof ProjectsIndexRoute
 }
@@ -114,6 +122,7 @@ export interface FileRoutesById {
   '/chat/$id': typeof ChatIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/projects/$id': typeof ProjectsIdRoute
+  '/share/$id': typeof ShareIdRoute
   '/agents/': typeof AgentsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
 }
@@ -129,6 +138,7 @@ export interface FileRouteTypes {
     | '/chat/$id'
     | '/invite/$token'
     | '/projects/$id'
+    | '/share/$id'
     | '/agents/'
     | '/projects/'
   fileRoutesByTo: FileRoutesByTo
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/chat/$id'
     | '/invite/$token'
     | '/projects/$id'
+    | '/share/$id'
     | '/agents'
     | '/projects'
   id:
@@ -155,6 +166,7 @@ export interface FileRouteTypes {
     | '/chat/$id'
     | '/invite/$token'
     | '/projects/$id'
+    | '/share/$id'
     | '/agents/'
     | '/projects/'
   fileRoutesById: FileRoutesById
@@ -169,6 +181,7 @@ export interface RootRouteChildren {
   ChatIdRoute: typeof ChatIdRoute
   InviteTokenRoute: typeof InviteTokenRoute
   ProjectsIdRoute: typeof ProjectsIdRoute
+  ShareIdRoute: typeof ShareIdRoute
   AgentsIndexRoute: typeof AgentsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
 }
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProjectsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/share/$id': {
+      id: '/share/$id'
+      path: '/share/$id'
+      fullPath: '/share/$id'
+      preLoaderRoute: typeof ShareIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -265,6 +285,7 @@ const rootRouteChildren: RootRouteChildren = {
   ChatIdRoute: ChatIdRoute,
   InviteTokenRoute: InviteTokenRoute,
   ProjectsIdRoute: ProjectsIdRoute,
+  ShareIdRoute: ShareIdRoute,
   AgentsIndexRoute: AgentsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
 }

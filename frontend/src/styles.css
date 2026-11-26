@@ -138,3 +138,34 @@
     @apply font-sans;
   }
 }
+
+/* flowdown reads the page's colour scheme (light-dark()), so the app's
+   theme toggle has to declare it; the .dark class alone only swaps the
+   shadcn tokens. */
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+/* Map flowdown's tokens onto the app's theme so replies match the UI. */
+.flowdown {
+  --fd-fg: var(--foreground);
+  --fd-fg-soft: var(--muted-foreground);
+  --fd-fg-faint: var(--muted-foreground);
+  --fd-bg: var(--background);
+  --fd-border: var(--border);
+  --fd-link: var(--primary);
+  --fd-radius: var(--radius);
+  --fd-code-bg: var(--muted);
+  --fd-code-fg: var(--foreground);
+  --fd-code-comment: var(--muted-foreground);
+  --fd-code-keyword: var(--primary);
+  --fd-code-string: var(--foreground);
+  --fd-code-number: var(--foreground);
+  --fd-code-function: var(--foreground);
+  --fd-code-type: var(--foreground);
+  --fd-code-tag: var(--foreground);
+}

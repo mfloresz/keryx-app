@@ -1,20 +1,39 @@
 import * as React from "react";
 
-import { hashCode, type HtmlArtifact } from "#/utils/html-artifacts";
+import {
+  hashCode,
+  type HtmlArtifact,
+  type ModelArtifact,
+} from "#/utils/html-artifacts";
 
 export type ArtifactTab = "preview" | "code";
 
+/**
+ * Everything the panel can navigate between: fenced-HTML artifacts carry
+ * their code locally, model artifacts carry only metadata (content is
+ * fetched lazily from the backend).
+ */
+export type PanelArtifact = HtmlArtifact | ModelArtifact;
+
+export function isModelArtifact(
+  artifact: PanelArtifact,
+): artifact is ModelArtifact {
+  return "artifactId" in artifact;
+}
+
 interface ArtifactContextValue {
-  /** Artifacts derived from the chat messages. */
+  /** Artifacts derived from the chat messages (HTML fences). */
   synced: HtmlArtifact[];
+  /** Model artifacts announced via data-artifact message parts. */
+  modelArtifacts: ModelArtifact[];
   /** Every artifact, including the ephemeral one opened from a code block. */
-  all: HtmlArtifact[];
-  active: HtmlArtifact | null;
+  all: PanelArtifact[];
+  active: PanelArtifact | null;
   activeKey: string | null;
   activeIndex: number;
   isOpen: boolean;
   tab: ArtifactTab;
-  syncItems: (next: HtmlArtifact[]) => void;
+  syncItems: (next: HtmlArtifact[], model?: ModelArtifact[]) => void;
   open: (key?: string) => void;
   openFromCodeBlock: (code: string) => void;
   select: (key: string) => void;
@@ -27,47 +46,69 @@ interface ArtifactContextValue {
 const ArtifactContext = React.createContext<ArtifactContextValue | null>(null);
 
 /**
- * Single source of UI truth for the HTML artifacts panel.
- * Items are synced (derived) from chat messages; inline previews from
- * Markdown resolve to the matching synced item by code or fall back to an
- * ephemeral entry so the eye-button always works.
+ * Single source of UI truth for the artifacts panel.
+ * Items are synced (derived) from chat messages — HTML fences and
+ * `data-artifact` parts alike; inline previews from Markdown resolve to the
+ * matching synced item by code or fall back to an ephemeral entry so the
+ * eye-button always works.
  */
 export function ArtifactProvider({ children }: { children: React.ReactNode }) {
   const [synced, setSynced] = React.useState<HtmlArtifact[]>([]);
+  const [modelArtifacts, setModelArtifacts] = React.useState<ModelArtifact[]>(
+    [],
+  );
   const [inlineItem, setInlineItem] = React.useState<HtmlArtifact | null>(null);
   const [activeKey, setActiveKey] = React.useState<string | null>(null);
   const [isOpen, setIsOpen] = React.useState(false);
   const [tab, setTab] = React.useState<ArtifactTab>("preview");
 
-  const all = React.useMemo<HtmlArtifact[]>(() => {
-    if (inlineItem && !synced.some((a) => a.key === inlineItem.key)) {
-      return [...synced, inlineItem];
+  const all = React.useMemo<PanelArtifact[]>(() => {
+    const combined: PanelArtifact[] = [...synced, ...modelArtifacts];
+    if (inlineItem && !combined.some((a) => a.key === inlineItem.key)) {
+      return [...combined, inlineItem];
     }
-    return synced;
-  }, [synced, inlineItem]);
+    return combined;
+  }, [synced, modelArtifacts, inlineItem]);
 
   const activeIndex = all.findIndex((a) => a.key === activeKey);
   const active = activeIndex >= 0 ? (all[activeIndex] ?? null) : null;
 
-  const syncItems = React.useCallback((next: HtmlArtifact[]) => {
-    setSynced(next);
-    setInlineItem((current) => {
-      if (!current) return null;
-      // Drop the ephemeral entry once the same code lands in synced items.
-      if (next.some((a) => a.code === current.code)) {
-        const match = next.find((a) => a.code === current.code);
-        if (match && activeKey === current.key) setActiveKey(match.key);
-        return null;
+  const syncItems = React.useCallback(
+    (next: HtmlArtifact[], model?: ModelArtifact[]) => {
+      setSynced(next);
+      if (model) {
+        setModelArtifacts((current) => {
+          if (
+            current.length === model.length &&
+            current.every(
+              (a, i) =>
+                a.key === model[i]?.key && a.version === model[i]?.version,
+            )
+          ) {
+            return current;
+          }
+          return model;
+        });
       }
-      return current;
-    });
-    setActiveKey((current) => {
-      if (!current) {
-        return next.length ? (next[next.length - 1]!.key) : null;
-      }
-      return next.some((a) => a.key === current) ? current : null;
-    });
-  }, [activeKey]);
+      setInlineItem((current) => {
+        if (!current) return null;
+        // Drop the ephemeral entry once the same code lands in synced items.
+        if (next.some((a) => a.code === current.code)) {
+          const match = next.find((a) => a.code === current.code);
+          if (match && activeKey === current.key) setActiveKey(match.key);
+          return null;
+        }
+        return current;
+      });
+      setActiveKey((current) => {
+        if (!current) {
+          return all.length ? (all[all.length - 1]!.key) : null;
+        }
+        return all.some((a) => a.key === current) ? current : null;
+      });
+    },
+    [activeKey, all],
+  );
 
   const open = React.useCallback((key?: string) => {
     setActiveKey((current) => {
@@ -117,6 +158,7 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
 
   const reset = React.useCallback(() => {
     setSynced([]);
+    setModelArtifacts([]);
     setInlineItem(null);
     setActiveKey(null);
     setIsOpen(false);
@@ -126,6 +168,7 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
   const value = React.useMemo<ArtifactContextValue>(
     () => ({
       synced,
+      modelArtifacts,
       all,
       active,
       activeKey,
@@ -143,6 +186,7 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
     }),
     [
       synced,
+      modelArtifacts,
       all,
       active,
       activeKey,

@@ -1,8 +1,4 @@
-import {
-  createRootRoute,
-  Outlet,
-  redirect,
-} from "@tanstack/react-router";
+import { createRootRoute, Outlet, redirect } from "@tanstack/react-router";
 
 import { AppShell } from "#/components/layout/app-shell";
 import { ErrorBoundary } from "#/components/layout/error-boundary";
@@ -12,7 +8,10 @@ import { getAuthAdapter } from "#/services/runtime";
 export const Route = createRootRoute({
   beforeLoad: async ({ location }) => {
     const pathname = location.pathname;
-    const isPublic = pathname === "/login" || pathname.startsWith("/invite/");
+    const isPublic =
+      pathname === "/login" ||
+      pathname.startsWith("/invite/") ||
+      pathname.startsWith("/share/");
 
     const auth = await getAuthAdapter();
     const session = await auth.getSession();

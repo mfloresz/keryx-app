@@ -9,3 +9,4 @@ node_modules
 .env.*
 !.env.example
 .hermes/
+ANALISIS_VIABILIDAD_OUI.md

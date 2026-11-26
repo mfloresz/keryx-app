@@ -1,4 +1,9 @@
-import type { ChatIndexEntry, ChatRecord, FavoriteMessageEntry } from "./types";
+import type {
+  ChatIndexEntry,
+  ChatRecord,
+  FavoriteMessageEntry,
+  PublicChatRecord,
+} from "./types";
 
 export interface DeleteMessageRequest {
   messageId: string;
@@ -24,6 +29,8 @@ export interface ChatRepository {
   listChats(): Promise<ChatIndexEntry[]>;
   createChat(chat: ChatRecord): Promise<ChatRecord>;
   getChat(chatId: string): Promise<ChatRecord | null>;
+  /** Fetches a public chat without authentication; null when not shared. */
+  getPublicChat(chatId: string): Promise<PublicChatRecord | null>;
   deleteChat(chatId: string): Promise<void>;
   deleteAllChats(): Promise<void>;
   updateTitle(chatId: string, title: string | null): Promise<ChatRecord>;

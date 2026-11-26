@@ -1,4 +1,3 @@
-import * as React from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   BotIcon,
@@ -8,15 +7,18 @@ import {
   PencilIcon,
   PlusIcon,
   SearchIcon,
+  Share2Icon,
   StarIcon,
   Trash2Icon,
 } from "lucide-react";
+import * as React from "react";
+import { toast } from "sonner";
 
 import { CommandPalette } from "#/components/layout/command-palette";
-import { SettingsDialog } from "#/components/settings/settings-dialog";
 import { UserMenu } from "#/components/layout/user-menu";
-import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { SettingsDialog } from "#/components/settings/settings-dialog";
 import { Button } from "#/components/ui/button";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,9 +38,9 @@ import {
   SidebarMenuItem,
 } from "#/components/ui/sidebar";
 import { useI18n } from "#/i18n";
-import { useAuth } from "#/stores/auth";
-import { useChatStore } from "#/stores/chat";
 import { getChatRepository } from "#/services/runtime";
+import { useAuth } from "#/stores/auth";
+import { useChatStore, type ChatListItem } from "#/stores/chat";
 
 export function AppSidebar() {
   const { t } = useI18n();
@@ -97,8 +99,32 @@ export function AppSidebar() {
     }
   }
 
-  const groupLabel = (group: { id: string; labelKey?: string; label?: string }) =>
-    group.labelKey ? t(group.labelKey) : (group.label ?? group.id);
+  async function toggleShare(chat: ChatListItem) {
+    const isPublic = chat.visibility === "public";
+    try {
+      const repo = await getChatRepository();
+      const updated = await repo.updateVisibility(
+        chat.id,
+        isPublic ? "private" : "public",
+      );
+      updateChat(chat.id, {
+        visibility: updated.visibility as ChatListItem["visibility"],
+      });
+      if (!isPublic) {
+        const url = `${window.location.origin}/share/${chat.id}`;
+        await navigator.clipboard.writeText(url);
+        toast.success(t("chat.shareLinkCopied"));
+      }
+    } catch {
+      toast.error(t("chat.failedShare"));
+    }
+  }
+
+  const groupLabel = (group: {
+    id: string;
+    labelKey?: string;
+    label?: string;
+  }) => (group.labelKey ? t(group.labelKey) : (group.label ?? group.id));
 
   return (
     <Sidebar collapsible="icon">
@@ -180,7 +206,7 @@ export function AppSidebar() {
               <div className="space-y-4">
                 {groups.map((group) => (
                   <div key={group.id}>
-                    <div className="px-2 pb-1.5 pt-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                    <div className="px-2 pt-3 pb-1.5 text-[11px] font-semibold tracking-widest text-muted-foreground/60 uppercase">
                       {groupLabel(group)}
                     </div>
                     <div className="space-y-0.5">
@@ -205,7 +231,7 @@ export function AppSidebar() {
                                   variant="ghost"
                                   size="icon"
                                   aria-label={t("sidebar.actions")}
-                                  className="absolute right-1 top-1/2 size-6 -translate-y-1/2 opacity-0 transition-opacity group-hover/item:opacity-100 data-[popup-open]:opacity-100"
+                                  className="absolute top-1/2 right-1 size-6 -translate-y-1/2 opacity-0 transition-opacity group-hover/item:opacity-100 data-[popup-open]:opacity-100"
                                 />
                               }
                             >
@@ -223,6 +249,14 @@ export function AppSidebar() {
                               >
                                 <PencilIcon className="mr-2 size-3.5" />
                                 {t("sidebar.rename")}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => void toggleShare(item)}
+                              >
+                                <Share2Icon className="mr-2 size-3.5" />
+                                {item.visibility === "public"
+                                  ? t("chat.unshare")
+                                  : t("chat.share")}
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 className="text-destructive focus:text-destructive"
@@ -253,10 +287,7 @@ export function AppSidebar() {
         />
       </SidebarFooter>
 
-      <CommandPalette
-        open={searchOpen}
-        onOpenChange={setSearchOpen}
-      />
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 
       <ConfirmDialog
@@ -287,7 +318,7 @@ export function AppSidebar() {
           }}
           placeholder={t("sidebar.rename")}
           aria-label={t("sidebar.rename")}
-          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none"
         />
       </ConfirmDialog>
     </Sidebar>
