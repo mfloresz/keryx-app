@@ -191,7 +191,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="min-h-0 flex-1 overflow-hidden">
+        <SidebarGroup>
           <SidebarGroupLabel>{t("sidebar.recentChats")}</SidebarGroupLabel>
           <SidebarGroupContent>
             {isLoading && !chats.length ? (
