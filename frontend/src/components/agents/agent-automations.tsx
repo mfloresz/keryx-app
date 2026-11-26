@@ -347,6 +347,13 @@ function CreateAutomationDialog({
               {t("automations.schedule")}
             </Label>
             <Select
+              items={Object.fromEntries([
+                ...INTERVAL_OPTIONS.map((option) => [
+                  option,
+                  formatScheduleLabel(option, t),
+                ]),
+                [DAILY_OPTION, t("automations.daily")],
+              ])}
               value={scheduleKind}
               onValueChange={(value) => setScheduleKind(String(value))}
             >

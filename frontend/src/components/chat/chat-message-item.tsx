@@ -32,7 +32,6 @@ import {
   MessageAvatar,
   MessageContent,
   MessageFooter,
-  MessageHeader,
 } from "#/components/ui/message";
 import {
   Trace,
@@ -364,12 +363,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
       ) : null}
 
       <MessageContent>
-        <MessageHeader>
-          <span className="text-xs text-muted-foreground">
-            {isUser ? t("message.user") : t("message.ai")}
-          </span>
-        </MessageHeader>
-
         {reasoningBlocks.map((block, index) => (
           <ReasoningPart
             key={`reasoning-${index}`}

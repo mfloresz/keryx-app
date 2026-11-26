@@ -2,7 +2,6 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   BotIcon,
   FolderIcon,
-  MessageCircleIcon,
   MoreHorizontalIcon,
   PencilIcon,
   PlusIcon,
@@ -154,7 +153,6 @@ export function AppSidebar() {
 
       <SidebarContent className="overflow-hidden">
         <SidebarGroup>
-          <SidebarGroupLabel>{"navigation"}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -221,7 +219,6 @@ export function AppSidebar() {
                                 "bg-foreground font-medium text-background shadow-sm hover:bg-foreground hover:text-background",
                             }}
                           >
-                            <MessageCircleIcon className="size-3.5 shrink-0 opacity-60" />
                             <span className="truncate">{item.label}</span>
                           </Link>
                           <DropdownMenu>

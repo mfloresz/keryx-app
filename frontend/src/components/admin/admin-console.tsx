@@ -168,6 +168,10 @@ export function AdminConsole() {
                     </p>
                   </div>
                   <Select
+                    items={{
+                      user: t("admin.shared.roleUser"),
+                      admin: t("admin.shared.roleAdmin"),
+                    }}
                     value={user.role}
                     onValueChange={async (value) => {
                       try {
@@ -454,7 +458,14 @@ function InvitationsCard({
               <Label htmlFor="invite-role">
                 {t("admin.invitations.role")}
               </Label>
-              <Select value={role} onValueChange={(v) => setRole(String(v))}>
+              <Select
+                items={{
+                  user: t("admin.shared.roleUser"),
+                  admin: t("admin.shared.roleAdmin"),
+                }}
+                value={role}
+                onValueChange={(v) => setRole(String(v))}
+              >
                 <SelectTrigger id="invite-role" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -857,6 +868,12 @@ function TitlePolicyCard({
           </label>
           {mode === "custom" ? (
             <Select
+              items={Object.fromEntries(
+                catalog.map((model) => [
+                  model.id,
+                  `${model.displayName} · ${model.provider}`,
+                ]),
+              )}
               value={modelId}
               onValueChange={(value) => {
                 setModelId(String(value));
@@ -946,6 +963,12 @@ function ModelPresetsCard({
             >
               <span className="text-sm">{preset.label}</span>
               <Select
+                items={Object.fromEntries(
+                  catalog.map((model) => [
+                    model.id,
+                    `${model.displayName} · ${model.provider}`,
+                  ]),
+                )}
                 value={drafts[preset.presetId] ?? preset.modelId}
                 onValueChange={(value) =>
                   setDrafts((current) => ({

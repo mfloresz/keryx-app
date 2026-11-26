@@ -116,7 +116,10 @@
       "confirmNewPassword": "Confirm New Password",
       "confirmNewPasswordPlaceholder": "Confirm your new password",
       "changing": "Changing...",
-      "updatePassword": "Update Password"
+      "updatePassword": "Update Password",
+      "profileSaved": "Profile saved successfully",
+      "avatarRemoved": "Avatar removed",
+      "passwordChanged": "Password changed successfully"
     },
     "fontLabel": "Font",
     "fontSizeLabel": "Font size"

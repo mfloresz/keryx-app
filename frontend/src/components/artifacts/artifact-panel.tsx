@@ -225,7 +225,16 @@ export function ArtifactPanel({ chatId }: { chatId: string }) {
         </Button>
 
         {all.length > 1 ? (
-          <Select value={active?.key ?? ""} onValueChange={(v) => select(String(v))}>
+          <Select
+            items={Object.fromEntries(
+              all.map((artifact, index) => [
+                artifact.key,
+                isModelArtifact(artifact) ? artifact.title : `v${index + 1}`,
+              ]),
+            )}
+            value={active?.key ?? ""}
+            onValueChange={(v) => select(String(v))}
+          >
             <SelectTrigger size="sm" className="ml-1 h-7 w-24 text-xs">
               <SelectValue />
             </SelectTrigger>
@@ -263,6 +272,12 @@ export function ArtifactPanel({ chatId }: { chatId: string }) {
               <ChevronRightIcon />
             </Button>
             <Select
+              items={Object.fromEntries(
+                Array.from({ length: maxVersion }, (_, i) => i + 1).map((v) => [
+                  String(v),
+                  `v${v}`,
+                ]),
+              )}
               value={String(effectiveVersion)}
               onValueChange={(v) => {
                 const num = Number(v);

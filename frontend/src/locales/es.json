@@ -116,7 +116,10 @@
       "confirmNewPassword": "Confirmar nueva contraseña",
       "confirmNewPasswordPlaceholder": "Confirma tu nueva contraseña",
       "changing": "Cambiando...",
-      "updatePassword": "Actualizar Contraseña"
+      "updatePassword": "Actualizar Contraseña",
+      "profileSaved": "Perfil guardado correctamente",
+      "avatarRemoved": "Avatar eliminado",
+      "passwordChanged": "Contraseña actualizada correctamente"
     },
     "fontLabel": "Fuente",
     "fontSizeLabel": "Tamaño de fuente"

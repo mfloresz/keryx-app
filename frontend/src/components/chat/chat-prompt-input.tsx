@@ -154,6 +154,11 @@ export function ChatPromptInput({
   }, []);
 
   const selectedPreset = presets.find((p) => p.preset === preset);
+  // The trigger shows the readable label of the selected preset.
+  const presetItems = React.useMemo(
+    () => Object.fromEntries(presets.map((p) => [p.preset, p.label])),
+    [presets],
+  );
   const modelSupportsImages = selectedPreset?.supportsImages ?? true;
   const selectedAgent = agents?.find((a) => a.id === agentId) ?? null;
   const selectedProject = projects?.find((p) => p.id === projectId) ?? null;
@@ -577,6 +582,7 @@ export function ChatPromptInput({
               ) : null}
 
               <Select
+                items={presetItems}
                 value={preset}
                 onValueChange={(value) => handlePresetChange(String(value))}
               >
