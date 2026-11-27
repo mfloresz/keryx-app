@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { annotateBranchMetadata } from "#/shared/chat-core";
+import { annotateBranchMetadata, hasRenderableContent } from "#/shared/chat-core";
 
 const branches = {
   root1: {
@@ -66,5 +66,29 @@ describe("annotateBranchMetadata", () => {
       metadata?: { keryxBranch?: unknown };
     };
     expect(target.metadata?.keryxBranch).toBeUndefined();
+  });
+});
+
+describe("hasRenderableContent", () => {
+  it("is false for an empty or structural-only message", () => {
+    expect(hasRenderableContent(null)).toBe(false);
+    expect(hasRenderableContent({ parts: [] })).toBe(false);
+    expect(hasRenderableContent({ parts: [{ type: "step-start" }] })).toBe(
+      false,
+    );
+    expect(
+      hasRenderableContent({ parts: [{ type: "text", text: "   " }] }),
+    ).toBe(false);
+  });
+
+  it("is true once the message has visible output", () => {
+    expect(
+      hasRenderableContent({ parts: [{ type: "text", text: "hello" }] }),
+    ).toBe(true);
+    expect(hasRenderableContent({ parts: [{ type: "reasoning" }] })).toBe(true);
+    expect(
+      hasRenderableContent({ parts: [{ type: "tool-read_file" }] }),
+    ).toBe(true);
+    expect(hasRenderableContent({ parts: [{ type: "file" }] })).toBe(true);
   });
 });

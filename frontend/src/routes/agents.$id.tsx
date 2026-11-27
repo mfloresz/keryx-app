@@ -11,6 +11,7 @@ import {
 } from "#/components/agents/agent-form-sections";
 import type { AgentKnowledge } from "#/components/chat/types";
 import { Button } from "#/components/ui/button";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { useI18n } from "#/i18n";
@@ -37,6 +38,8 @@ function AgentEditorPage() {
   const [loadedAgent, setLoadedAgent] = React.useState<Agent | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -103,6 +106,7 @@ function AgentEditorPage() {
   }
 
   async function handleDelete() {
+    setIsDeleting(true);
     try {
       await deleteAgent(id);
       void navigate({ to: "/agents" });
@@ -110,6 +114,8 @@ function AgentEditorPage() {
       toast.error(
         err instanceof Error ? err.message : "Failed to delete agent",
       );
+      setIsDeleting(false);
+      setDeleteOpen(false);
     }
   }
 
@@ -150,9 +156,9 @@ function AgentEditorPage() {
               type="button"
               variant="ghost"
               className="text-destructive"
-              onClick={() => void handleDelete()}
+              onClick={() => setDeleteOpen(true)}
             >
-              {t("sidebar.delete")}
+              {t("agents.delete")}
             </Button>
           </div>
         </div>
@@ -231,6 +237,19 @@ function AgentEditorPage() {
           <AgentAutomationsSection agentId={id} />
         </div>
       ) : null}
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) setDeleteOpen(open);
+        }}
+        title={t("agents.deleteTitle")}
+        description={t("agents.deleteDescription")}
+        confirmLabel={isDeleting ? t("app.loading") : t("app.delete")}
+        cancelLabel={t("app.cancel")}
+        destructive
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 }

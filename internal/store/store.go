@@ -119,11 +119,39 @@ func (s *Store) EnsureSchema() error {
 	return nil
 }
 
+// maxLongTextChars is the explicit ceiling for text fields that hold
+// model- or user-authored documents (artifact bodies, skill instructions,
+// conversation summaries).
+//
+// PocketBase v0.39+ treats a zero Max as "use the default limit" and that
+// default is 5000 characters (see core/field_text.go ValidatePlainValue), so a
+// field declared as `&core.TextField{Name: "content"}` silently rejects any
+// document longer than 5000 chars. There is no "unlimited" sentinel (a negative
+// Max fails the field settings validation), so we declare an explicit,
+// effectively-unlimited ceiling instead.
+const maxLongTextChars = 10_000_000
+
 func (s *Store) ensureField(collection *core.Collection, field core.Field) error {
 	if existing := collection.Fields.GetByName(field.GetName()); existing != nil {
 		return nil
 	}
 	collection.Fields.Add(field)
+	return s.App.Save(collection)
+}
+
+// ensureFieldMax reconciles the Max of an existing text field. ensureField is a
+// no-op for fields that already exist, so constraints tightened by an older
+// schema (or by PocketBase's implicit 5000-char default) would otherwise stick
+// forever.
+func (s *Store) ensureFieldMax(collection *core.Collection, name string, max int) error {
+	field, ok := collection.Fields.GetByName(name).(*core.TextField)
+	if !ok {
+		return nil
+	}
+	if field.Max == max {
+		return nil
+	}
+	field.Max = max
 	return s.App.Save(collection)
 }
 

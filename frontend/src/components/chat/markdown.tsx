@@ -13,6 +13,7 @@ import { EyeIcon } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { useI18n } from "#/i18n";
 import { useArtifactStore } from "#/stores/artifact";
+import { InlineHtmlPreview } from "./inline-html-preview";
 
 /**
  * Math is a stage of its own, fetched the first time a reply holds a formula.
@@ -24,8 +25,10 @@ const loadMath = () => import("@localix-ai/flowdown/math");
  * Fenced code with the app's own HTML-preview action.
  *
  * flowdown draws the block (language, download, copy, highlighting); an
- * `html` fence additionally gets a button that opens the isolated preview
- * from the artifacts panel. The button sits under the block so it never
+ * `html` fence additionally renders an isolated inline preview right below
+ * the block (published as a network document so the app's strict CSP does
+ * not block its scripts) plus a button that opens the same artifact in the
+ * full artifacts panel. The button sits under the block so it never
  * collides with the built-in actions.
  */
 function MarkdownPre(props: React.ComponentProps<"pre"> & { node?: unknown }) {
@@ -47,17 +50,20 @@ function MarkdownPre(props: React.ComponentProps<"pre"> & { node?: unknown }) {
     <div className="my-3">
       <CodeBlock {...props} />
       {language === "html" && source.trim() ? (
-        <div className="mt-1 flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={t("message.preview")}
-            title={t("message.preview")}
-            onClick={() => openFromCodeBlock(source)}
-          >
-            <EyeIcon />
-            {t("message.preview")}
-          </Button>
+        <div className="mt-1 space-y-1">
+          <InlineHtmlPreview html={source} />
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={t("message.preview")}
+              title={t("message.preview")}
+              onClick={() => openFromCodeBlock(source)}
+            >
+              <EyeIcon />
+              {t("message.preview")}
+            </Button>
+          </div>
         </div>
       ) : null}
     </div>

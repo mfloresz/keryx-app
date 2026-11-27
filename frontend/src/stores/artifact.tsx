@@ -35,6 +35,8 @@ interface ArtifactContextValue {
   tab: ArtifactTab;
   syncItems: (next: HtmlArtifact[], model?: ModelArtifact[]) => void;
   open: (key?: string) => void;
+  /** Opens a model artifact, registering it when the sync has not run yet. */
+  openModelArtifact: (artifact: ModelArtifact) => void;
   openFromCodeBlock: (code: string) => void;
   select: (key: string) => void;
   step: (delta: -1 | 1) => void;
@@ -76,6 +78,9 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
   const syncItems = React.useCallback(
     (next: HtmlArtifact[], model?: ModelArtifact[]) => {
       setSynced(next);
+      // `modelArtifacts` is read below to reconcile the selection, so the
+      // incoming list is tracked locally as well.
+      const modelList = model ?? modelArtifacts;
       if (model) {
         setModelArtifacts((current) => {
           if (
@@ -102,57 +107,91 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
       });
       setActiveKey((current) => {
         if (!current) {
-          return all.length ? (all[all.length - 1]!.key) : null;
+          const last = modelList.at(-1) ?? next.at(-1);
+          return last ? last.key : null;
         }
-        return all.some((a) => a.key === current) ? current : null;
+        // Keep the selection while the artifact still exists (the panel may
+        // have been opened from a card before this sync landed).
+        const stillThere =
+          next.some((a) => a.key === current) ||
+          modelList.some((a) => a.key === current);
+        return stillThere ? current : null;
       });
     },
-    [activeKey, all],
+    [activeKey, modelArtifacts],
   );
 
-  const open = React.useCallback((key?: string) => {
-    setActiveKey((current) => {
-      if (key && all.some((a) => a.key === key)) return key;
-      if (!current && all.length) return all[all.length - 1]!.key;
-      return current;
+  const open = React.useCallback(
+    (key?: string) => {
+      setActiveKey((current) => {
+        if (key && all.some((a) => a.key === key)) return key;
+        if (!current && all.length) return all[all.length - 1]!.key;
+        return current;
+      });
+      setTab("preview");
+      setIsOpen(true);
+    },
+    [all],
+  );
+
+  const openModelArtifact = React.useCallback((artifact: ModelArtifact) => {
+    // Insert (or bump) the artifact so the panel can resolve it even when the
+    // message sync has not run yet.
+    setModelArtifacts((current) => {
+      const index = current.findIndex((a) => a.key === artifact.key);
+      if (index < 0) return [...current, artifact];
+      if (current[index]!.version >= artifact.version) return current;
+      const updated = current.slice();
+      updated[index] = artifact;
+      return updated;
     });
+    setActiveKey(artifact.key);
     setTab("preview");
     setIsOpen(true);
-  }, [all]);
+  }, []);
 
-  const openFromCodeBlock = React.useCallback((code: string) => {
-    const trimmed = code.trim();
-    if (!trimmed) return;
-    const existing = synced.find((a) => a.code === trimmed);
-    if (existing) {
-      setActiveKey(existing.key);
-    } else {
-      const item: HtmlArtifact = {
-        key: `inline-${hashCode(trimmed)}`,
-        messageId: "inline",
-        index: 0,
-        code: trimmed,
-      };
-      setInlineItem(item);
-      setActiveKey(item.key);
-    }
-    setTab("preview");
-    setIsOpen(true);
-  }, [synced]);
+  const openFromCodeBlock = React.useCallback(
+    (code: string) => {
+      const trimmed = code.trim();
+      if (!trimmed) return;
+      const existing = synced.find((a) => a.code === trimmed);
+      if (existing) {
+        setActiveKey(existing.key);
+      } else {
+        const item: HtmlArtifact = {
+          key: `inline-${hashCode(trimmed)}`,
+          messageId: "inline",
+          index: 0,
+          code: trimmed,
+        };
+        setInlineItem(item);
+        setActiveKey(item.key);
+      }
+      setTab("preview");
+      setIsOpen(true);
+    },
+    [synced],
+  );
 
-  const select = React.useCallback((key: string) => {
-    if (all.some((a) => a.key === key)) setActiveKey(key);
-  }, [all]);
+  const select = React.useCallback(
+    (key: string) => {
+      if (all.some((a) => a.key === key)) setActiveKey(key);
+    },
+    [all],
+  );
 
-  const step = React.useCallback((delta: -1 | 1) => {
-    if (!all.length) return;
-    setActiveKey((current) => {
-      const index = all.findIndex((a) => a.key === current);
-      const from = index < 0 ? all.length - 1 : index;
-      const next = (from + delta + all.length) % all.length;
-      return all[next]!.key;
-    });
-  }, [all]);
+  const step = React.useCallback(
+    (delta: -1 | 1) => {
+      if (!all.length) return;
+      setActiveKey((current) => {
+        const index = all.findIndex((a) => a.key === current);
+        const from = index < 0 ? all.length - 1 : index;
+        const next = (from + delta + all.length) % all.length;
+        return all[next]!.key;
+      });
+    },
+    [all],
+  );
 
   const close = React.useCallback(() => setIsOpen(false), []);
 
@@ -177,6 +216,7 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
       tab,
       syncItems,
       open,
+      openModelArtifact,
       openFromCodeBlock,
       select,
       step,
@@ -195,6 +235,7 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
       tab,
       syncItems,
       open,
+      openModelArtifact,
       openFromCodeBlock,
       select,
       step,
@@ -204,7 +245,9 @@ export function ArtifactProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ArtifactContext.Provider value={value}>{children}</ArtifactContext.Provider>
+    <ArtifactContext.Provider value={value}>
+      {children}
+    </ArtifactContext.Provider>
   );
 }
 

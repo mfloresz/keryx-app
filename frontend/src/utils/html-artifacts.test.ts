@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractHtmlArtifacts,
   extractModelArtifacts,
+  modelArtifactFromPart,
 } from "#/utils/html-artifacts";
 
 describe("extractModelArtifacts", () => {
@@ -71,7 +72,12 @@ describe("extractModelArtifacts", () => {
         parts: [
           {
             type: "data-artifact",
-            data: { artifactId: "art_1", title: "Old", artifactType: "html", version: 2 },
+            data: {
+              artifactId: "art_1",
+              title: "Old",
+              artifactType: "html",
+              version: 2,
+            },
           },
         ],
       },
@@ -80,7 +86,12 @@ describe("extractModelArtifacts", () => {
         parts: [
           {
             type: "data-artifact",
-            data: { artifactId: "art_1", title: "Old", artifactType: "html", version: 5 },
+            data: {
+              artifactId: "art_1",
+              title: "Old",
+              artifactType: "html",
+              version: 5,
+            },
           },
         ],
       },
@@ -90,7 +101,12 @@ describe("extractModelArtifacts", () => {
           // An older re-announcement must not lower the version.
           {
             type: "data-artifact",
-            data: { artifactId: "art_1", title: "Old", artifactType: "html", version: 1 },
+            data: {
+              artifactId: "art_1",
+              title: "Old",
+              artifactType: "html",
+              version: 1,
+            },
           },
         ],
       },
@@ -123,6 +139,23 @@ describe("extractModelArtifacts", () => {
       version: 1,
     });
   });
+
+  it("accepts the live stream shape, where version is a string", () => {
+    // The SSE `artifact` event is a map[string]string, so the version arrives
+    // quoted; the persisted part uses a number.
+    const artifact = modelArtifactFromPart({
+      type: "data-artifact",
+      id: "artpart-art_1-v3",
+      data: {
+        artifactId: "art_1",
+        title: "Page",
+        artifactType: "html",
+        version: "3",
+      },
+    });
+
+    expect(artifact).toMatchObject({ artifactId: "art_1", version: 3 });
+  });
 });
 
 describe("extractHtmlArtifacts", () => {
@@ -130,9 +163,7 @@ describe("extractHtmlArtifacts", () => {
     const artifacts = extractHtmlArtifacts([
       {
         id: "m1",
-        parts: [
-          { type: "text", text: "Here:\n```html\n<p>hi</p>\n```\ndone" },
-        ],
+        parts: [{ type: "text", text: "Here:\n```html\n<p>hi</p>\n```\ndone" }],
       },
     ]);
 

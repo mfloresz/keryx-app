@@ -124,11 +124,16 @@ func (s *Server) handleGetArtifact(w http.ResponseWriter, r *http.Request) {
 		errorResponse(w, "Artifact not found.", http.StatusNotFound)
 		return
 	}
-	// Override the global security headers for this document: it must be
-	// frameable same-origin and free to run its own inline scripts. A minimal
-	// CSP with only frame-ancestors imposes nothing else.
+	// Override the global security headers for this document. It is embedded
+	// in a sandboxed iframe WITHOUT allow-same-origin, so it runs in an opaque
+	// ("null") origin. Any same-origin framing guard — frame-ancestors 'self'
+	// or X-Frame-Options SAMEORIGIN — would then BLOCK the frame, because a
+	// unique origin matches no other origin, not even itself. The unguessable
+	// capability token in the URL (128-bit, 1h TTL) is the real access control,
+	// so allow any ancestor and drop X-Frame-Options. Scripts still run because
+	// no script-src is imposed (only frame-ancestors).
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'self'")
-	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	w.Header().Set("Content-Security-Policy", "frame-ancestors *")
+	w.Header().Del("X-Frame-Options")
 	w.Write(html)
 }

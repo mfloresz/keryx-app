@@ -83,6 +83,40 @@ interface DataArtifactPart {
 }
 
 /**
+ * Parses one `data-artifact` part into a ModelArtifact, or null when the part
+ * is a different kind or carries no artifact id.
+ *
+ * The backend broadcasts the live version as a string (`map[string]string`
+ * SSE payload) and persists it as a number, so both shapes are accepted.
+ */
+export function modelArtifactFromPart(part: unknown): ModelArtifact | null {
+  const candidate = part as DataArtifactPart | undefined;
+  if (candidate?.type !== "data-artifact") return null;
+
+  const data = candidate.data ?? {};
+  const artifactId =
+    typeof data.artifactId === "string" ? data.artifactId : null;
+  if (!artifactId) return null;
+
+  const rawVersion =
+    typeof data.version === "number"
+      ? data.version
+      : typeof data.version === "string"
+        ? Number.parseInt(data.version, 10)
+        : 1;
+  const version = Number.isFinite(rawVersion) ? Math.floor(rawVersion) : 1;
+
+  return {
+    key: artifactId,
+    artifactId,
+    title:
+      typeof data.title === "string" && data.title ? data.title : artifactId,
+    type: data.artifactType === "markdown" ? "markdown" : "html",
+    version: Math.max(1, version),
+  };
+}
+
+/**
  * Collect every `data-artifact` part across messages, deduped by artifactId
  * keeping the max version (a regenerated answer can announce the same
  * artifact again with a newer version). Order follows first appearance.
@@ -93,29 +127,17 @@ export function extractModelArtifacts(
   const byId = new Map<string, ModelArtifact>();
   for (const message of messages) {
     if (!Array.isArray(message?.parts)) continue;
-    for (const part of message.parts as DataArtifactPart[]) {
-      if (part?.type !== "data-artifact") continue;
-      const data = part.data ?? {};
-      const artifactId =
-        typeof data.artifactId === "string" ? data.artifactId : null;
-      if (!artifactId) continue;
-      const version =
-        typeof data.version === "number" ? Math.floor(data.version) : 1;
-      const existing = byId.get(artifactId);
+    for (const part of message.parts) {
+      const artifact = modelArtifactFromPart(part);
+      if (!artifact) continue;
+      const existing = byId.get(artifact.artifactId);
       if (existing) {
-        if (version > existing.version) existing.version = version;
+        if (artifact.version > existing.version) {
+          existing.version = artifact.version;
+        }
         continue;
       }
-      byId.set(artifactId, {
-        key: artifactId,
-        artifactId,
-        title:
-          typeof data.title === "string" && data.title
-            ? data.title
-            : artifactId,
-        type: data.artifactType === "markdown" ? "markdown" : "html",
-        version: Math.max(1, version),
-      });
+      byId.set(artifact.artifactId, artifact);
     }
   }
   return [...byId.values()];

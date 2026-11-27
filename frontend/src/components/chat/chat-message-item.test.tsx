@@ -1,3 +1,4 @@
+import { fireEvent, render } from "@testing-library/react";
 /**
  * Render tests for the assistant message.
  *
@@ -6,10 +7,10 @@
  * block stayed expanded forever.
  */
 import { describe, expect, it } from "vitest";
-import { fireEvent, render } from "@testing-library/react";
 
 import { ChatMessageItem } from "#/components/chat/chat-message-item";
 import { I18nProvider } from "#/i18n";
+import { ArtifactProvider, useArtifactStore } from "#/stores/artifact";
 
 function renderMessage(
   parts: unknown[],
@@ -61,13 +62,15 @@ describe("ChatMessageItem", () => {
     const { container, rerender } = render(
       <I18nProvider>
         <ChatMessageItem
-          message={{
-            id: "m1",
-            role: "assistant",
-            parts: [
-              { type: "reasoning", text: "Pensando...", state: "streaming" },
-            ],
-          } as never}
+          message={
+            {
+              id: "m1",
+              role: "assistant",
+              parts: [
+                { type: "reasoning", text: "Pensando...", state: "streaming" },
+              ],
+            } as never
+          }
           isStreaming={true}
         />
       </I18nProvider>,
@@ -79,14 +82,16 @@ describe("ChatMessageItem", () => {
     rerender(
       <I18nProvider>
         <ChatMessageItem
-          message={{
-            id: "m1",
-            role: "assistant",
-            parts: [
-              { type: "reasoning", text: "Pensando...", state: "done" },
-              { type: "text", text: "Respuesta", state: "done" },
-            ],
-          } as never}
+          message={
+            {
+              id: "m1",
+              role: "assistant",
+              parts: [
+                { type: "reasoning", text: "Pensando...", state: "done" },
+                { type: "text", text: "Respuesta", state: "done" },
+              ],
+            } as never
+          }
           isStreaming={false}
         />
       </I18nProvider>,
@@ -165,5 +170,82 @@ describe("ChatMessageItem", () => {
     const img = container.querySelector("img");
     expect(img).not.toBeNull();
     expect(img?.getAttribute("src")).toBe("https://example.com/pic.png");
+  });
+
+  it("renders a card for an artifact published with update_artifact", () => {
+    const { container } = render(
+      <I18nProvider>
+        <ArtifactProvider>
+          <ChatMessageItem
+            message={
+              {
+                id: "m1",
+                role: "assistant",
+                parts: [
+                  {
+                    type: "data-artifact",
+                    id: "artpart-art_1-v2",
+                    data: {
+                      artifactId: "art_1",
+                      title: "Demo page",
+                      artifactType: "html",
+                      version: 2,
+                    },
+                  },
+                ],
+              } as never
+            }
+          />
+        </ArtifactProvider>
+      </I18nProvider>,
+    );
+
+    const card = container.querySelector("[data-slot=artifact-card]");
+    expect(card).not.toBeNull();
+    expect(card?.textContent).toContain("Demo page");
+    expect(card?.textContent).toContain("v2");
+  });
+
+  it("opens the artifact panel from the message card", () => {
+    function StoreProbe() {
+      const { isOpen, activeKey } = useArtifactStore();
+      return <span data-testid="probe">{isOpen ? activeKey : "closed"}</span>;
+    }
+
+    const { getByRole, getByTestId } = render(
+      <I18nProvider>
+        <ArtifactProvider>
+          <ChatMessageItem
+            message={
+              {
+                id: "m1",
+                role: "assistant",
+                parts: [
+                  {
+                    type: "data-artifact",
+                    id: "artpart-art_1-v1",
+                    data: {
+                      artifactId: "art_1",
+                      title: "Demo page",
+                      artifactType: "markdown",
+                      version: 1,
+                    },
+                  },
+                ],
+              } as never
+            }
+          />
+          <StoreProbe />
+        </ArtifactProvider>
+      </I18nProvider>,
+    );
+
+    expect(getByTestId("probe").textContent).toBe("closed");
+
+    // The card registers the artifact and opens the panel even before the
+    // transcript sync effect has run.
+    fireEvent.click(getByRole("button", { name: /preview/i }));
+
+    expect(getByTestId("probe").textContent).toBe("art_1");
   });
 });

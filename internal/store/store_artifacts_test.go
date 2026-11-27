@@ -2,7 +2,10 @@ package store
 
 import (
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/pocketbase/pocketbase/core"
 )
 
 func TestChatArtifactsVersions(t *testing.T) {
@@ -48,5 +51,53 @@ func TestChatArtifactsVersions(t *testing.T) {
 	}
 	if _, err := s.GetChatArtifact(chat.ID, "art_1", 9); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown version: got %v, want ErrNotFound", err)
+	}
+}
+
+// PocketBase v0.39+ applies an implicit 5000-char cap to text fields whose Max
+// is left at zero, which used to make update_artifact fail on real documents.
+func TestChatArtifactContentHasNoImplicit5000Cap(t *testing.T) {
+	s := newProjectsTestStore(t)
+	const alice = "alicetestuser01"
+	s.createTestUser(t, alice, "alice@test.local")
+	chat := createTestChat(t, s, alice, "artifacts")
+
+	content := strings.Repeat("<p>largo</p>", 2000) // 12000 chars > 5000
+	if err := s.SaveChatArtifact(chat.ID, "art_big", "Big", "html", content, 1); err != nil {
+		t.Fatalf("save oversized artifact: %v", err)
+	}
+	got, err := s.GetChatArtifact(chat.ID, "art_big", 0)
+	if err != nil {
+		t.Fatalf("get oversized artifact: %v", err)
+	}
+	if got.Content != content {
+		t.Errorf("content roundtrip mismatch: got %d chars, want %d", len(got.Content), len(content))
+	}
+}
+
+// A DB created before the explicit cap keeps Max=0 (5000 chars) until
+// EnsureSchema reconciles it.
+func TestChatArtifactsCollectionMigrationRaisesContentMax(t *testing.T) {
+	s := newProjectsTestStore(t)
+
+	collection, err := s.App.FindCollectionByNameOrId(ChatArtifactsCollection)
+	if err != nil {
+		t.Fatalf("chat_artifacts collection: %v", err)
+	}
+	content := collection.Fields.GetByName("content").(*core.TextField)
+	content.Max = 0 // simulate the legacy schema
+	if err := s.App.Save(collection); err != nil {
+		t.Fatalf("simulate legacy schema: %v", err)
+	}
+
+	if err := s.EnsureSchema(); err != nil {
+		t.Fatalf("ensure schema: %v", err)
+	}
+	collection, err = s.App.FindCollectionByNameOrId(ChatArtifactsCollection)
+	if err != nil {
+		t.Fatalf("chat_artifacts collection: %v", err)
+	}
+	if got := collection.Fields.GetByName("content").(*core.TextField).Max; got != maxLongTextChars {
+		t.Errorf("content Max = %d, want %d", got, maxLongTextChars)
 	}
 }

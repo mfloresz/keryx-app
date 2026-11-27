@@ -11,7 +11,7 @@ import (
 // packs admins can toggle for stream injection.
 func (s *Store) ensureSkillsCollection() (*core.Collection, error) {
 	if existing, err := s.App.FindCollectionByNameOrId(SkillsCollection); err == nil {
-		return existing, nil
+		return s.migrateSkillsCollection(existing)
 	}
 	c := core.NewBaseCollection(SkillsCollection)
 	adminOnly := "@request.auth.id != '' && @collection.users.id = @request.auth.id && @collection.users.role = 'admin'"
@@ -22,11 +22,24 @@ func (s *Store) ensureSkillsCollection() (*core.Collection, error) {
 	c.DeleteRule = new(adminOnly)
 	c.Fields.Add(&core.TextField{Name: "name", Required: true, Max: 120})
 	c.Fields.Add(&core.TextField{Name: "description", Max: 500})
-	c.Fields.Add(&core.TextField{Name: "instructions"})
+	c.Fields.Add(&core.TextField{Name: "instructions", Max: maxLongTextChars})
 	c.Fields.Add(&core.BoolField{Name: "enabled"})
 	addSystemDateFields(c)
 	c.AddIndex("idx_skills_name_unique", true, "name", "")
 	if err := s.App.Save(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// migrateSkillsCollection reconciles an existing skills collection with the
+// current schema: instructions are long free-form text, so they must not keep
+// PocketBase's implicit 5000-char limit.
+func (s *Store) migrateSkillsCollection(c *core.Collection) (*core.Collection, error) {
+	if err := s.ensureField(c, &core.TextField{Name: "instructions", Max: maxLongTextChars}); err != nil {
+		return nil, err
+	}
+	if err := s.ensureFieldMax(c, "instructions", maxLongTextChars); err != nil {
 		return nil, err
 	}
 	return c, nil

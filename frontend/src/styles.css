@@ -59,72 +59,74 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Yara "Quiet Shelf" palette: warm stone + ink, no decorative color.
+     Sizing/density stays Keryx's; only colour/shape tokens change. */
+  --background: #fafaf9; /* bone-paper (chat/main, lighter) */
+  --foreground: #141413; /* warm-ink */
+  --card: #ffffff; /* surface-base */
+  --card-foreground: #141413;
+  --popover: #fafaf9; /* bone-paper (surface-elevated) */
+  --popover-foreground: #141413;
+  --primary: #1c1917; /* btn-primary-bg */
+  --primary-foreground: #fafaf9; /* btn-primary-fg */
+  --secondary: #e8e6e2; /* block-elevated */
+  --secondary-foreground: #141413;
+  --muted: #f5f4f2; /* surface-muted */
+  --muted-foreground: color-mix(in oklab, #141413 66%, transparent);
+  --accent: #e8e6e2; /* block-elevated */
+  --accent-foreground: #141413;
+  --destructive: #dc2626; /* danger-red */
+  --border: color-mix(in oklab, #141413 14%, transparent); /* divide */
+  --input: color-mix(in oklab, #141413 14%, transparent);
+  --ring: #57544c; /* aged-stone (accent-link) */
+  --chart-1: #57544c;
+  --chart-2: #78746b;
+  --chart-3: #a8a29a;
+  --chart-4: #c4c0b9;
+  --chart-5: #ddd9d3;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #f5f4f2; /* page-stone (sidebar, darker) */
+  --sidebar-foreground: #141413;
+  --sidebar-primary: #1c1917;
+  --sidebar-primary-foreground: #fafaf9;
+  --sidebar-accent: #e8e6e2;
+  --sidebar-accent-foreground: #141413;
+  --sidebar-border: color-mix(in oklab, #141413 14%, transparent);
+  --sidebar-ring: #57544c;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: #161514; /* surface-base dark (chat/main, lighter) */
+  --foreground: #f5f4f2; /* text-primary dark */
+  --card: #161514; /* surface-base dark */
+  --card-foreground: #f5f4f2;
+  --popover: #1c1b19; /* surface-elevated dark */
+  --popover-foreground: #f5f4f2;
+  --primary: #fafaf9; /* btn-primary-bg dark */
+  --primary-foreground: #121110;
+  --secondary: #1c1b19; /* block-elevated dark */
+  --secondary-foreground: #f5f4f2;
+  --muted: #23211f; /* surface-muted dark */
+  --muted-foreground: color-mix(in oklab, #f5f4f2 62%, transparent);
+  --accent: #2c2a27; /* surface-strong dark */
+  --accent-foreground: #f5f4f2;
+  --destructive: #dc2626;
+  --border: color-mix(in oklab, #f5f4f2 16%, transparent);
+  --input: color-mix(in oklab, #f5f4f2 16%, transparent);
+  --ring: #c4c0b9; /* accent-link dark */
+  --chart-1: #c4c0b9;
+  --chart-2: #a8a29a;
+  --chart-3: #78746b;
+  --chart-4: #57544c;
+  --chart-5: #3d3b35;
+  --sidebar: #121110; /* page-bg dark (sidebar, darker) */
+  --sidebar-foreground: #f5f4f2;
+  --sidebar-primary: #fafaf9;
+  --sidebar-primary-foreground: #121110;
+  --sidebar-accent: #2c2a27;
+  --sidebar-accent-foreground: #f5f4f2;
+  --sidebar-border: color-mix(in oklab, #f5f4f2 16%, transparent);
+  --sidebar-ring: #c4c0b9;
 }
 
 @layer base {

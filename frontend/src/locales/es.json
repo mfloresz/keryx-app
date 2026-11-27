@@ -148,6 +148,10 @@
     "byCatalog": "Catálogo",
     "preview": "Chatear con el agente",
     "editor": "Editar agente",
+    "actions": "Acciones",
+    "delete": "Eliminar agente",
+    "deleteTitle": "¿Eliminar este agente?",
+    "deleteDescription": "Este agente se eliminará permanentemente. Los chats que lo usen volverán al prompt base.",
     "toolsSection": {
       "label": "Herramientas",
       "webSearch": "Búsqueda web",
@@ -211,6 +215,9 @@
     "attachmentNoTextLayer": "Este PDF no contiene texto extraible (puede estar escaneado). Adjunta un PDF con capa de texto.",
     "attachmentConvertError": "No se pudo convertir el documento a texto, por lo que no se adjuntó.",
     "thinking": "Pensando...",
+    "thinkingIdle": "Conectando ideas...",
+    "thinkingPonder": "Reflexionando sobre la pregunta...",
+    "thinkingDraft": "Redactando una respuesta...",
     "stop": "Detener",
     "errors": {
       "network": "No se puede conectar. Por favor verifica tu conexión a internet e inténtalo de nuevo.",
@@ -291,6 +298,8 @@
     "preview": "Vista previa",
     "codePreview": "Vista previa HTML",
     "codePreviewDescription": "Renderizado del bloque de código en un iframe aislado.",
+    "previewLoading": "Publicando vista previa…",
+    "reload": "Recargar vista previa",
     "editDescription": "Edita tu mensaje y envíalo de nuevo para continuar la conversación.",
     "sources": "fuentes",
     "thought": "Razonamiento"

@@ -18,6 +18,7 @@ import { UserMenu } from "#/components/layout/user-menu";
 import { SettingsDialog } from "#/components/settings/settings-dialog";
 import { Button } from "#/components/ui/button";
 import { ConfirmDialog } from "#/components/ui/confirm-dialog";
+import { ScrollArea } from "#/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -191,8 +192,9 @@ export function AppSidebar() {
 
         <SidebarGroup className="min-h-0 flex-1">
           <SidebarGroupLabel>{t("sidebar.recentChats")}</SidebarGroupLabel>
-          <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
-            {isLoading && !chats.length ? (
+          <SidebarGroupContent className="min-h-0 flex-1">
+            <ScrollArea className="h-full">
+              {isLoading && !chats.length ? (
               <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                 {t("app.loading")}
               </p>
@@ -271,6 +273,7 @@ export function AppSidebar() {
                 ))}
               </div>
             )}
+            </ScrollArea>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

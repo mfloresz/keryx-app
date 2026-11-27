@@ -10,7 +10,7 @@ import (
 // the newest version per artifact_id is the live one.
 func (s *Store) ensureChatArtifactsCollection(chats *core.Collection) (*core.Collection, error) {
 	if existing, err := s.App.FindCollectionByNameOrId(ChatArtifactsCollection); err == nil {
-		return existing, nil
+		return s.migrateChatArtifactsCollection(existing)
 	}
 	c := core.NewBaseCollection(ChatArtifactsCollection)
 	ownerOnly := "@request.auth.id != '' && chat.owner = @request.auth.id"
@@ -23,11 +23,34 @@ func (s *Store) ensureChatArtifactsCollection(chats *core.Collection) (*core.Col
 	c.Fields.Add(&core.TextField{Name: "artifact_id", Required: true, Max: 200})
 	c.Fields.Add(&core.TextField{Name: "title", Max: 500})
 	c.Fields.Add(&core.TextField{Name: "type", Max: 20})
-	c.Fields.Add(&core.TextField{Name: "content"})
+	c.Fields.Add(&core.TextField{Name: "content", Max: maxLongTextChars})
 	c.Fields.Add(&core.NumberField{Name: "version", OnlyInt: true})
 	addSystemDateFields(c)
 	c.AddIndex("idx_chat_artifacts_chat_artifact_version_unique", true, "chat, artifact_id, version", "")
 	if err := s.App.Save(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// migrateChatArtifactsCollection reconciles an existing chat_artifacts
+// collection with the current schema. Databases created before the content cap
+// was made explicit keep PocketBase's implicit 5000-char text limit, which makes
+// update_artifact fail with "content: Must be no more than 5000 character(s)".
+func (s *Store) migrateChatArtifactsCollection(c *core.Collection) (*core.Collection, error) {
+	if err := s.ensureField(c, &core.TextField{Name: "artifact_id", Required: true, Max: 200}); err != nil {
+		return nil, err
+	}
+	if err := s.ensureField(c, &core.TextField{Name: "title", Max: 500}); err != nil {
+		return nil, err
+	}
+	if err := s.ensureField(c, &core.TextField{Name: "type", Max: 20}); err != nil {
+		return nil, err
+	}
+	if err := s.ensureField(c, &core.TextField{Name: "content", Max: maxLongTextChars}); err != nil {
+		return nil, err
+	}
+	if err := s.ensureFieldMax(c, "content", maxLongTextChars); err != nil {
 		return nil, err
 	}
 	return c, nil

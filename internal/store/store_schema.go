@@ -149,8 +149,8 @@ func (s *Store) ensureChatsCollection(users *core.Collection) (*core.Collection,
 	c.Fields.Add(&core.TextField{Name: "agent_id", Max: 80})
 	c.Fields.Add(&core.TextField{Name: "preset", Max: 30})
 	c.Fields.Add(&core.TextField{Name: "project_id", Max: 80})
-	c.Fields.Add(&core.TextField{Name: "summary"})
-	c.Fields.Add(&core.TextField{Name: "summary_through"})
+	c.Fields.Add(&core.TextField{Name: "summary", Max: maxLongTextChars})
+	c.Fields.Add(&core.TextField{Name: "summary_through", Max: maxLongTextChars})
 	addSystemDateFields(c)
 	c.AddIndex("idx_chats_owner", false, "owner", "")
 	if err := s.App.Save(c); err != nil {
@@ -162,10 +162,17 @@ func (s *Store) ensureChatsCollection(users *core.Collection) (*core.Collection,
 // migrateChatsCollectionForSummary adds summary and summary_through to an
 // existing chats collection (conversation summarization).
 func (s *Store) migrateChatsCollectionForSummary(c *core.Collection) error {
-	if err := s.ensureField(c, &core.TextField{Name: "summary"}); err != nil {
+	if err := s.ensureField(c, &core.TextField{Name: "summary", Max: maxLongTextChars}); err != nil {
 		return err
 	}
-	return s.ensureField(c, &core.TextField{Name: "summary_through"})
+	if err := s.ensureField(c, &core.TextField{Name: "summary_through", Max: maxLongTextChars}); err != nil {
+		return err
+	}
+	// Existing DBs keep the implicit 5000-char cap unless it is raised here.
+	if err := s.ensureFieldMax(c, "summary", maxLongTextChars); err != nil {
+		return err
+	}
+	return s.ensureFieldMax(c, "summary_through", maxLongTextChars)
 }
 
 func (s *Store) ensureProjectsCollection(users *core.Collection) (*core.Collection, error) {

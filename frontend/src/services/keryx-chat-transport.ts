@@ -8,6 +8,7 @@
  */
 
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
+
 import { randomUUID } from "#/shared/uuid";
 
 interface KeryxChatTransportOptions {
@@ -97,8 +98,7 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
     const request =
       [
         (options.body ?? {}) as Record<string, unknown>,
-        (metadata as { custom?: Record<string, unknown> } | undefined)
-          ?.custom,
+        (metadata as { custom?: Record<string, unknown> } | undefined)?.custom,
         (metadata ?? {}) as Record<string, unknown>,
       ].find((candidate) => candidate?.model || candidate?.preset) ?? {};
     const model = request.model as string | undefined;
@@ -135,8 +135,9 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
               mediaType?: string;
               providerMetadata?: Record<string, any>;
             };
-            const storageKey =
-              part.providerMetadata?.keryx?.storageKey as string | undefined;
+            const storageKey = part.providerMetadata?.keryx?.storageKey as
+              | string
+              | undefined;
             const fromUrl =
               typeof part.url === "string" &&
               part.url.startsWith("/api/attachments/")
@@ -157,12 +158,23 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
 
         // Extract tool invocations and results so multi-turn conversations
         // retain tool context (e.g. read_file results or web searches).
-        const toolCalls: Array<{ id: string; name: string; arguments: string }> = [];
-        const toolResults: Array<{ toolCallId: string; toolName: string; output: string }> = [];
+        const toolCalls: Array<{
+          id: string;
+          name: string;
+          arguments: string;
+        }> = [];
+        const toolResults: Array<{
+          toolCallId: string;
+          toolName: string;
+          output: string;
+        }> = [];
 
         if (Array.isArray(msg.parts)) {
           for (const p of msg.parts) {
-            if (p.type === "dynamic-tool" || (typeof p.type === "string" && p.type.startsWith("tool-"))) {
+            if (
+              p.type === "dynamic-tool" ||
+              (typeof p.type === "string" && p.type.startsWith("tool-"))
+            ) {
               const part = p as {
                 toolCallId?: string;
                 toolName?: string;
@@ -170,20 +182,39 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                 output?: unknown;
               };
               const id = part.toolCallId || "";
-              const name = part.toolName || (typeof p.type === "string" && p.type.startsWith("tool-") ? p.type.slice(5) : "tool");
-              const inputStr = typeof part.input === "string" ? part.input : JSON.stringify(part.input ?? {});
-              const outputStr = typeof part.output === "string" ? part.output : JSON.stringify(part.output ?? "");
+              const name =
+                part.toolName ||
+                (typeof p.type === "string" && p.type.startsWith("tool-")
+                  ? p.type.slice(5)
+                  : "tool");
+              const inputStr =
+                typeof part.input === "string"
+                  ? part.input
+                  : JSON.stringify(part.input ?? {});
+              const outputStr =
+                typeof part.output === "string"
+                  ? part.output
+                  : JSON.stringify(part.output ?? "");
               if (id && name) {
                 toolCalls.push({ id, name, arguments: inputStr });
                 if (part.output !== undefined) {
-                  toolResults.push({ toolCallId: id, toolName: name, output: outputStr });
+                  toolResults.push({
+                    toolCallId: id,
+                    toolName: name,
+                    output: outputStr,
+                  });
                 }
               }
             }
           }
         }
 
-        if (!content.trim() && attachments.length === 0 && toolCalls.length === 0) return null;
+        if (
+          !content.trim() &&
+          attachments.length === 0 &&
+          toolCalls.length === 0
+        )
+          return null;
         const base: Record<string, unknown> = { id: msg.id, role, content };
         if (attachments.length) base.attachments = attachments;
         if (toolCalls.length) base.toolCalls = toolCalls;
@@ -196,8 +227,9 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
     // verbatim by the backend before streaming, so no input is ever lost
     // even if the stream fails or the client disconnects.
     const lastUserMessage =
-      [...options.messages].reverse().find((msg) => (msg.role ?? "user") === "user") ??
-      null;
+      [...options.messages]
+        .reverse()
+        .find((msg) => (msg.role ?? "user") === "user") ?? null;
 
     const response = await fetch(this.api, {
       method: "POST",
@@ -239,7 +271,10 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
     body?: object;
     metadata?: unknown;
   }): Promise<ReadableStream<UIMessageChunk> | null> {
-    const mergedHeaders = mergeHeaders(await this.getHeaders(), options.headers);
+    const mergedHeaders = mergeHeaders(
+      await this.getHeaders(),
+      options.headers,
+    );
 
     let response: Response;
     try {
@@ -519,14 +554,19 @@ export class KeryxChatTransport implements ChatTransport<UIMessage> {
                     // A model-produced artifact announcement. The content is
                     // not in the stream: the panel fetches it lazily from
                     // GET /api/chats/{id}/artifacts/{artifactId}.
+                    // The backend sends `version` as a string (SSE payloads
+                    // are map[string]string); normalize it to a number so the
+                    // message part matches the persisted shape.
+                    const version =
+                      Number.parseInt(String(data.version ?? "1"), 10) || 1;
                     controller.enqueue({
                       type: "data-artifact",
-                      id: `artpart-${data.artifactId}-v${data.version}`,
+                      id: `artpart-${data.artifactId}-v${version}`,
                       data: {
                         artifactId: data.artifactId,
                         title: data.title,
                         artifactType: data.artifactType,
-                        version: data.version,
+                        version,
                       },
                     } as UIMessageChunk);
                   } else if (data.type === "source" && data.url) {

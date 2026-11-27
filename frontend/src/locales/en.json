@@ -148,6 +148,10 @@
     "byCatalog": "Catalog",
     "preview": "Chat with agent",
     "editor": "Edit agent",
+    "actions": "Actions",
+    "delete": "Delete agent",
+    "deleteTitle": "Delete this agent?",
+    "deleteDescription": "This agent will be permanently deleted. Chats using it will fall back to the base prompt.",
     "toolsSection": {
       "label": "Tools",
       "webSearch": "Web search",
@@ -212,6 +216,9 @@
     "attachmentConvertError": "The document could not be converted to text, so it was not attached.",
     "addPhotosOrFiles": "Add photos or files",
     "thinking": "Thinking...",
+    "thinkingIdle": "Connecting ideas...",
+    "thinkingPonder": "Pondering the question...",
+    "thinkingDraft": "Drafting a response...",
     "stop": "Stop",
     "errors": {
       "network": "Unable to connect. Please check your internet connection and try again.",
@@ -291,6 +298,8 @@
     "preview": "Preview",
     "codePreview": "HTML preview",
     "codePreviewDescription": "Rendered from the code block in an isolated iframe.",
+    "previewLoading": "Publishing preview…",
+    "reload": "Reload preview",
     "editDescription": "Edit your message and resend it to continue the conversation.",
     "sources": "sources",
     "thought": "Thought"

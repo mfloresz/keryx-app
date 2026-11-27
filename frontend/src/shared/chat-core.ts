@@ -167,3 +167,40 @@ export function ensureMessageIdentifiers(messages: any[]): any[] {
     };
   });
 }
+
+/**
+ * True when a message has anything the transcript can render.
+ *
+ * Used to decide whether the "thinking" placeholder is still needed: an
+ * assistant message that only carries an empty text part (the transport
+ * opens one as soon as the run starts) is not renderable yet.
+ */
+export function hasRenderableContent(
+  message: { parts?: unknown[] | null } | null | undefined,
+): boolean {
+  if (!message || !Array.isArray(message.parts)) return false;
+
+  return message.parts.some((part) => {
+    if (!part || typeof part !== "object") return false;
+    const candidate = part as { type?: unknown; text?: unknown };
+    const type = candidate.type;
+
+    if (type === "text") {
+      return (
+        typeof candidate.text === "string" && candidate.text.trim().length > 0
+      );
+    }
+    if (type === "reasoning" || type === "file") return true;
+    if (typeof type !== "string") return false;
+
+    // Tool, source and data parts render a row of their own. Structural
+    // parts such as `step-start` are deliberately excluded: they carry no
+    // visible output and would hide the placeholder too early.
+    return (
+      type === "dynamic-tool" ||
+      type.startsWith("tool-") ||
+      type.startsWith("source-") ||
+      type.startsWith("data-")
+    );
+  });
+}

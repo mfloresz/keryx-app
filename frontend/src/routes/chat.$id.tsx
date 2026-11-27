@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 import { ArtifactPanel } from "#/components/artifacts/artifact-panel";
 import { ChatMessageItem } from "#/components/chat/chat-message-item";
+import { ThinkingIndicator } from "#/components/chat/thinking-indicator";
 import { ChatPromptInput } from "#/components/chat/chat-prompt-input";
 import type {
   ChatAgent,
@@ -40,15 +41,9 @@ import {
   MessageScrollerViewport,
 } from "#/components/ui/message-scroller";
 import { Spinner } from "#/components/ui/spinner";
-import {
-  Trace,
-  TraceIcon,
-  TraceLine,
-  TraceTitle,
-} from "#/components/ui/trace";
 import { useI18n } from "#/i18n";
 import { getChatRepository, getAuthAdapter } from "#/services/runtime";
-import { annotateBranchMetadata } from "#/shared/chat-core";
+import { annotateBranchMetadata, hasRenderableContent } from "#/shared/chat-core";
 import { extractHtmlArtifacts, extractModelArtifacts } from "#/utils/html-artifacts";
 import { useArtifactStore } from "#/stores/artifact";
 import { watchChatTitle } from "#/services/title-watcher";
@@ -825,8 +820,12 @@ function ChatConversation({
   }
 
   const lastMessage = messages.at(-1);
+  // The placeholder covers the whole window before the assistant has
+  // anything to show: the run just submitted (last message is the user's),
+  // and the assistant message exists but only carries an empty text part.
   const showThinking =
-    isBusy && lastMessage?.role === "assistant" && !lastMessage.parts?.length;
+    isBusy &&
+    (lastMessage?.role !== "assistant" || !hasRenderableContent(lastMessage));
 
   // Starter prompt chips: only when the selected agent suggests them and
   // the conversation is still empty. Clicking fills the composer.
@@ -915,14 +914,7 @@ function ChatConversation({
 
               {showThinking ? (
                 <MessageScrollerItem messageId="thinking">
-                  <Trace>
-                    <TraceLine status="running">
-                      <TraceIcon>
-                        <Spinner />
-                      </TraceIcon>
-                      <TraceTitle>{t("chat.thinking")}</TraceTitle>
-                    </TraceLine>
-                  </Trace>
+                  <ThinkingIndicator status={status} />
                 </MessageScrollerItem>
               ) : null}
             </MessageScrollerContent>

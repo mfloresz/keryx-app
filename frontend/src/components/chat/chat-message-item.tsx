@@ -1,4 +1,3 @@
-import * as React from "react";
 import { getToolName, type UIMessage } from "ai";
 import {
   BotIcon,
@@ -6,6 +5,9 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
+  EyeIcon,
+  FileCode2Icon,
+  FileTextIcon,
   GitForkIcon,
   LinkIcon,
   PaperclipIcon,
@@ -15,6 +17,7 @@ import {
   ThumbsUpIcon,
   WrenchIcon,
 } from "lucide-react";
+import * as React from "react";
 
 import { Markdown } from "#/components/chat/markdown";
 import {
@@ -25,8 +28,8 @@ import {
   AttachmentMedia,
   AttachmentTitle,
 } from "#/components/ui/attachment";
-import { Button } from "#/components/ui/button";
 import { Bubble, BubbleContent } from "#/components/ui/bubble";
+import { Button } from "#/components/ui/button";
 import {
   Message,
   MessageAvatar,
@@ -43,10 +46,15 @@ import {
   TraceTitle,
 } from "#/components/ui/trace";
 import { useI18n } from "#/i18n";
+import { useArtifactStore } from "#/stores/artifact";
 import {
   ensureAttachmentResolved,
   resolvedAttachmentUrl,
 } from "#/utils/attachment-url";
+import {
+  modelArtifactFromPart,
+  type ModelArtifact,
+} from "#/utils/html-artifacts";
 
 export interface ChatMessageItemProps {
   message: UIMessage;
@@ -60,10 +68,7 @@ export interface ChatMessageItemProps {
     rootMessageId: string;
     snapshotId: string;
   }) => void;
-  onToolApproval?: (payload: {
-    approvalId: string;
-    approved: boolean;
-  }) => void;
+  onToolApproval?: (payload: { approvalId: string; approved: boolean }) => void;
 }
 
 /** Branch metadata attached by the server for non-destructive regeneration. */
@@ -140,7 +145,9 @@ function ReasoningPart({ text, running }: { text: string; running: boolean }) {
       <TraceIcon>
         <BotIcon />
       </TraceIcon>
-      <TraceTitle>{running ? t("chat.thinking") : t("message.thought")}</TraceTitle>
+      <TraceTitle>
+        {running ? t("chat.thinking") : t("message.thought")}
+      </TraceTitle>
     </TraceLine>
   );
 
@@ -149,7 +156,7 @@ function ReasoningPart({ text, running }: { text: string; running: boolean }) {
   return (
     <TraceCollapsible open={open} onOpenChange={setOpen}>
       <TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
-      <TraceCollapsibleContent className="whitespace-pre-wrap text-sm text-muted-foreground">
+      <TraceCollapsibleContent className="text-sm whitespace-pre-wrap text-muted-foreground">
         {text}
       </TraceCollapsibleContent>
     </TraceCollapsible>
@@ -173,10 +180,7 @@ function ToolPart({
     approved?: boolean;
     requestReason?: string;
   };
-  onApproval?: (payload: {
-    approvalId: string;
-    approved: boolean;
-  }) => void;
+  onApproval?: (payload: { approvalId: string; approved: boolean }) => void;
 }) {
   const { t } = useI18n();
   const isError = state === "output-error";
@@ -262,6 +266,42 @@ function ToolPart({
   );
 }
 
+/**
+ * Card for a model artifact published via `update_artifact`.
+ *
+ * The content lives in the backend (it is versioned there), so the card only
+ * announces it and opens the artifact panel, which fetches the content.
+ */
+function ArtifactPart({ artifact }: { artifact: ModelArtifact }) {
+  const { t } = useI18n();
+  const { openModelArtifact } = useArtifactStore();
+  const Icon = artifact.type === "markdown" ? FileTextIcon : FileCode2Icon;
+
+  return (
+    <div
+      data-slot="artifact-card"
+      className="flex items-center gap-3 rounded-md border bg-card px-3 py-2"
+    >
+      <Icon className="size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{artifact.title}</p>
+        <p className="text-xs text-muted-foreground">
+          {artifact.type === "markdown" ? "Markdown" : "HTML"} · v
+          {artifact.version}
+        </p>
+      </div>
+      <Button
+        size="xs"
+        variant="outline"
+        onClick={() => openModelArtifact(artifact)}
+      >
+        <EyeIcon className="size-3.5" />
+        {t("message.preview")}
+      </Button>
+    </div>
+  );
+}
+
 function SourcesList({
   sources,
 }: {
@@ -332,6 +372,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     (p) => p.type === "dynamic-tool" || p.type.startsWith("tool-"),
   );
   const files = message.parts.filter((p) => p.type === "file");
+  // Artifacts the model published with update_artifact. Their content is
+  // versioned in the backend, so the message only carries the announcement.
+  const artifacts = message.parts
+    .map(modelArtifactFromPart)
+    .filter((a): a is ModelArtifact => a !== null);
   const sources = message.parts.filter(
     (p) => p.type === "source-url" || p.type === "source-document",
   );
@@ -341,9 +386,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
   // on the text lets renders with identical text (reasoning-only updates,
   // vote changes, sibling streaming) skip the re-parse entirely.
   const renderedMarkdown = React.useMemo(
-    () => (
-      <Markdown streaming={Boolean(isStreaming)}>{text}</Markdown>
-    ),
+    () => <Markdown streaming={Boolean(isStreaming)}>{text}</Markdown>,
     [text, isStreaming],
   );
 
@@ -367,7 +410,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           <ReasoningPart
             key={`reasoning-${index}`}
             text={block}
-            running={Boolean(isStreaming) && !text && index === reasoningBlocks.length - 1}
+            running={
+              Boolean(isStreaming) &&
+              !text &&
+              index === reasoningBlocks.length - 1
+            }
           />
         ))}
 
@@ -396,6 +443,17 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             />
           );
         })}
+
+        {artifacts.length > 0 ? (
+          <div className="space-y-2">
+            {artifacts.map((artifact, index) => (
+              <ArtifactPart
+                key={`${artifact.key}-${artifact.version}-${index}`}
+                artifact={artifact}
+              />
+            ))}
+          </div>
+        ) : null}
 
         {files.length > 0 ? (
           <AttachmentGroup>
@@ -484,8 +542,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
               aria-label={t("message.previousBranch")}
               onClick={() => {
                 const count = branch.snapshotCount;
-                const next =
-                  (branch.currentIndex - 1 + count) % count;
+                const next = (branch.currentIndex - 1 + count) % count;
                 const target = branch.snapshots[next];
                 if (target) {
                   onBranchChange?.({

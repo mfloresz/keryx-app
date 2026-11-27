@@ -3,6 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { AgentCard } from "#/components/agents/agent-card";
 import { Button } from "#/components/ui/button";
+import { ConfirmDialog } from "#/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,7 @@ import {
 } from "#/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { useI18n } from "#/i18n";
+import { useAuth } from "#/stores/auth";
 import { useAgentsStore, type Agent } from "#/stores/agents";
 
 export const Route = createFileRoute("/agents/")({
@@ -22,10 +24,30 @@ export const Route = createFileRoute("/agents/")({
 function AgentsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { all, mine, shared, isLoading, fetchAgents } = useAgentsStore();
+  const { user } = useAuth();
+  const { all, mine, shared, isLoading, fetchAgents, deleteAgent } =
+    useAgentsStore();
 
   const [tab, setTab] = React.useState<"all" | "mine" | "shared">("all");
   const [preview, setPreview] = React.useState<Agent | null>(null);
+  const [agentToDelete, setAgentToDelete] = React.useState<Agent | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  function canManage(agent: Agent): boolean {
+    if (agent.source === "user_custom") return true;
+    return user?.role === "admin" && !agent.ownerId;
+  }
+
+  async function confirmDelete() {
+    if (!agentToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteAgent(agentToDelete.id);
+      setAgentToDelete(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   React.useEffect(() => {
     void fetchAgents();
@@ -124,6 +146,7 @@ function AgentsPage() {
                   key={agent.id + ":" + agent.source}
                   agent={agent}
                   onSelect={setPreview}
+                  onDelete={canManage(agent) ? setAgentToDelete : undefined}
                 />
               ))}
             </div>
@@ -163,6 +186,19 @@ function AgentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={agentToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setAgentToDelete(null);
+        }}
+        title={t("agents.deleteTitle")}
+        description={t("agents.deleteDescription")}
+        confirmLabel={isDeleting ? t("app.loading") : t("app.delete")}
+        cancelLabel={t("app.cancel")}
+        destructive
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   );
 }

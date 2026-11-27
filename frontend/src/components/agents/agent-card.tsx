@@ -6,12 +6,21 @@ import {
   CodeIcon,
   GraduationCapIcon,
   LeafIcon,
+  MoreHorizontalIcon,
   PenLineIcon,
   ScaleIcon,
   SparklesIcon,
+  Trash2Icon,
 } from "lucide-react";
 
 import { Badge } from "#/components/ui/badge";
+import { Button } from "#/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu";
 import { useI18n } from "#/i18n";
 import type { Agent } from "#/stores/agents";
 
@@ -41,9 +50,11 @@ function getAgentHeaderColor(id: string, source: Agent["source"]): string {
 export function AgentCard({
   agent,
   onSelect,
+  onDelete,
 }: {
   agent: Agent;
   onSelect: (agent: Agent) => void;
+  onDelete?: (agent: Agent) => void;
 }) {
   const { t } = useI18n();
 
@@ -58,38 +69,68 @@ export function AgentCard({
         : t("agents.byCatalog");
 
   return (
-    <button
-      type="button"
-      aria-label={agent.name}
-      onClick={() => onSelect(agent)}
-      className="group flex flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <div
-        className="relative flex h-36 w-full items-center justify-center overflow-hidden bg-[var(--agent-header)]"
-        style={
-          {
-            "--agent-header": getAgentHeaderColor(agent.id, agent.source),
-          } as React.CSSProperties
-        }
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-shadow focus-within:ring-2 focus-within:ring-ring hover:shadow-md">
+      <button
+        type="button"
+        aria-label={agent.name}
+        onClick={() => onSelect(agent)}
+        className="flex flex-1 flex-col text-left focus-visible:outline-none"
       >
-        {React.createElement(icon, {
-          className: "h-12 w-12 text-background drop-shadow-sm",
-        })}
-      </div>
-
-      <div className="flex flex-1 flex-col gap-1 p-4">
-        <h3 className="line-clamp-1 text-sm font-semibold tracking-tight">
-          {agent.name}
-        </h3>
-        <p className="line-clamp-2 min-h-[2.5rem] text-xs leading-5 text-muted-foreground">
-          {agent.description || t("agents.emptyDescription")}
-        </p>
-        <div className="mt-auto pt-3">
-          <Badge variant="secondary" className="text-[11px] font-normal">
-            {badgeLabel}
-          </Badge>
+        <div
+          className="relative flex h-36 w-full items-center justify-center overflow-hidden bg-[var(--agent-header)]"
+          style={
+            {
+              "--agent-header": getAgentHeaderColor(agent.id, agent.source),
+            } as React.CSSProperties
+          }
+        >
+          {React.createElement(icon, {
+            className: "h-12 w-12 text-background drop-shadow-sm",
+          })}
         </div>
-      </div>
-    </button>
+
+        <div className="flex flex-1 flex-col gap-1 p-4">
+          <h3 className="line-clamp-1 text-sm font-semibold tracking-tight">
+            {agent.name}
+          </h3>
+          <p className="line-clamp-2 min-h-[2.5rem] text-xs leading-5 text-muted-foreground">
+            {agent.description || t("agents.emptyDescription")}
+          </p>
+          <div className="mt-auto pt-3">
+            <Badge variant="secondary" className="text-[11px] font-normal">
+              {badgeLabel}
+            </Badge>
+          </div>
+        </div>
+      </button>
+
+      {onDelete ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label={t("agents.actions")}
+                className="absolute top-2 right-2 size-8 bg-background/80 text-foreground opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100"
+              />
+            }
+          >
+            <MoreHorizontalIcon className="size-4" />
+            <span className="sr-only">{t("agents.actions")}</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => onDelete(agent)}
+            >
+              <Trash2Icon className="mr-2 size-3.5" />
+              {t("agents.delete")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
   );
 }
